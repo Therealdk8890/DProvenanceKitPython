@@ -1,0 +1,34 @@
+# Python build / cache artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.eggs/
+*.egg
+
+# Test / tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local tooling / editor state
+.claude/
+.idea/
+.vscode/
+
+# OS noise
+.DS_Store
+
+# Stray SQLite databases from local runs
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

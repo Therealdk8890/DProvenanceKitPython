@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dprovenancekit"
+version = "0.1.0"
+description = "Reasoning observability and regression testing for AI systems — a Python port of DProvenanceKit."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "BSL-1.1" }
+authors = [{ name = "DProvenanceKit" }]
+keywords = ["observability", "ai", "agents", "tracing", "provenance", "regression"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Debuggers",
+]
+# Pure standard library: sqlite3, contextvars, threading, json, hashlib, uuid, urllib.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+dprovenancekit = "dprovenancekit.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Therealdk8890/DProvenanceKit"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

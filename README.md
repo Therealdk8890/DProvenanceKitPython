@@ -173,13 +173,26 @@ The SwiftUI `DProvenanceUI` target is intentionally **not** ported (it is Apple-
 
 ---
 
+## Cross-language conformance
+
+Keeping the Swift and Python SDKs behaviorally equivalent is enforced, not hoped for. [`conformance/`](conformance/) holds **Trace Specification v1** — a language-neutral contract plus frozen golden vectors that pin the run fingerprint, the alignment profile hash, canonical payload encoding, query semantics, and alignment verdicts.
+
+```bash
+python -m pytest tests/test_conformance.py   # the Python SDK's claim of conformance
+python conformance/generate_vectors.py        # intentionally re-freeze the contract
+```
+
+The committed `conformance/vectors/*.json` are the contract: any SDK — Swift today, Rust or TypeScript later — proves equivalence by reproducing the same files. See [`conformance/TRACE_SPEC_v1.md`](conformance/TRACE_SPEC_v1.md).
+
+---
+
 ## Tests
 
 ```bash
 python -m pytest
 ```
 
-80 tests, ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …).
+107 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …) plus 27 cross-language conformance checks against the frozen Trace Specification v1 vectors.
 
 ---
 

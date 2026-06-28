@@ -168,6 +168,7 @@ The standard corpus scores **Precision 1.000 / Recall 1.000 / F1 1.000** across 
 | Semantic alignment engine + evidence + verification | `alignment_*`, `verification` |
 | Benchmark harness, failure diagnoser, corpus | `benchmark`, `corpus` |
 | Pure view models for a trace viewer | `viewmodel` |
+| Framework adapters (LangChain / LangGraph) | `integrations.langchain` |
 
 The SwiftUI `DProvenanceUI` target is intentionally **not** ported (it is Apple-platform UI); its pure value-model layer (`SpanViewModel`, flattening) is ported in `viewmodel`.
 
@@ -186,13 +187,41 @@ The committed `conformance/vectors/*.json` are the contract: any SDK — Swift t
 
 ---
 
+## Integrations
+
+Framework adapters live in `dprovenancekit.integrations` and are the only parts of the package with third-party dependencies — the core stays pure standard library, and nothing imports an adapter unless you do.
+
+### LangChain / LangGraph
+
+```bash
+pip install dprovenancekit[langchain]
+```
+
+```python
+from dprovenancekit import SQLiteTraceStore
+from dprovenancekit.integrations.langchain import DProvenanceTracer, LangChainTraceEvent
+
+store = SQLiteTraceStore(LangChainTraceEvent, "traces.sqlite")
+tracer = DProvenanceTracer(store)
+
+with tracer.trace(context_id="customer-42") as cb:
+    answer = chain.invoke(question, config={"callbacks": [cb]})
+
+# The run is now recorded — query it, diff it against a known-good run, or
+# compare run fingerprints to detect when the agent took a different path.
+```
+
+[`DProvenanceCallbackHandler`](src/dprovenancekit/integrations/langchain.py) translates LangChain's callback stream into a trace: each `on_llm_start` / `on_tool_start` / `on_retriever_start` / `on_chain_start` (and its completion) becomes a typed event in execution order, LangChain's `run_id`/`parent_run_id` become the trace's **span tree**, the active model/tool/retriever becomes the **engine**, and (by default) lifecycle **provenance edges** are emitted (`DERIVED_FROM` start→completion, `INFORMED` parent→child). Because events flow through the same recording path as hand-written ones, the whole toolkit applies: a run's **fingerprint** is the structural identity of the agent's execution path, so two runs that diverge (a tool called in a different order, a retrieval step skipped) produce different fingerprints — a cheap regression signal. Options: `capture_payloads` (prompt/completion/IO previews), `link_lifecycle` (edges), `record_chains` (LCEL/LangGraph chain noise).
+
+---
+
 ## Tests
 
 ```bash
 python -m pytest
 ```
 
-107 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …) plus 27 cross-language conformance checks against the frozen Trace Specification v1 vectors.
+121 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 27 cross-language conformance checks against the frozen Trace Specification v1 vectors, and 14 LangChain integration tests (one runs only when `langchain-core` is installed, otherwise skipped).
 
 ---
 

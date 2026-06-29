@@ -448,6 +448,12 @@ class SQLiteTraceStore(TraceStore):
                 runs.append(run)
         return runs
 
+    def get_run(self, id: uuid.UUID) -> Optional[TraceRun]:
+        """Fetch a single run by id, indexed on ``run_id`` (no full scan). Flushes pending
+        events first, mirroring :meth:`query_runs`, and parallels ``InMemoryTraceStore``."""
+        self.flush()
+        return self._fetch_run(id)
+
     def _fetch_run(self, id: uuid.UUID) -> Optional[TraceRun]:
         ctx_rows = self._db.query("SELECT context_id FROM runs WHERE run_id = ?", (str(id),))
         if not ctx_rows or ctx_rows[0][0] is None:

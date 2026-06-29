@@ -90,10 +90,20 @@ def node_from_wire(node: Dict[str, Any]):
 # ── Per-project state ────────────────────────────────────────────────────────────
 
 
+# Role hierarchy and per-plan quotas (quotas enforced only in tenancy mode).
+_ROLE_RANK = {"read": 1, "write": 2, "admin": 3}
+PLAN_LIMITS = {
+    "free": {"events": 10_000, "gate_calls": 500},
+    "pro": {"events": 10_000_000, "gate_calls": 100_000},
+}
+
+
 @dataclass
 class Project:
     name: str
     store: Any = field(default_factory=InMemoryTraceStore)
+    role: str = "admin"          # static/dev keys are unrestricted; tenancy sets the real role
+    id: Optional[str] = None     # set in tenancy mode; enables usage metering + quotas
 
 
 def make_project(name: str) -> Project:
@@ -175,17 +185,26 @@ class Server:
             project = self._auth(headers)
 
             if method == "GET" and path == "/capabilities":
+                self._require(project, "read")
                 return self._json(200, {"schemaVersions": [SCHEMA_VERSION], "features": ["ingest", "query", "gate"]})
             if method == "POST" and path == "/ingest":
+                self._require(project, "write")
                 return self._ingest(project, body)
             if method == "POST" and path == "/query":
+                self._require(project, "read")
                 return self._query(project, body)
             if method == "GET" and path == "/api/runs":
+                self._require(project, "read")
                 return self._list_runs(project)
             if method == "GET" and path.startswith("/api/runs/"):
+                self._require(project, "read")
                 return self._run_detail(project, path.rsplit("/", 1)[1])
             if method == "POST" and path == "/api/gate":
+                self._require(project, "read")
                 return self._gate(project, body)
+            if method == "GET" and path == "/api/usage":
+                self._require(project, "read")
+                return self._usage(project)
 
             return self._json(404, {"error": "NOT_FOUND", "path": path})
         except HTTPError as e:
@@ -208,8 +227,46 @@ class Server:
         resolved = self.tenancy.resolve(key)
         if resolved is None:
             raise HTTPError(401, {"error": "INVALID_API_KEY"})
-        project_id, name = resolved
-        return Project(name=name, store=self._store_for(project_id))
+        project_id, name, role = resolved
+        return Project(name=name, store=self._store_for(project_id), role=role, id=project_id)
+
+    def _require(self, project: Project, needed: str) -> None:
+        if _ROLE_RANK.get(project.role, 0) < _ROLE_RANK[needed]:
+            raise HTTPError(403, {"error": "FORBIDDEN", "need": needed, "have": project.role})
+
+    # -- usage metering + quotas (tenancy mode only) -----------------------------
+
+    def _metered(self, project: Project) -> bool:
+        return self.tenancy is not None and project.id is not None
+
+    def _check_quota(self, project: Project, *, events: int = 0, gate_calls: int = 0) -> None:
+        if not self._metered(project):
+            return
+        plan = self.tenancy.get_plan(project.id) or "free"
+        limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
+        used_events, used_gate = self.tenancy.get_usage(project.id)
+        if events and used_events + events > limits["events"]:
+            raise HTTPError(429, {"error": "QUOTA_EXCEEDED", "resource": "events",
+                                  "plan": plan, "limit": limits["events"], "used": used_events})
+        if gate_calls and used_gate + gate_calls > limits["gate_calls"]:
+            raise HTTPError(429, {"error": "QUOTA_EXCEEDED", "resource": "gate_calls",
+                                  "plan": plan, "limit": limits["gate_calls"], "used": used_gate})
+
+    def _meter(self, project: Project, *, events: int = 0, gate_calls: int = 0) -> None:
+        if self._metered(project):
+            self.tenancy.record_usage(project.id, events=events, gate_calls=gate_calls)
+
+    def _usage(self, project: Project) -> Tuple[int, Dict[str, str], bytes]:
+        if not self._metered(project):
+            return self._json(200, {"metered": False})
+        plan = self.tenancy.get_plan(project.id) or "free"
+        used_events, used_gate = self.tenancy.get_usage(project.id)
+        return self._json(200, {
+            "metered": True,
+            "plan": plan,
+            "usage": {"events": used_events, "gate_calls": used_gate},
+            "limits": PLAN_LIMITS.get(plan, PLAN_LIMITS["free"]),
+        })
 
     # -- ingest (§7) -------------------------------------------------------------
 
@@ -220,6 +277,7 @@ class Server:
         except Exception:
             # A malformed batch is a "poison batch": 400 tells the SDK to quarantine it.
             raise HTTPError(400, {"error": "BAD_BATCH"})
+        self._check_quota(project, events=len(events))
         accepted = 0
         for ev in events:
             try:
@@ -228,6 +286,7 @@ class Server:
             except Exception:
                 raise HTTPError(400, {"error": "BAD_EVENT", "accepted": accepted})
         flush_store(project.store)  # persist the batch (no-op for the in-memory backend)
+        self._meter(project, events=accepted)
         return self._json(200, {"accepted": accepted})
 
     # -- query (§7): the SDK only checks status; the body powers the dashboard ---
@@ -270,6 +329,7 @@ class Server:
 
     def _gate(self, project: Project, body: bytes) -> Tuple[int, Dict[str, str], bytes]:
         req = json.loads(body.decode("utf-8")) if body else {}
+        self._check_quota(project, gate_calls=1)
         golden = _get_run(project, str(req.get("golden_run_id", "")))
         candidate = _get_run(project, str(req.get("candidate_run_id", "")))
         gate = RegressionGate(
@@ -277,6 +337,7 @@ class Server:
             allow_divergent_steps=bool(req.get("allow_divergent_steps", False)),
         )
         report = gate.check(golden, candidate)
+        self._meter(project, gate_calls=1)
         return self._json(200, {
             "passed": report.passed,
             "regression_level": report.regression_level.value,

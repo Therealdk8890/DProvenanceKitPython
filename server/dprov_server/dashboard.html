@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DProvenanceKit — Regression Gate</title>
+<style>
+  :root{
+    --bg:#0e1117; --panel:#161b22; --panel2:#1b222c; --border:#2a313c;
+    --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff;
+    --ok:#3fb950; --okbg:#0f2417; --bad:#f85149; --badbg:#2b1416; --warn:#d29922; --warnbg:#2a2113;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:16px;padding:14px 22px;border-bottom:1px solid var(--border);background:var(--panel)}
+  header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.2px}
+  header h1 .dot{color:var(--accent)}
+  header .spacer{flex:1}
+  header label{color:var(--muted);font-size:12px;margin-right:6px}
+  input,select,button{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:6px 10px}
+  input:focus,select:focus{outline:none;border-color:var(--accent)}
+  button{cursor:pointer;background:#21262d}
+  button.primary{background:var(--accent);color:#06101f;border-color:var(--accent);font-weight:600}
+  button:hover{filter:brightness(1.1)}
+  main{display:grid;grid-template-columns:1.1fr .9fr;gap:18px;padding:18px 22px;max-width:1280px;margin:0 auto}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .panel h2{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 12px}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-weight:500;font-size:12px}
+  td.fp{font-family:var(--mono);color:var(--muted);font-size:12px}
+  .chip{display:inline-block;background:var(--panel2);border:1px solid var(--border);border-radius:20px;padding:1px 9px;margin:2px 3px 2px 0;font-size:12px}
+  .chip.crit{border-color:#5a2b2b;color:#ffb4ab}
+  .row-controls{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:14px}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:11px;color:var(--muted)}
+  .verdict{border-radius:10px;padding:16px;margin-top:6px;border:1px solid var(--border)}
+  .verdict.pass{background:var(--okbg);border-color:#1c5a2e}
+  .verdict.fail{background:var(--badbg);border-color:#6e2a28}
+  .badge{display:inline-block;font-weight:700;letter-spacing:.5px;padding:3px 12px;border-radius:6px;font-size:13px}
+  .badge.pass{background:var(--ok);color:#06210f}
+  .badge.fail{background:var(--bad);color:#2a0a0a}
+  .lvl{font-family:var(--mono);font-size:13px}
+  .kv{color:var(--muted);font-size:13px;margin-top:8px}
+  .grp{margin-top:10px}
+  .grp .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  pre{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;overflow:auto;font-size:12px;color:var(--muted);white-space:pre-wrap}
+  .empty{color:var(--muted);font-style:italic;padding:10px 4px}
+  .err{color:var(--bad);font-size:13px;margin-top:8px}
+  tr.sel{background:#15202e}
+  code{font-family:var(--mono);background:var(--panel2);padding:1px 5px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="dot">◆</span> DProvenanceKit <span style="color:var(--muted);font-weight:400">· Regression Gate</span></h1>
+  <span class="spacer"></span>
+  <span id="project" style="color:var(--muted);font-size:12px"></span>
+  <label for="key">API key</label>
+  <input id="key" value="demo-key" style="width:140px" />
+  <button onclick="loadRuns()">Refresh</button>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Runs</h2>
+    <table>
+      <thead><tr><th>Context</th><th>Steps</th><th>Engines</th><th>Fingerprint</th></tr></thead>
+      <tbody id="runs"></tbody>
+    </table>
+    <div id="runs-empty" class="empty">No runs yet. Ingest some via the <code>CloudTraceStore</code> SDK, then Refresh.</div>
+  </section>
+
+  <section class="panel">
+    <h2>Regression gate</h2>
+    <div class="row-controls">
+      <div class="field"><label>Golden run</label><select id="golden"></select></div>
+      <div class="field"><label>Candidate run</label><select id="candidate"></select></div>
+      <div class="field"><label>Max severity allowed</label>
+        <select id="maxlevel"><option value="none">none (strict)</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option></select>
+      </div>
+      <div class="field"><label>&nbsp;</label><label style="font-size:13px;color:var(--text)"><input type="checkbox" id="allowdiv" style="vertical-align:-2px"> allow divergent</label></div>
+      <div class="field"><label>&nbsp;</label><button class="primary" onclick="runGate()">Run gate</button></div>
+    </div>
+    <div id="verdict"></div>
+  </section>
+</main>
+
+<script>
+const key = () => document.getElementById('key').value.trim();
+const hdr = () => ({'Authorization': 'Bearer ' + key(), 'Content-Type': 'application/json'});
+let RUNS = [];
+
+function short(fp){ return fp ? fp.slice(0,10) + '…' : ''; }
+function chips(items, cls){ return (items||[]).map(s => `<span class="chip ${cls||''}">${s}</span>`).join('') || '<span class="empty">—</span>'; }
+
+async function loadRuns(){
+  document.getElementById('verdict').innerHTML = '';
+  try{
+    const r = await fetch('/api/runs', {headers: hdr()});
+    if(!r.ok){ throw new Error('HTTP ' + r.status); }
+    const data = await r.json();
+    RUNS = data.runs || [];
+    document.getElementById('project').textContent = data.project ? ('project: ' + data.project) : '';
+  }catch(e){ RUNS = []; document.getElementById('runs').innerHTML = `<tr><td colspan="4" class="err">${e.message} — check the API key</td></tr>`; document.getElementById('runs-empty').style.display='none'; return; }
+
+  const tbody = document.getElementById('runs');
+  document.getElementById('runs-empty').style.display = RUNS.length ? 'none' : 'block';
+  tbody.innerHTML = RUNS.map(run => `
+    <tr title="${run.run_id}">
+      <td>${run.context_id || '<span class="empty">—</span>'}</td>
+      <td>${chips(run.steps)}</td>
+      <td style="color:var(--muted)">${(run.engines||[]).join(', ')}</td>
+      <td class="fp">${short(run.fingerprint)}</td>
+    </tr>`).join('');
+
+  const opts = RUNS.map(r => `<option value="${r.run_id}">${(r.context_id||r.run_id.slice(0,8))} · ${short(r.fingerprint)}</option>`).join('');
+  for(const id of ['golden','candidate']){
+    const sel = document.getElementById(id);
+    sel.innerHTML = opts;
+  }
+  if(RUNS.length > 1) document.getElementById('candidate').selectedIndex = 1;
+}
+
+async function runGate(){
+  const v = document.getElementById('verdict');
+  const golden = document.getElementById('golden').value, candidate = document.getElementById('candidate').value;
+  if(!golden || !candidate){ v.innerHTML = '<div class="err">Pick a golden and a candidate run.</div>'; return; }
+  v.innerHTML = '<div class="empty">Running gate…</div>';
+  try{
+    const r = await fetch('/api/gate', {method:'POST', headers: hdr(), body: JSON.stringify({
+      golden_run_id: golden, candidate_run_id: candidate,
+      max_regression_level: document.getElementById('maxlevel').value,
+      allow_divergent_steps: document.getElementById('allowdiv').checked,
+    })});
+    const rep = await r.json();
+    if(!r.ok){ v.innerHTML = `<div class="err">${rep.error || ('HTTP ' + r.status)}</div>`; return; }
+    const pass = rep.passed;
+    v.innerHTML = `
+      <div class="verdict ${pass?'pass':'fail'}">
+        <span class="badge ${pass?'pass':'fail'}">${pass?'PASS':'REGRESSION'}</span>
+        <span class="lvl" style="margin-left:10px">severity: <b>${rep.regression_level}</b> · strength ${Number(rep.strength).toFixed(2)}</span>
+        <div class="kv">fingerprint: ${rep.fingerprint_match ? 'match' : 'differs'} <span class="fp">(${short(rep.golden_fingerprint)} vs ${short(rep.candidate_fingerprint)})</span></div>
+        <div class="grp"><div class="label">removed (in golden, missing in candidate)</div>${chips(rep.removed_steps,'crit')}</div>
+        <div class="grp"><div class="label">added</div>${chips(rep.added_steps)}</div>
+        <div class="grp"><div class="label">divergent</div>${chips(rep.divergent_steps)}</div>
+        <pre>${rep.summary}</pre>
+      </div>`;
+  }catch(e){ v.innerHTML = `<div class="err">${e.message}</div>`; }
+}
+
+loadRuns();
+</script>
+</body>
+</html>

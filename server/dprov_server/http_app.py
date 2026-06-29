@@ -37,11 +37,20 @@ def _make_handler(server: Server):
     return Handler
 
 
+def _maybe_seed(srv: Server) -> None:
+    """First run in tenancy mode: create a demo project + key so the dashboard works."""
+    if srv.tenancy is not None and srv.tenancy.is_empty():
+        project_id = srv.tenancy.create_project("demo")
+        key = srv.tenancy.create_api_key(project_id, "seed")
+        print(f"  seeded demo project ({project_id}); API key (save it now): {key}")
+
+
 def serve(host: str = "127.0.0.1", port: int = 8787, server: Optional[Server] = None) -> None:
     srv = server or Server()
+    _maybe_seed(srv)
     httpd = ThreadingHTTPServer((host, port), _make_handler(srv))
     print(f"DProvenanceKit backend → http://{host}:{port}   (dashboard at /)")
-    print(f"  projects: {', '.join(p.name for p in srv.projects.values()) or '—'}")
+    print(f"  {srv.describe()}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

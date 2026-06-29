@@ -10,6 +10,8 @@ from urllib.parse import urlsplit
 import pytest
 
 from dprov_server import Project, Server
+from dprov_server.storage import make_store
+from dprov_server.tenancy import Tenancy
 
 from dprovenancekit import CloudTraceStore, DProvenanceKit, TraceableEvent, TracePriority
 
@@ -162,6 +164,95 @@ def test_gate_missing_run_is_404():
     s, body = call(srv, "POST", "/api/gate",
                    {"golden_run_id": str(uuid.uuid4()), "candidate_run_id": str(uuid.uuid4())})
     assert s == 404 and body["error"] == "RUN_NOT_FOUND"
+
+
+# ── Durable (SQLite) storage ────────────────────────────────────────────────────
+
+
+def test_sqlite_storage_persists_across_restart(tmp_path):
+    data_dir = str(tmp_path)
+
+    def fresh_server():  # a new process would build the store the same way
+        return Server({API_KEY: Project("proj", make_store("proj", storage="sqlite", data_dir=data_dir))})
+
+    g, c = str(uuid.uuid4()), str(uuid.uuid4())
+    srv = fresh_server()
+    call(srv, "POST", "/ingest", [ev(g, 0, "retrieved"), ev(g, 1, "verified", priority=3), ev(g, 2, "decided", priority=3)])
+    call(srv, "POST", "/ingest", [ev(c, 0, "retrieved"), ev(c, 1, "decided", priority=3)])
+
+    # A brand-new server over the same data dir still sees the runs — durability.
+    srv2 = fresh_server()
+    s, body = call(srv2, "GET", "/api/runs")
+    assert s == 200 and len(body["runs"]) == 2
+
+    # And the regression gate works across the "restart".
+    s, rep = call(srv2, "POST", "/api/gate", {"golden_run_id": g, "candidate_run_id": c})
+    assert s == 200 and rep["passed"] is False and "verified" in rep["removed_steps"]
+
+
+# ── Multi-tenant auth (projects + hashed keys) ───────────────────────────────────
+
+
+def test_tenancy_create_resolve_revoke(tmp_path):
+    t = Tenancy(str(tmp_path / "tenants.sqlite"))
+    pid = t.create_project("Team A")
+    key = t.create_api_key(pid, name="ci")
+    assert key.startswith("dpk_")
+    assert t.resolve(key) == (pid, "Team A")
+    assert t.resolve("dpk_wrong") is None
+    # keys are stored hashed, never in the clear
+    assert key not in open(str(tmp_path / "tenants.sqlite"), "rb").read().decode("latin-1")
+    assert t.revoke(key) is True
+    assert t.resolve(key) is None
+
+
+def test_server_tenancy_mode_auth(tmp_path):
+    t = Tenancy(str(tmp_path / "tenants.sqlite"))
+    pid = t.create_project("acme")
+    key = t.create_api_key(pid)
+    srv = Server(tenancy=t)
+
+    # a valid key authenticates and gets an isolated project store
+    rid = str(uuid.uuid4())
+    s, body = call(srv, "POST", "/ingest", [ev(rid, 0, "step")], key=key)
+    assert s == 200 and body["accepted"] == 1
+    s, body = call(srv, "GET", "/api/runs", key=key)
+    assert s == 200 and len(body["runs"]) == 1
+
+    # unknown and revoked keys are rejected
+    assert call(srv, "GET", "/api/runs", key="dpk_nope")[0] == 401
+    t.revoke(key)
+    assert call(srv, "GET", "/api/runs", key=key)[0] == 401
+
+
+# ── CI gate CLI (dprov_gate) ─────────────────────────────────────────────────────
+
+
+def _gate_transport(srv):
+    def request_fn(method, url, headers, body):
+        status, _h, out = srv.handle(method, urlsplit(url).path, headers, body or b"")
+        return status, out
+    return request_fn
+
+
+def test_gate_cli_exit_codes():
+    import dprov_gate
+
+    srv = server()
+    g, c = str(uuid.uuid4()), str(uuid.uuid4())
+    call(srv, "POST", "/ingest", [ev(g, 0, "retrieved"), ev(g, 1, "verified", priority=3), ev(g, 2, "decided", priority=3)])
+    call(srv, "POST", "/ingest", [ev(c, 0, "retrieved"), ev(c, 1, "decided", priority=3)])
+    rf = _gate_transport(srv)
+
+    base = ["--url", "http://x", "--key", API_KEY]
+    # regression -> exit 1
+    assert dprov_gate.main(base + ["--golden", g, "--candidate", c], request_fn=rf) == 1
+    # identical -> exit 0
+    assert dprov_gate.main(base + ["--golden", g, "--candidate", g], request_fn=rf) == 0
+    # fully lenient (tolerate divergences AND raise the severity ceiling) lets it pass
+    assert dprov_gate.main(base + ["--golden", g, "--candidate", c, "--allow-divergent", "--max-level", "high"], request_fn=rf) == 0
+    # missing creds -> exit 2
+    assert dprov_gate.main(["--url", "", "--key", "", "--golden", g, "--candidate", c], request_fn=rf) == 2
 
 
 # ── End-to-end through the real CloudTraceStore SDK (no sockets) ─────────────────

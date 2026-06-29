@@ -53,9 +53,10 @@ from dprovenancekit.query import (  # noqa: E402
     SequenceNode,
 )
 
+from .storage import ALL_RUNS, fetch_run, flush as flush_store, make_store  # noqa: E402
+
 SCHEMA_VERSION = "1.0"
 _DASHBOARD = os.path.join(os.path.dirname(__file__), "dashboard.html")
-_ALL_RUNS = TraceQueryDSL(_root=AndNode(nodes=()))  # empty AND matches every run
 
 
 # ── Query wire-form deserializer (inverse of the SDK's _serialize_node) ─────────
@@ -92,7 +93,12 @@ def node_from_wire(node: Dict[str, Any]):
 @dataclass
 class Project:
     name: str
-    store: InMemoryTraceStore = field(default_factory=InMemoryTraceStore)
+    store: Any = field(default_factory=InMemoryTraceStore)
+
+
+def make_project(name: str) -> Project:
+    """A project with a store built from the configured backend (memory or sqlite)."""
+    return Project(name=name, store=make_store(name))
 
 
 def _load_api_keys() -> Dict[str, Project]:
@@ -104,7 +110,7 @@ def _load_api_keys() -> Dict[str, Project]:
         if not pair:
             continue
         key, _, name = pair.partition(":")
-        keys[key.strip()] = Project(name=(name.strip() or "default"))
+        keys[key.strip()] = make_project(name.strip() or "default")
     return keys
 
 
@@ -118,10 +124,41 @@ class HTTPError(Exception):
 
 
 class Server:
-    """Pure request handler. Reuses the library for all reasoning; no sockets here."""
+    """Pure request handler. Reuses the library for all reasoning; no sockets here.
 
-    def __init__(self, projects: Optional[Dict[str, Project]] = None):
-        self.projects = projects if projects is not None else _load_api_keys()
+    Auth has two modes:
+      * **static** — an explicit ``{api_key: Project}`` map (tests, or ``DPROV_API_KEYS``).
+      * **tenancy** — a :class:`~dprov_server.tenancy.Tenancy` (durable projects + hashed
+        keys); each project's store is built lazily and cached.
+    """
+
+    def __init__(self, projects: Optional[Dict[str, Project]] = None, tenancy=None):
+        self._static: Optional[Dict[str, Project]] = None
+        self.tenancy = None
+        self._stores: Dict[str, Any] = {}
+        if projects is not None:
+            self._static = projects
+        elif tenancy is not None:
+            self.tenancy = tenancy
+        elif os.environ.get("DPROV_API_KEYS"):
+            self._static = _load_api_keys()
+        else:
+            from .tenancy import Tenancy
+
+            self.tenancy = Tenancy.default()
+
+    def describe(self) -> str:
+        if self._static is not None:
+            names = sorted({p.name for p in self._static.values()})
+            return f"static auth · projects: {', '.join(names) or '—'}"
+        return f"tenancy auth · {len(self.tenancy.list_projects())} project(s)"
+
+    def _store_for(self, project_id: str):
+        store = self._stores.get(project_id)
+        if store is None:
+            store = make_store(project_id)
+            self._stores[project_id] = store
+        return store
 
     # -- routing -----------------------------------------------------------------
 
@@ -163,10 +200,16 @@ class Server:
         if not auth or not auth.startswith("Bearer "):
             raise HTTPError(401, {"error": "MISSING_BEARER"})
         key = auth[len("Bearer "):].strip()
-        project = self.projects.get(key)
-        if project is None:
+        if self._static is not None:
+            project = self._static.get(key)
+            if project is None:
+                raise HTTPError(401, {"error": "INVALID_API_KEY"})
+            return project
+        resolved = self.tenancy.resolve(key)
+        if resolved is None:
             raise HTTPError(401, {"error": "INVALID_API_KEY"})
-        return project
+        project_id, name = resolved
+        return Project(name=name, store=self._store_for(project_id))
 
     # -- ingest (§7) -------------------------------------------------------------
 
@@ -184,6 +227,7 @@ class Server:
                 accepted += 1
             except Exception:
                 raise HTTPError(400, {"error": "BAD_EVENT", "accepted": accepted})
+        flush_store(project.store)  # persist the batch (no-op for the in-memory backend)
         return self._json(200, {"accepted": accepted})
 
     # -- query (§7): the SDK only checks status; the body powers the dashboard ---
@@ -193,7 +237,7 @@ class Server:
         received = str(req.get("schemaVersion", ""))
         if received != SCHEMA_VERSION:
             raise HTTPError(422, {"error": "UNSUPPORTED_SCHEMA", "expected": SCHEMA_VERSION, "received": received})
-        dsl = TraceQueryDSL(_root=node_from_wire(req["dsl"])) if req.get("dsl") else _ALL_RUNS
+        dsl = TraceQueryDSL(_root=node_from_wire(req["dsl"])) if req.get("dsl") else ALL_RUNS
         runs = project.store.query_runs(dsl)
         limit = int(req.get("limit", 100))
         return self._json(200, {"runs": [_run_summary(r) for r in runs[:limit]]})
@@ -201,7 +245,7 @@ class Server:
     # -- dashboard data ----------------------------------------------------------
 
     def _list_runs(self, project: Project) -> Tuple[int, Dict[str, str], bytes]:
-        runs = project.store.query_runs(_ALL_RUNS)
+        runs = project.store.query_runs(ALL_RUNS)
         runs = sorted(runs, key=lambda r: r.events[0].timestamp if r.events else 0, reverse=True)
         return self._json(200, {"project": project.name, "runs": [_run_summary(r) for r in runs]})
 
@@ -308,7 +352,7 @@ def _run_summary(run) -> Dict[str, Any]:
 
 def _get_run(project: Project, run_id: str):
     try:
-        run = project.store.get_run(uuid.UUID(run_id))
+        run = fetch_run(project.store, uuid.UUID(run_id))
     except (ValueError, AttributeError):
         run = None
     if run is None:

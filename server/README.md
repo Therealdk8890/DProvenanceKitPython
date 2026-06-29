@@ -16,58 +16,87 @@ It speaks the Trace Specification v1 cloud wire format (§7), so the library's
 | `POST` | `/api/gate` | **regression gate**: golden vs candidate → verdict |
 | `GET` | `/` | the dashboard |
 
-Everything is generic over any consumer payload (events are stored type-erased as
+Everything is generic over any consumer payload (events stored type-erased as
 `AnyTraceableEvent`), and the whole reasoning layer — query DSL, run fingerprint, semantic
 alignment, the regression gate — is **reused verbatim from the library**, so the service and
-the SDK can never drift.
+the SDK can never drift. Dependencies: **none beyond the standard library** + `dprovenancekit`.
 
 ## Run it
 
 ```bash
-python server/run.py                  # http://127.0.0.1:8787  (dashboard at /)
-PORT=9000 DPROV_API_KEYS="k1:teamA,k2:teamB" python server/run.py
+python server/run.py                       # http://127.0.0.1:8787  (dashboard at /)
+DPROV_STORAGE=sqlite python server/run.py  # durable; prints a seeded API key on first run
 ```
 
-Dependencies: **none beyond the standard library** + the `dprovenancekit` package. Auth is a
-`DPROV_API_KEYS` map of `key:project` (defaults to `demo-key:demo`).
+On first run in the default (tenancy) mode it seeds a `demo` project and prints an API key
+**once** — paste it into the dashboard. For local dev you can skip tenancy with a static key
+map: `DPROV_API_KEYS="demo-key:demo" python server/run.py`.
+
+## Storage
+
+`DPROV_STORAGE` selects the backend; both are held at **parity** by the library's test suite,
+so the query/gate code is identical either way:
+
+- `memory` (default) — in-process; great for dev and tests.
+- `sqlite` — one WAL SQLite file per project under `DPROV_DATA_DIR` (default `./dprov-data`);
+  durable across restarts.
+
+## Auth & tenants
+
+Production uses a durable, multi-tenant model: **projects** are first-class and **API keys are
+stored hashed** (only their SHA-256 is persisted; the raw key is shown once). Manage it with
+the admin CLI (same tenancy DB the server uses):
+
+```bash
+python server/admin.py create-project "Team A"            # -> proj_xxxx
+python server/admin.py create-key --project proj_xxxx --name ci   # -> dpk_… (save it)
+python server/admin.py list-projects
+python server/admin.py list-keys --project proj_xxxx
+python server/admin.py revoke dpk_…
+```
+
+(For dev, `DPROV_API_KEYS="k:project,…"` switches to a static, in-memory key map.)
 
 ## The regression gate in CI
 
-Point your app's `CloudTraceStore` at the backend so each run is recorded, then in CI fail
-the build when the agent regresses against a known-good (golden) run:
+Point your app's `CloudTraceStore` at the backend so each run is recorded, then gate the
+candidate against a known-good (golden) run. One command, sets the exit code:
 
 ```bash
-curl -fsS -X POST "$DPROV_URL/api/gate" \
-  -H "Authorization: Bearer $DPROV_KEY" -H "Content-Type: application/json" \
-  -d "{\"golden_run_id\":\"$GOLDEN\",\"candidate_run_id\":\"$CANDIDATE\"}" \
-| python -c "import sys,json; r=json.load(sys.stdin); print(r['summary']); sys.exit(0 if r['passed'] else 1)"
+python server/dprov_gate.py --url "$DPROV_URL" --key "$DPROV_KEY" \
+    --golden "$GOLDEN_RUN_ID" --candidate "$CANDIDATE_RUN_ID"
+# exit 0 = no regression · 1 = regression · 2 = error
+# tune with --max-level none|low|medium|high  and  --allow-divergent
 ```
 
-`/api/gate` accepts `max_regression_level` (`none`…`high`) and `allow_divergent_steps` to tune
-strictness, and returns the full report: `passed`, `regression_level`, `fingerprint_match`,
-and the `removed` / `added` / `divergent` steps.
+`dprov_gate.py` is self-contained (standard library only) — copy it straight into CI. It
+prints the report summary and fails the build on regression.
+
+## Deploy
+
+```bash
+docker compose up --build         # http://localhost:8787/  — seeded key is in the logs
+```
+
+The image is pure standard library (no `pip install`), runs with `DPROV_STORAGE=sqlite`, and
+persists `/data` to a named volume (per-project trace stores + the tenancy DB).
 
 ## Tests
 
 ```bash
-python -m pytest server/tests
+python -m pytest server/tests      # 15 tests
 ```
 
-11 tests: wire compatibility (ingest / query / capabilities / auth / poison-batch),
-the regression gate (catches a skipped critical step, passes identical runs, lenient
-policy), and an **end-to-end test driving the real `CloudTraceStore` SDK** against the
-server in-process.
+Wire compatibility (ingest / query / capabilities / auth / poison-batch), the regression
+gate (catches a skipped critical step, passes identical runs, lenient policy, 404), **durable
+SQLite storage across a restart**, **multi-tenant auth** (create / resolve / revoke; keys
+stored hashed), the **CI gate CLI** exit codes, and an **end-to-end test driving the real
+`CloudTraceStore` SDK** against the server in-process.
 
-## MVP scope (and the path to production)
+## What's MVP vs production
 
-This is a working open-core MVP, deliberately minimal:
-
-- **Storage is in-memory per project** (`InMemoryTraceStore`). Swapping in the WAL
-  `SQLiteTraceStore` (or a Postgres-backed store) gives durability — the two backends are
-  held at **parity** by the library's test suite, so the query/gate code is unchanged.
-- **Auth is a static API-key map.** Production wants per-user keys, projects, and billing.
-- **Single node, synchronous.** Fine for a pilot; horizontal scale + a managed datastore
-  come next.
-
-What it already proves: the SDK → ingest → query → **regression gate** → dashboard loop
-works end to end, on the exact wire contract the library ships.
+Done: the SDK → ingest → query → **regression gate** → dashboard loop on the exact wire
+contract; durable per-project storage; multi-tenant projects + hashed, revocable API keys; a
+one-command CI gate; containerized deploy. Still ahead for a real SaaS: per-user roles &
+billing, horizontal scale on a managed datastore, and a run-id index (the SQLite `get_run`
+currently scans, fine at MVP volume).

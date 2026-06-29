@@ -1,0 +1,10 @@
+.git
+.claude
+.github
+__pycache__/
+*.pyc
+.pytest_cache/
+.build/
+dprov-data/
+*.sqlite
+conformance/

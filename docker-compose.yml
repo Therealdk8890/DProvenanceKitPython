@@ -1,0 +1,17 @@
+# One command:  docker compose up --build
+# Dashboard at http://localhost:8787/  — the seeded API key is printed in the logs.
+services:
+  dprovenancekit:
+    build: .
+    image: dprovenancekit-server
+    ports:
+      - "8787:8787"
+    volumes:
+      - dprov-data:/data          # durable SQLite trace stores + tenancy db
+    environment:
+      DPROV_STORAGE: sqlite
+      DPROV_DATA_DIR: /data
+    restart: unless-stopped
+
+volumes:
+  dprov-data:

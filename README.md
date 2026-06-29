@@ -158,7 +158,7 @@ dprovenancekit diagnose     # causal ranking of failure modes
 dprovenancekit stability    # determinism boundary: isolated vs perturbed F1 variance
 ```
 
-The standard corpus scores **Precision 1.000 / Recall 1.000 / F1 1.000** across 8 scenarios (reordering, semantic evolution, noise injection, branch collapse, …), matching the Swift implementation.
+Both corpora score **Precision 1.000 / Recall 1.000 / F1 1.000** — 8 standard scenarios (reordering, semantic evolution, noise injection, branch collapse, …) and 5 adversarial robustness traps (dependency inversion, partial truncation, semantic substitution, …) — matching the Swift implementation case-for-case.
 
 ---
 
@@ -255,7 +255,7 @@ from dprovenancekit.testing import assert_no_regression
 assert_no_regression(golden=golden_run, candidate=candidate_run)
 ```
 
-Strict by default — any removed, added, or changed (ambiguous) step fails, and a removed CRITICAL step is additionally a HIGH-severity regression. Loosen with `max_regression_level` (gate only on severity) or `allow_divergent_steps` (tolerate benign per-step changes), or pass a custom `evaluator` to define what "equivalent" means (e.g. ignore volatile fields like token counts). `RegressionGate(...).check(...)` returns a `RegressionReport` (no raise) for richer assertions. Detecting *reordered* steps requires a span-aware profile (`AlignmentProfile.developer_debug_v1`); the default linear profile treats a pure reorder as still-matching. Complements `AlignmentSnapshotValidator` (an exact output-hash snapshot): the gate works on two runs and reasons about regression severity.
+Strict by default — any removed, added, or changed (ambiguous) step fails, and a removed *or reordered* CRITICAL step is additionally a HIGH-severity regression (reordering a critical step can invert a dependency). Loosen with `max_regression_level` (gate only on severity) or `allow_divergent_steps` (tolerate benign per-step changes), or pass a custom `evaluator` to define what "equivalent" means (e.g. ignore volatile fields like token counts). `RegressionGate(...).check(...)` returns a `RegressionReport` (no raise) for richer assertions. Detecting *reordered* steps requires a span-aware profile (`AlignmentProfile.developer_debug_v1`); the default linear profile treats a pure reorder as still-matching. Complements `AlignmentSnapshotValidator` (an exact output-hash snapshot): the gate works on two runs and reasons about regression severity.
 
 ---
 
@@ -301,7 +301,7 @@ with traced_run(store, context_id="ticket-42"):
 python -m pytest
 ```
 
-167 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 27 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain integration tests, 16 OpenAI Agents SDK integration tests, 16 instrumentation-layer tests, 13 regression-gate tests, and the regression-testing example run as a self-asserting test. (The real-framework tests run only when `langchain-core` / `openai-agents` are installed, otherwise skipped.)
+168 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 28 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain integration tests, 16 OpenAI Agents SDK integration tests, 16 instrumentation-layer tests, 13 regression-gate tests, and the regression-testing example run as a self-asserting test. (The real-framework tests run only when `langchain-core` / `openai-agents` are installed, otherwise skipped.)
 
 ---
 

@@ -395,6 +395,19 @@ def gen_alignment_verdict() -> dict:
                 {"type": "finalDecisionMade", "attributes": {"approved": True}},
             ],
         },
+        {
+            "description": "Two critical steps run in the opposite order -> HIGH regression "
+            "(reordering a critical step can invert a dependency).",
+            "profile": "developer_debug_v1",
+            "base": [
+                {"type": "documentEvaluated", "attributes": {"doc": "A"}},
+                {"type": "finalDecisionMade", "attributes": {"approved": True}},
+            ],
+            "comparison": [
+                {"type": "finalDecisionMade", "attributes": {"approved": True}},
+                {"type": "documentEvaluated", "attributes": {"doc": "A"}},
+            ],
+        },
     ]
     cases = []
     for spec in samples:

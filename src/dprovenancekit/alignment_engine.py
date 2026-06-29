@@ -71,11 +71,24 @@ class TraceAlignmentEngine:
             evidence_collector=collector,
         )
 
-        # Regression risk: removing a critical reasoning step is a high risk.
+        # Regression risk. Two failure modes degrade a critical reasoning step:
+        #   1. Removing it outright.
+        #   2. Reordering it — running critical steps out of their original order can invert
+        #      a dependency (e.g. GenerateInvoice before CreateCustomer). The engine has no
+        #      dependency graph, so this is critical-*order* sensitivity, not true dependency
+        #      inference; it deliberately fires only on CRITICAL steps so that reordering of
+        #      structural/diagnostic steps (the common, benign case) stays NONE.
         removed_critical = [
             a
             for a in alignments
             if a.state.is_removed
+            and a.base_event is not None
+            and a.base_event.payload.priority == TracePriority.CRITICAL
+        ]
+        reordered_critical = [
+            a
+            for a in alignments
+            if a.state.kind == AlignmentStateKind.REORDERED
             and a.base_event is not None
             and a.base_event.payload.priority == TracePriority.CRITICAL
         ]
@@ -86,11 +99,20 @@ class TraceAlignmentEngine:
                 strength=0.95,
                 reasoning=f"Critical reasoning steps removed: {critical_types}",
             )
+        elif reordered_critical:
+            reordered_types = ", ".join(
+                a.base_event.payload.type_identifier for a in reordered_critical
+            )
+            risk = RegressionRisk(
+                level=RegressionLevel.HIGH,
+                strength=1.0,
+                reasoning=f"Critical reasoning steps reordered: {reordered_types}",
+            )
         else:
             risk = RegressionRisk(
                 level=RegressionLevel.NONE,
                 strength=1.0,
-                reasoning="No critical steps removed.",
+                reasoning="No critical steps removed or reordered.",
             )
 
         v_artifacts = None

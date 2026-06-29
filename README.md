@@ -169,6 +169,7 @@ The standard corpus scores **Precision 1.000 / Recall 1.000 / F1 1.000** across 
 | Benchmark harness, failure diagnoser, corpus | `benchmark`, `corpus` |
 | Pure view models for a trace viewer | `viewmodel` |
 | Framework adapters (LangChain / LangGraph) | `integrations.langchain` |
+| Framework-agnostic instrumentation (decorators) | `instrument` |
 
 The SwiftUI `DProvenanceUI` target is intentionally **not** ported (it is Apple-platform UI); its pure value-model layer (`SpanViewModel`, flattening) is ported in `viewmodel`.
 
@@ -215,13 +216,37 @@ with tracer.trace(context_id="customer-42") as cb:
 
 ---
 
+## Instrumenting plain code (no framework)
+
+Not using a framework? Instrument a hand-written agent loop directly — no event type to define, zero dependencies (ships in core as `dprovenancekit.instrument`):
+
+```python
+from dprovenancekit import InMemoryTraceStore, traced, traced_run, record_event
+
+@traced
+def search(query): ...
+
+@traced
+def answer(question, sources): ...
+
+store = InMemoryTraceStore()
+with traced_run(store, context_id="ticket-42"):
+    sources = search(question)
+    record_event("plan.chosen", {"strategy": "rag"})
+    reply = answer(question, sources)
+```
+
+`@traced` records a `"<name>.start"` / `".end"` / `".error"` event pair per call in its own **span** (the function name is the **engine**), nests calls in the span tree, and emits the same `DERIVED_FROM` / `INFORMED` provenance edges as the framework adapters. `record_event(...)` drops an ad-hoc event (a decision, a chosen branch). Outside a `traced_run` the decorators are transparent — instrumented code is safe to call untraced — and `async def` is supported. The trace it produces is identical in shape to the adapter-produced ones, so fingerprint / diff / align / the regression gate all apply.
+
+---
+
 ## Tests
 
 ```bash
 python -m pytest
 ```
 
-121 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 27 cross-language conformance checks against the frozen Trace Specification v1 vectors, and 14 LangChain integration tests (one runs only when `langchain-core` is installed, otherwise skipped).
+131 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 27 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain integration tests (one runs only when `langchain-core` is installed, otherwise skipped), and 10 instrumentation-layer tests.
 
 ---
 

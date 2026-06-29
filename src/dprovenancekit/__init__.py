@@ -196,4 +196,7 @@ from .perturbation import EvaluationPerturbationLayer, PerturbationMode
 # View models (pure logic)
 from .viewmodel import SpanViewModel, FlattenedSpanNode, flatten_span_tree
 
+# Framework-agnostic instrumentation (decorators / context manager)
+from .instrument import TracedEvent, traced, traced_run, record_event
+
 __version__ = "0.1.0"

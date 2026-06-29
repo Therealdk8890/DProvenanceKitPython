@@ -169,6 +169,8 @@ The standard corpus scores **Precision 1.000 / Recall 1.000 / F1 1.000** across 
 | Benchmark harness, failure diagnoser, corpus | `benchmark`, `corpus` |
 | Pure view models for a trace viewer | `viewmodel` |
 | Framework adapters (LangChain / LangGraph) | `integrations.langchain` |
+| Framework adapters (OpenAI Agents SDK) | `integrations.openai_agents` |
+| Regression-gate test helper | `testing` |
 | Framework-agnostic instrumentation (decorators) | `instrument` |
 
 The SwiftUI `DProvenanceUI` target is intentionally **not** ported (it is Apple-platform UI); its pure value-model layer (`SpanViewModel`, flattening) is ported in `viewmodel`.
@@ -214,6 +216,50 @@ with tracer.trace(context_id="customer-42") as cb:
 
 [`DProvenanceCallbackHandler`](src/dprovenancekit/integrations/langchain.py) translates LangChain's callback stream into a trace: each `on_llm_start` / `on_tool_start` / `on_retriever_start` / `on_chain_start` (and its completion) becomes a typed event in execution order, LangChain's `run_id`/`parent_run_id` become the trace's **span tree**, the active model/tool/retriever becomes the **engine**, and (by default) lifecycle **provenance edges** are emitted (`DERIVED_FROM` start→completion, `INFORMED` parent→child). Because events flow through the same recording path as hand-written ones, the whole toolkit applies: a run's **fingerprint** is the structural identity of the agent's execution path, so two runs that diverge (a tool called in a different order, a retrieval step skipped) produce different fingerprints — a cheap regression signal. Options: `capture_payloads` (prompt/completion/IO previews), `link_lifecycle` (edges), `record_chains` (LCEL/LangGraph chain noise).
 
+### OpenAI Agents SDK
+
+```bash
+pip install dprovenancekit[openai-agents]
+```
+
+```python
+from dprovenancekit import SQLiteTraceStore
+from dprovenancekit.integrations.openai_agents import register, OpenAIAgentsTraceEvent
+
+store = SQLiteTraceStore(OpenAIAgentsTraceEvent, "traces.sqlite")
+register(store)   # registers a global tracing processor
+
+# ... run your agents normally; each run is recorded ...
+```
+
+[`DProvenanceTracingProcessor`](src/dprovenancekit/integrations/openai_agents.py) implements the SDK's `TracingProcessor`: each agent run becomes a trace-run (`context_id` = the trace name), and every span start/end becomes a typed event — `agent.start`, `generation.end`, `function.start`, `guardrail.error`, … — in execution order. The span's `span_id`/`parent_id` become the **span tree**, the active agent/tool/model becomes the **engine**, errors and triggered guardrails are recorded at `CRITICAL`, and lifecycle **provenance edges** are emitted (same `DERIVED_FROM`/`INFORMED` model). One registered processor captures every run; the same `fingerprint`/diff/align tooling then applies.
+
+---
+
+## Regression gate
+
+`dprovenancekit.testing` turns "did my agent regress?" into one assertion you can drop into any test or CI step. Give it a *golden* run (known-good) and a *candidate* run (what your current code produced); it aligns them and fails with a readable diagnostic if the candidate diverged.
+
+```python
+from dprovenancekit.testing import assert_no_regression
+
+assert_no_regression(golden=golden_run, candidate=candidate_run)
+```
+
+Strict by default — any removed, added, or changed (ambiguous) step fails, and a removed CRITICAL step is additionally a HIGH-severity regression. Loosen with `max_regression_level` (gate only on severity) or `allow_divergent_steps` (tolerate benign per-step changes), or pass a custom `evaluator` to define what "equivalent" means (e.g. ignore volatile fields like token counts). `RegressionGate(...).check(...)` returns a `RegressionReport` (no raise) for richer assertions. Detecting *reordered* steps requires a span-aware profile (`AlignmentProfile.developer_debug_v1`); the default linear profile treats a pure reorder as still-matching. Complements `AlignmentSnapshotValidator` (an exact output-hash snapshot): the gate works on two runs and reasons about regression severity.
+
+---
+
+## Example: regression testing
+
+[`examples/regression_testing.py`](examples/regression_testing.py) is the end-to-end story in ~150 readable lines: record a **golden** run of a fact-checking agent (retrieve → verify → decide), then catch a later run that skips its verification step — via both the fast **fingerprint** check and the detailed **alignment** verdict (which flags the dropped `claimVerified` step as a HIGH regression).
+
+```bash
+python examples/regression_testing.py
+```
+
+It self-asserts its verdicts, so it doubles as an executable test of the headline use case.
+
 ---
 
 ## Instrumenting plain code (no framework)
@@ -246,7 +292,7 @@ with traced_run(store, context_id="ticket-42"):
 python -m pytest
 ```
 
-137 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 27 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain integration tests (one runs only when `langchain-core` is installed, otherwise skipped), and 16 instrumentation-layer tests.
+167 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 27 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain integration tests, 16 OpenAI Agents SDK integration tests, 16 instrumentation-layer tests, 13 regression-gate tests, and the regression-testing example run as a self-asserting test. (The real-framework tests run only when `langchain-core` / `openai-agents` are installed, otherwise skipped.)
 
 ---
 

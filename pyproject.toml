@@ -21,9 +21,10 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
-# Framework adapters. The core package stays pure standard library; this extra is only
-# needed to wire DProvenanceKit into LangChain / LangGraph.
+# Framework adapters. The core package stays pure standard library; these extras are only
+# needed to wire DProvenanceKit into the corresponding framework.
 langchain = ["langchain-core>=0.2"]
+openai-agents = ["openai-agents>=0.1"]
 
 [project.scripts]
 dprovenancekit = "dprovenancekit.cli:main"

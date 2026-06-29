@@ -130,7 +130,9 @@ def build_run(run_index: int, spec: dict) -> TraceRun:
                 span_id=ev.get("span_id"),
                 parent_span_id=ev.get("parent_span_id"),
                 payload=ConformanceEvent.from_spec(ev),
-                id=deterministic_uuid((run_index + 1) * 1000 + i),
+                # Prefer an explicit id from the spec — the alignment vectors pin event ids
+                # because the canonical alignment ordering tiebreaks on (sequence, id).
+                id=(uuid.UUID(ev["id"]) if ev.get("id") else deterministic_uuid((run_index + 1) * 1000 + i)),
                 timestamp=float(i),
             )
         )

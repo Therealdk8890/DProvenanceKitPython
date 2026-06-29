@@ -196,6 +196,16 @@ from .perturbation import EvaluationPerturbationLayer, PerturbationMode
 # View models (pure logic)
 from .viewmodel import SpanViewModel, FlattenedSpanNode, flatten_span_tree
 
+# Regression-gate test helper
+from .testing import (
+    RegressionGate,
+    RegressionReport,
+    RegressionError,
+    assert_no_regression,
+    exact_equality_evaluator,
+    run_fingerprint,
+)
+
 # Framework-agnostic instrumentation (decorators / context manager)
 from .instrument import TracedEvent, traced, traced_run, record_event
 

@@ -49,16 +49,12 @@ def flush(store) -> None:
 
 
 def fetch_run(store, run_id: uuid.UUID):
-    """Fetch one run by id, uniformly across backends.
-
-    InMemoryTraceStore has a direct ``get_run``; SQLiteTraceStore does not (and there is no
-    run-id query node), so fall back to scanning all runs. Fine for the MVP; a production
-    store would index by run id.
-    """
+    """Fetch one run by id. Both backends expose an indexed ``get_run`` (InMemory directly,
+    SQLite via the ``run_id`` index); the scan is only a defensive fallback."""
     get_run = getattr(store, "get_run", None)
     if callable(get_run):
         return get_run(run_id)
-    for run in store.query_runs(ALL_RUNS):
+    for run in store.query_runs(ALL_RUNS):  # pragma: no cover - no current backend needs it
         if run.run_id == run_id:
             return run
     return None

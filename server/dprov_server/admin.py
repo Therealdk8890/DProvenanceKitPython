@@ -25,30 +25,37 @@ def main(argv=None) -> int:
     sub.add_parser("list-projects")
     p = sub.add_parser("create-project")
     p.add_argument("name")
+    p.add_argument("--plan", default="free", choices=["free", "pro"])
     p = sub.add_parser("create-key")
     p.add_argument("--project", required=True)
     p.add_argument("--name", default=None)
+    p.add_argument("--role", default="write", choices=["read", "write", "admin"])
     p = sub.add_parser("list-keys")
     p.add_argument("--project", required=True)
+    p = sub.add_parser("set-plan")
+    p.add_argument("--project", required=True)
+    p.add_argument("plan", choices=["free", "pro"])
     p = sub.add_parser("revoke")
     p.add_argument("key")
     args = ap.parse_args(argv)
 
     if args.cmd == "create-project":
-        print(t.create_project(args.name))
+        print(t.create_project(args.name, args.plan))
     elif args.cmd == "create-key":
         try:
-            print(t.create_api_key(args.project, args.name))
+            print(t.create_api_key(args.project, args.name, args.role))
         except KeyError as e:
             print(e, file=sys.stderr)
             return 1
         print("  ^ save this now — only its hash is stored.", file=sys.stderr)
+    elif args.cmd == "set-plan":
+        print("ok" if t.set_plan(args.project, args.plan) else "no such project")
     elif args.cmd == "list-projects":
         for r in t.list_projects():
-            print(f"{r['id']}\t{r['name']}")
+            print(f"{r['id']}\t{r['name']}\t[{r['plan']}]")
     elif args.cmd == "list-keys":
         for r in t.list_keys(args.project):
-            print(f"{r['key_hash'][:16]}…\t{r['name'] or '-'}\t{'revoked' if r['revoked'] else 'active'}")
+            print(f"{r['key_hash'][:16]}…\t{r['name'] or '-'}\t{r['role']}\t{'revoked' if r['revoked'] else 'active'}")
     elif args.cmd == "revoke":
         print("revoked" if t.revoke(args.key) else "no such key")
     return 0

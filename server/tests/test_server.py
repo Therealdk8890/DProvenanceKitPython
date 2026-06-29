@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from dataclasses import dataclass
 from urllib.parse import urlsplit
@@ -198,7 +199,7 @@ def test_tenancy_create_resolve_revoke(tmp_path):
     pid = t.create_project("Team A")
     key = t.create_api_key(pid, name="ci")
     assert key.startswith("dpk_")
-    assert t.resolve(key) == (pid, "Team A")
+    assert t.resolve(key) == (pid, "Team A", "write")  # default role
     assert t.resolve("dpk_wrong") is None
     # keys are stored hashed, never in the clear
     assert key not in open(str(tmp_path / "tenants.sqlite"), "rb").read().decode("latin-1")
@@ -253,6 +254,107 @@ def test_gate_cli_exit_codes():
     assert dprov_gate.main(base + ["--golden", g, "--candidate", c, "--allow-divergent", "--max-level", "high"], request_fn=rf) == 0
     # missing creds -> exit 2
     assert dprov_gate.main(["--url", "", "--key", "", "--golden", g, "--candidate", c], request_fn=rf) == 2
+
+
+# ── Roles / key scopes ───────────────────────────────────────────────────────────
+
+
+def test_role_scopes(tmp_path):
+    t = Tenancy(str(tmp_path / "tenants.sqlite"))
+    pid = t.create_project("acme")
+    read_key = t.create_api_key(pid, role="read")
+    write_key = t.create_api_key(pid, role="write")
+    srv = Server(tenancy=t)
+    rid = str(uuid.uuid4())
+
+    # a read-only key may read but not ingest
+    assert call(srv, "POST", "/ingest", [ev(rid, 0, "x")], key=read_key)[0] == 403
+    assert call(srv, "GET", "/api/runs", key=read_key)[0] == 200
+    # a write key may ingest
+    assert call(srv, "POST", "/ingest", [ev(rid, 0, "x")], key=write_key)[0] == 200
+
+
+# ── Usage metering + quotas (the billing mechanics) ──────────────────────────────
+
+
+def test_usage_metering_and_quota(tmp_path, monkeypatch):
+    import dprov_server.app as appmod
+
+    monkeypatch.setitem(appmod.PLAN_LIMITS["free"], "events", 1)  # tiny limit to force 429
+    t = Tenancy(str(tmp_path / "tenants.sqlite"))
+    pid = t.create_project("acme", plan="free")
+    key = t.create_api_key(pid, role="write")
+    srv = Server(tenancy=t)
+
+    # first event is within the (shrunk) free quota; usage is metered
+    assert call(srv, "POST", "/ingest", [ev(str(uuid.uuid4()), 0, "a")], key=key)[0] == 200
+    s, u = call(srv, "GET", "/api/usage", key=key)
+    assert s == 200 and u["metered"] is True and u["plan"] == "free" and u["usage"]["events"] == 1
+
+    # the next event exceeds the quota -> 429
+    s, body = call(srv, "POST", "/ingest", [ev(str(uuid.uuid4()), 0, "b")], key=key)
+    assert s == 429 and body["error"] == "QUOTA_EXCEEDED" and body["resource"] == "events"
+
+    # upgrading the plan (the Stripe-webhook seam) lifts the quota
+    assert t.set_plan(pid, "pro") is True
+    assert call(srv, "POST", "/ingest", [ev(str(uuid.uuid4()), 0, "c")], key=key)[0] == 200
+
+
+def test_usage_unmetered_in_static_mode():
+    s, u = call(server(), "GET", "/api/usage")
+    assert s == 200 and u["metered"] is False
+
+
+# ── Stripe billing webhook ───────────────────────────────────────────────────────
+
+
+def test_stripe_signature_and_plan_mapping():
+    from dprov_server.billing import plan_for_event, sign, verify_signature
+
+    secret, body = "whsec_test", b'{"hello":1}'
+    ts = int(time.time())
+    hdr = sign(body, secret, ts)
+    assert verify_signature(body, hdr, secret) is True
+    assert verify_signature(body + b"x", hdr, secret) is False        # tampered body
+    assert verify_signature(body, hdr, "whsec_wrong") is False        # wrong secret
+    assert verify_signature(body, sign(body, secret, ts - 10_000), secret, tolerance=300) is False  # stale
+
+    active = {"type": "customer.subscription.updated",
+              "data": {"object": {"metadata": {"project_id": "proj_1"},
+                                   "items": {"data": [{"price": {"lookup_key": "pro_monthly"}}]}}}}
+    assert plan_for_event(active) == ("proj_1", "pro")
+    assert plan_for_event(active, {"pro_monthly": "free"}) == ("proj_1", "free")  # price map override
+    deleted = {"type": "customer.subscription.deleted", "data": {"object": {"metadata": {"project_id": "proj_1"}}}}
+    assert plan_for_event(deleted) == ("proj_1", "free")
+    assert plan_for_event({"type": "x", "data": {"object": {}}}) is None  # no project_id
+
+
+def test_stripe_webhook_upgrades_plan(tmp_path):
+    from dprov_server.billing import sign
+
+    t = Tenancy(str(tmp_path / "tenants.sqlite"))
+    pid = t.create_project("acme", plan="free")
+    srv = Server(tenancy=t, stripe_secret="whsec_test")
+
+    body = json.dumps({
+        "type": "customer.subscription.updated",
+        "data": {"object": {"metadata": {"project_id": pid},
+                            "items": {"data": [{"price": {"lookup_key": "pro"}}]}}},
+    }).encode()
+    hdr = sign(body, "whsec_test", int(time.time()))
+
+    status, _h, out = srv.handle("POST", "/webhooks/stripe", {"Stripe-Signature": hdr}, body)
+    rep = json.loads(out)
+    assert status == 200 and rep["plan"] == "pro" and rep["updated"] is True
+    assert t.get_plan(pid) == "pro"
+
+    # bad signature is rejected
+    bad, _h, _b = srv.handle("POST", "/webhooks/stripe", {"Stripe-Signature": "t=1,v1=deadbeef"}, body)
+    assert bad == 400
+
+    # not configured -> 503
+    s503, _h, _b = Server(tenancy=t, stripe_secret="").handle("POST", "/webhooks/stripe", {}, body)
+    assert s503 == 503
 
 
 # ── End-to-end through the real CloudTraceStore SDK (no sockets) ─────────────────

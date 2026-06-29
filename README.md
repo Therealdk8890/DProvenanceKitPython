@@ -169,6 +169,7 @@ The standard corpus scores **Precision 1.000 / Recall 1.000 / F1 1.000** across 
 | Benchmark harness, failure diagnoser, corpus | `benchmark`, `corpus` |
 | Pure view models for a trace viewer | `viewmodel` |
 | Framework adapters (LangChain / LangGraph) | `integrations.langchain` |
+| Framework adapters (OpenAI Agents SDK) | `integrations.openai_agents` |
 
 The SwiftUI `DProvenanceUI` target is intentionally **not** ported (it is Apple-platform UI); its pure value-model layer (`SpanViewModel`, flattening) is ported in `viewmodel`.
 
@@ -213,6 +214,24 @@ with tracer.trace(context_id="customer-42") as cb:
 
 [`DProvenanceCallbackHandler`](src/dprovenancekit/integrations/langchain.py) translates LangChain's callback stream into a trace: each `on_llm_start` / `on_tool_start` / `on_retriever_start` / `on_chain_start` (and its completion) becomes a typed event in execution order, LangChain's `run_id`/`parent_run_id` become the trace's **span tree**, the active model/tool/retriever becomes the **engine**, and (by default) lifecycle **provenance edges** are emitted (`DERIVED_FROM` start→completion, `INFORMED` parent→child). Because events flow through the same recording path as hand-written ones, the whole toolkit applies: a run's **fingerprint** is the structural identity of the agent's execution path, so two runs that diverge (a tool called in a different order, a retrieval step skipped) produce different fingerprints — a cheap regression signal. Options: `capture_payloads` (prompt/completion/IO previews), `link_lifecycle` (edges), `record_chains` (LCEL/LangGraph chain noise).
 
+### OpenAI Agents SDK
+
+```bash
+pip install dprovenancekit[openai-agents]
+```
+
+```python
+from dprovenancekit import SQLiteTraceStore
+from dprovenancekit.integrations.openai_agents import register, OpenAIAgentsTraceEvent
+
+store = SQLiteTraceStore(OpenAIAgentsTraceEvent, "traces.sqlite")
+register(store)   # registers a global tracing processor
+
+# ... run your agents normally; each run is recorded ...
+```
+
+[`DProvenanceTracingProcessor`](src/dprovenancekit/integrations/openai_agents.py) implements the SDK's `TracingProcessor`: each agent run becomes a trace-run (`context_id` = the trace name), and every span start/end becomes a typed event — `agent.start`, `generation.end`, `function.start`, `guardrail.error`, … — in execution order. The span's `span_id`/`parent_id` become the **span tree**, the active agent/tool/model becomes the **engine**, errors and triggered guardrails are recorded at `CRITICAL`, and lifecycle **provenance edges** are emitted (same `DERIVED_FROM`/`INFORMED` model). One registered processor captures every run; the same `fingerprint`/diff/align tooling then applies.
+
 ---
 
 ## Tests
@@ -221,7 +240,7 @@ with tracer.trace(context_id="customer-42") as cb:
 python -m pytest
 ```
 
-121 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 27 cross-language conformance checks against the frozen Trace Specification v1 vectors, and 14 LangChain integration tests (one runs only when `langchain-core` is installed, otherwise skipped).
+132 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 27 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain integration tests, and 11 OpenAI Agents SDK integration tests. (The two real-framework tests run only when `langchain-core` / `openai-agents` are installed, otherwise skipped.)
 
 ---
 

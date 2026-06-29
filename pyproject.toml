@@ -13,8 +13,18 @@ authors = [{ name = "DProvenanceKit" }]
 keywords = ["observability", "ai", "agents", "tracing", "provenance", "regression"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Intended Audience :: Developers",
     "Topic :: Software Development :: Debuggers",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "License :: Other/Proprietary License",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
 ]
 # Pure standard library: sqlite3, contextvars, threading, json, hashlib, uuid, urllib.
 dependencies = []
@@ -30,10 +40,16 @@ openai-agents = ["openai-agents>=0.1"]
 dprovenancekit = "dprovenancekit.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/Therealdk8890/DProvenanceKit"
+Homepage = "https://github.com/Therealdk8890/DProvenanceKitPython"
+Repository = "https://github.com/Therealdk8890/DProvenanceKitPython"
+Issues = "https://github.com/Therealdk8890/DProvenanceKitPython/issues"
+"Swift original" = "https://github.com/Therealdk8890/DProvenanceKit"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+dprovenancekit = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

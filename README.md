@@ -20,13 +20,22 @@ The Swift library targets Apple-platform and on-device AI. This port brings the 
 
 ## Install
 
+From PyPI (released builds):
+
 ```bash
-pip install -e .
-# optional, for the tests:
+pip install dprovenancekit
+pip install "dprovenancekit[langchain]"        # + LangChain adapter
+pip install "dprovenancekit[openai-agents]"    # + OpenAI Agents adapter
+```
+
+From a checkout (development):
+
+```bash
 pip install -e ".[dev]"
 ```
 
-Requires Python 3.9+.
+Requires Python 3.9+; the core has **zero third-party dependencies**. Releasing is documented
+in [RELEASING.md](RELEASING.md).
 
 ---
 

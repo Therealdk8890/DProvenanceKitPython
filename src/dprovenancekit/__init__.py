@@ -206,4 +206,7 @@ from .testing import (
     run_fingerprint,
 )
 
+# Framework-agnostic instrumentation (decorators / context manager)
+from .instrument import TracedEvent, traced, traced_run, record_event
+
 __version__ = "0.1.0"

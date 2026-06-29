@@ -171,6 +171,7 @@ The standard corpus scores **Precision 1.000 / Recall 1.000 / F1 1.000** across 
 | Framework adapters (LangChain / LangGraph) | `integrations.langchain` |
 | Framework adapters (OpenAI Agents SDK) | `integrations.openai_agents` |
 | Regression-gate test helper | `testing` |
+| Framework-agnostic instrumentation (decorators) | `instrument` |
 
 The SwiftUI `DProvenanceUI` target is intentionally **not** ported (it is Apple-platform UI); its pure value-model layer (`SpanViewModel`, flattening) is ported in `viewmodel`.
 
@@ -261,13 +262,37 @@ It self-asserts its verdicts, so it doubles as an executable test of the headlin
 
 ---
 
+## Instrumenting plain code (no framework)
+
+Not using a framework? Instrument a hand-written agent loop directly — no event type to define, zero dependencies (ships in core as `dprovenancekit.instrument`):
+
+```python
+from dprovenancekit import InMemoryTraceStore, traced, traced_run, record_event
+
+@traced
+def search(query): ...
+
+@traced
+def answer(question, sources): ...
+
+store = InMemoryTraceStore()
+with traced_run(store, context_id="ticket-42"):
+    sources = search(question)
+    record_event("plan.chosen", {"strategy": "rag"})
+    reply = answer(question, sources)
+```
+
+`@traced` records a `"<name>.start"` / `".end"` / `".error"` event pair per call in its own **span** (the function name is the **engine**), nests calls in the span tree, and emits the same `DERIVED_FROM` / `INFORMED` provenance edges as the framework adapters. `record_event(...)` drops an ad-hoc event (a decision, a chosen branch). Plain functions, `async def`, generators, and async generators are all supported (for a generator, start/end bracket the full iteration). Instrumentation never changes behavior — capture is failure-proof and exceptions pass through unchanged. Outside a `traced_run` the decorators are transparent, so instrumented code is safe to call untraced. The trace it produces is identical in shape to the adapter-produced ones, so fingerprint / diff / align / the regression gate all apply.
+
+---
+
 ## Tests
 
 ```bash
 python -m pytest
 ```
 
-151 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 27 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain integration tests, 16 OpenAI Agents SDK integration tests, 13 regression-gate tests, and the regression-testing example run as a self-asserting test. (The real-framework tests run only when `langchain-core` / `openai-agents` are installed, otherwise skipped.)
+167 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 27 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain integration tests, 16 OpenAI Agents SDK integration tests, 16 instrumentation-layer tests, 13 regression-gate tests, and the regression-testing example run as a self-asserting test. (The real-framework tests run only when `langchain-core` / `openai-agents` are installed, otherwise skipped.)
 
 ---
 

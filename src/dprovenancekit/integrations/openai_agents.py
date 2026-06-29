@@ -44,8 +44,8 @@ from __future__ import annotations
 import json
 import threading
 import uuid
-from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Mapping, Optional, Set
 
 from ..context import TraceContext
 from ..edge import TraceEdgeType
@@ -171,6 +171,12 @@ def _engine_for(span_data: Any, default: str) -> str:
         to_agent = getattr(span_data, "to_agent", None)
         if to_agent:
             return str(to_agent)
+    if kind == "response":
+        # The Responses API (the SDK's default model path) emits `response` spans; the
+        # model lives on the Response object, not directly on the span data.
+        model = getattr(getattr(span_data, "response", None), "model", None)
+        if model:
+            return str(model)
     return default
 
 
@@ -204,6 +210,9 @@ def _span_attributes(span_data: Any, capture_payloads: bool) -> Dict[str, Any]:
         response_id = getattr(response, "id", None)
         if response_id is not None:
             attrs["response_id"] = str(response_id)
+        model = getattr(response, "model", None)
+        if model is not None:
+            attrs["model"] = str(model)
     elif kind == "function":
         if capture_payloads:
             for field in ("input", "output"):
@@ -245,11 +254,23 @@ def _error_attributes(error: Any) -> Dict[str, Any]:
 # ── The processor ────────────────────────────────────────────────────────────────
 
 
+@dataclass
+class _TraceState:
+    """Per-trace bookkeeping. All span-level state is scoped here, not globally, so two
+    concurrently-open traces can never collide on a span id or leak across each other."""
+
+    run: ActiveTraceRun
+    start_events: Dict[str, uuid.UUID] = field(default_factory=dict)  # span_id -> start id
+    ended_spans: Set[str] = field(default_factory=set)  # span_ids already ended (idempotency)
+
+
 class DProvenanceTracingProcessor(_TracingProcessor):  # type: ignore[misc,valid-type]
     """An OpenAI Agents SDK ``TracingProcessor`` that records DProvenanceKit runs.
 
-    One instance handles many concurrent traces; it is safe to share across threads. Each
-    trace opens a run keyed by ``trace_id`` and is flushed on ``on_trace_end``.
+    One instance handles many concurrent traces and is safe to share across threads: each
+    trace's run and span bookkeeping are isolated in a per-trace :class:`_TraceState`, and
+    a lock guards the map of live traces. A trace opens a run on ``on_trace_start`` and is
+    flushed and dropped on ``on_trace_end``.
 
     Options:
         capture_payloads: include tool/generation IO previews in event attributes (else
@@ -271,62 +292,77 @@ class DProvenanceTracingProcessor(_TracingProcessor):  # type: ignore[misc,valid
         self._capture = capture_payloads
         self._link = link_lifecycle
         self._lock = threading.Lock()
-        self._runs: Dict[str, ActiveTraceRun] = {}  # trace_id -> run
-        self._start_event: Dict[str, uuid.UUID] = {}  # span_id -> start event id
+        self._traces: Dict[str, _TraceState] = {}  # trace_id -> per-trace state
+
+    def run_id_for(self, trace_id: Any) -> Optional[uuid.UUID]:
+        """The DProvenanceKit run id recording the given SDK ``trace_id`` (or ``None``)."""
+        with self._lock:
+            state = self._traces.get(str(trace_id))
+        return state.run.run_id if state is not None else None
 
     # MARK: - Trace lifecycle ----------------------------------------------------
 
     def on_trace_start(self, trace: Any) -> None:
-        trace_id = getattr(trace, "trace_id", None)
-        context_id = getattr(trace, "name", None) or str(trace_id)
-        run = ActiveTraceRun(
-            context_id=str(context_id),
-            store=self._store,
-            event_type=OpenAIAgentsTraceEvent,
-            schema_version=self._schema_version,
-        )
+        trace_id = str(getattr(trace, "trace_id", None))
+        context_id = getattr(trace, "name", None) or trace_id
         with self._lock:
-            self._runs[str(trace_id)] = run
+            if trace_id in self._traces:
+                return  # duplicate start for a live trace — keep the first run
+            self._traces[trace_id] = _TraceState(
+                run=ActiveTraceRun(
+                    context_id=str(context_id),
+                    store=self._store,
+                    event_type=OpenAIAgentsTraceEvent,
+                    schema_version=self._schema_version,
+                )
+            )
 
     def on_trace_end(self, trace: Any) -> None:
         trace_id = str(getattr(trace, "trace_id", None))
         with self._lock:
-            run = self._runs.pop(trace_id, None)
-        if run is not None:
-            run.flush()
+            state = self._traces.pop(trace_id, None)  # drops span bookkeeping with it
+        if state is not None:
+            state.run.flush()
 
     # MARK: - Span lifecycle -----------------------------------------------------
 
     def on_span_start(self, span: Any) -> None:
         with self._lock:
-            run = self._runs.get(str(getattr(span, "trace_id", None)))
-            if run is None:
+            state = self._traces.get(str(getattr(span, "trace_id", None)))
+            if state is None:
                 return
             span_data = getattr(span, "span_data", None)
             kind = getattr(span_data, "type", "span")
+            span_id = getattr(span, "span_id", None)
+            parent_id = getattr(span, "parent_id", None)
             event_id = self._record(
-                run,
+                state.run,
                 f"{kind}.start",
                 TracePriority.STRUCTURAL,
                 _span_attributes(span_data, self._capture),
                 engine=_engine_for(span_data, kind),
-                span_id=getattr(span, "span_id", None),
-                parent_id=getattr(span, "parent_id", None),
+                span_id=span_id,
+                parent_id=parent_id,
             )
-            span_id = getattr(span, "span_id", None)
-            if span_id is not None:
-                self._start_event[str(span_id)] = event_id
-            parent_id = getattr(span, "parent_id", None)
-            if self._link and parent_id is not None:
-                parent_start = self._start_event.get(str(parent_id))
-                if parent_start is not None:
-                    run.link(parent_start, event_id, TraceEdgeType.INFORMED)
+            if self._link:
+                if span_id is not None:
+                    state.start_events[str(span_id)] = event_id  # only kept if edges are on
+                if parent_id is not None:
+                    parent_start = state.start_events.get(str(parent_id))
+                    if parent_start is not None:
+                        state.run.link(parent_start, event_id, TraceEdgeType.INFORMED)
 
     def on_span_end(self, span: Any) -> None:
         with self._lock:
-            run = self._runs.get(str(getattr(span, "trace_id", None)))
-            if run is None:
+            state = self._traces.get(str(getattr(span, "trace_id", None)))
+            if state is None:
                 return
+            span_id = getattr(span, "span_id", None)
+            if span_id is not None:
+                key = str(span_id)
+                if key in state.ended_spans:
+                    return  # idempotent: ignore a repeated end for the same span
+                state.ended_spans.add(key)
             span_data = getattr(span, "span_data", None)
             kind = getattr(span_data, "type", "span")
             error = getattr(span, "error", None)
@@ -339,25 +375,24 @@ class DProvenanceTracingProcessor(_TracingProcessor):  # type: ignore[misc,valid
                 priority = TracePriority.CRITICAL if triggered else TracePriority.STRUCTURAL
                 type_name = f"{kind}.end"
             event_id = self._record(
-                run,
+                state.run,
                 type_name,
                 priority,
                 attrs,
                 engine=_engine_for(span_data, kind),
-                span_id=getattr(span, "span_id", None),
+                span_id=span_id,
                 parent_id=getattr(span, "parent_id", None),
             )
-            span_id = getattr(span, "span_id", None)
             if self._link and span_id is not None:
-                start_id = self._start_event.pop(str(span_id), None)
+                start_id = state.start_events.pop(str(span_id), None)
                 if start_id is not None:
-                    run.link(start_id, event_id, TraceEdgeType.DERIVED_FROM)
+                    state.run.link(start_id, event_id, TraceEdgeType.DERIVED_FROM)
 
     # MARK: - Flush / shutdown ---------------------------------------------------
 
     def force_flush(self) -> None:
         with self._lock:
-            runs = list(self._runs.values())
+            runs = [state.run for state in self._traces.values()]
         for run in runs:
             run.flush()
 

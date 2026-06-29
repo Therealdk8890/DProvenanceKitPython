@@ -87,7 +87,7 @@ def drive_agent_trace(proc, *, trace_id="trace-1", name="research-run"):
     proc.on_span_end(fn)
 
     proc.on_span_end(agent)
-    run_id = proc._runs[trace_id].run_id
+    run_id = proc.run_id_for(trace_id)
     proc.on_trace_end(trace)
     return run_id
 
@@ -180,7 +180,7 @@ def test_span_error_is_recorded_as_critical():
                     error={"message": "tool exploded", "data": {"code": 500}})
     proc.on_span_start(span)
     proc.on_span_end(span)
-    run_id = proc._runs["t"].run_id
+    run_id = proc.run_id_for("t")
     proc.on_trace_end(trace)
 
     by_type = _events_by_type(store.get_run(run_id))
@@ -198,7 +198,7 @@ def test_triggered_guardrail_is_critical():
     span = FakeSpan("s1", "t", FakeSpanData("guardrail", name="jailbreak", triggered=True))
     proc.on_span_start(span)
     proc.on_span_end(span)
-    run_id = proc._runs["t"].run_id
+    run_id = proc.run_id_for("t")
     proc.on_trace_end(trace)
 
     by_type = _events_by_type(store.get_run(run_id))
@@ -214,7 +214,7 @@ def test_capture_payloads_off_omits_io():
     span = FakeSpan("s1", "t", FakeSpanData("function", name="search", input="secret", output="secret"))
     proc.on_span_start(span)
     proc.on_span_end(span)
-    run_id = proc._runs["t"].run_id
+    run_id = proc.run_id_for("t")
     proc.on_trace_end(trace)
 
     by_type = _events_by_type(store.get_run(run_id))
@@ -240,7 +240,7 @@ def test_concurrent_traces_route_to_separate_runs():
     proc.on_span_start(b)
     proc.on_span_end(b)
     proc.on_span_end(a)
-    rid1, rid2 = proc._runs["t1"].run_id, proc._runs["t2"].run_id
+    rid1, rid2 = proc.run_id_for("t1"), proc.run_id_for("t2")
     proc.on_trace_end(t1)
     proc.on_trace_end(t2)
 
@@ -260,7 +260,7 @@ def test_force_flush_writes_open_trace():
         proc.on_trace_start(trace)
         span = FakeSpan("s1", "t", FakeSpanData("agent", name="A"))
         proc.on_span_start(span)
-        run_id = proc._runs["t"].run_id
+        run_id = proc.run_id_for("t")
         proc.force_flush()  # without on_trace_end
         rows = store._db.query("SELECT event_count FROM runs WHERE run_id = ?", (str(run_id),))
     assert rows and rows[0][0] == 1
@@ -296,7 +296,7 @@ def test_same_path_shares_fingerprint_divergent_path_differs():
         proc.on_span_start(gen)
         proc.on_span_end(gen)
         proc.on_span_end(agent)
-        c = proc._runs["c"].run_id
+        c = proc.run_id_for("c")
         proc.on_trace_end(trace)
 
         store.flush()
@@ -304,6 +304,96 @@ def test_same_path_shares_fingerprint_divergent_path_differs():
 
     assert fp_a == fp_b
     assert fp_a != fp_c
+
+
+# ── Hardening: behaviors confirmed by adversarial review ────────────────────────
+
+
+def test_response_span_uses_model_as_engine():
+    # The Responses API (the SDK default) emits `response` spans; the model lives on the
+    # nested Response object, and must still become the engine.
+    store = InMemoryTraceStore()
+    proc = DProvenanceTracingProcessor(store)
+    trace = FakeTrace("t", "run")
+    proc.on_trace_start(trace)
+    resp = type("Resp", (), {"model": "gpt-4o-mini", "id": "resp_1"})()
+    span = FakeSpan("s1", "t", FakeSpanData("response", response=resp, usage={"total_tokens": 9}))
+    proc.on_span_start(span)
+    proc.on_span_end(span)
+    run_id = proc.run_id_for("t")
+    proc.on_trace_end(trace)
+
+    by_type = _events_by_type(store.get_run(run_id))
+    assert by_type["response.start"].engine_name == "gpt-4o-mini"
+    assert by_type["response.end"].payload.attributes["model"] == "gpt-4o-mini"
+    assert by_type["response.end"].payload.attributes["response_id"] == "resp_1"
+
+
+def test_link_off_does_not_populate_or_leak_state():
+    store = InMemoryTraceStore()
+    proc = DProvenanceTracingProcessor(store, link_lifecycle=False)
+    trace = FakeTrace("t", "run")
+    proc.on_trace_start(trace)
+    span = FakeSpan("s1", "t", FakeSpanData("agent", name="A"))
+    proc.on_span_start(span)
+    # With edges off, start-event bookkeeping is not even populated...
+    assert proc._traces["t"].start_events == {}
+    proc.on_span_end(span)
+    proc.on_trace_end(trace)
+    # ...and per-trace state is dropped entirely when the trace ends (no global leak).
+    assert proc._traces == {}
+
+
+def test_concurrent_traces_with_colliding_span_ids_keep_edges_isolated():
+    store = InMemoryTraceStore()
+    proc = DProvenanceTracingProcessor(store)
+    t1, t2 = FakeTrace("t1", "A"), FakeTrace("t2", "B")
+    proc.on_trace_start(t1)
+    proc.on_trace_start(t2)
+    # Both traces deliberately reuse the SAME span ids.
+    proc.on_span_start(FakeSpan("s_parent", "t1", FakeSpanData("agent", name="A")))
+    proc.on_span_start(FakeSpan("s_parent", "t2", FakeSpanData("agent", name="B")))
+    proc.on_span_start(FakeSpan("s_child", "t1", FakeSpanData("function", name="f1"), parent_id="s_parent"))
+    proc.on_span_start(FakeSpan("s_child", "t2", FakeSpanData("function", name="f2"), parent_id="s_parent"))
+    rid1, rid2 = proc.run_id_for("t1"), proc.run_id_for("t2")
+    proc.on_trace_end(t1)
+    proc.on_trace_end(t2)
+
+    run1, run2 = store.get_run(rid1), store.get_run(rid2)
+    ids1 = {e.id for e in run1.events}
+    ids2 = {e.id for e in run2.events}
+    by1, by2 = _events_by_type(run1), _events_by_type(run2)
+    # The child's INFORMED edge points at its OWN run's parent, never the other trace's.
+    sources1 = {e.source_id for e in store.lineage_edges(by1["function.start"].id)}
+    sources2 = {e.source_id for e in store.lineage_edges(by2["function.start"].id)}
+    assert by1["agent.start"].id in sources1 and sources1 <= ids1
+    assert by2["agent.start"].id in sources2 and sources2 <= ids2
+
+
+def test_duplicate_trace_start_keeps_first_run():
+    store = InMemoryTraceStore()
+    proc = DProvenanceTracingProcessor(store)
+    trace = FakeTrace("t", "run")
+    proc.on_trace_start(trace)
+    rid_first = proc.run_id_for("t")
+    proc.on_trace_start(trace)  # duplicate start for a live trace
+    assert proc.run_id_for("t") == rid_first
+
+
+def test_duplicate_span_end_is_idempotent():
+    store = InMemoryTraceStore()
+    proc = DProvenanceTracingProcessor(store)
+    trace = FakeTrace("t", "run")
+    proc.on_trace_start(trace)
+    span = FakeSpan("s1", "t", FakeSpanData("function", name="search"))
+    proc.on_span_start(span)
+    proc.on_span_end(span)
+    proc.on_span_end(span)  # repeated end — must not double-emit
+    run_id = proc.run_id_for("t")
+    proc.on_trace_end(trace)
+
+    types = [e.payload.type_identifier for e in store.get_run(run_id).events]
+    assert types == ["function.start", "function.end"]
 
 
 # ── Real SpanData, when the SDK is installed ─────────────────────────────────────
@@ -323,7 +413,7 @@ def test_real_span_data_objects_are_handled():
     span = FakeSpan("s1", "t", FunctionSpanData(name="search", input="q", output="r"))
     proc.on_span_start(span)
     proc.on_span_end(span)
-    run_id = proc._runs["t"].run_id
+    run_id = proc.run_id_for("t")
     proc.on_trace_end(trace)
 
     by_type = _events_by_type(store.get_run(run_id))

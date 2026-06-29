@@ -240,7 +240,7 @@ register(store)   # registers a global tracing processor
 python -m pytest
 ```
 
-132 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 27 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain integration tests, and 11 OpenAI Agents SDK integration tests. (The two real-framework tests run only when `langchain-core` / `openai-agents` are installed, otherwise skipped.)
+137 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 27 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain integration tests, and 16 OpenAI Agents SDK integration tests. (The two real-framework tests run only when `langchain-core` / `openai-agents` are installed, otherwise skipped.)
 
 ---
 

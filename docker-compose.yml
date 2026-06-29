@@ -1,11 +1,12 @@
 # One command:  docker compose up --build
 # Dashboard at http://localhost:8787/  — the seeded API key is printed in the logs.
+# Host port is overridable:  DPROV_HOST_PORT=8788 docker compose up --build
 services:
   dprovenancekit:
     build: .
     image: dprovenancekit-server
     ports:
-      - "8787:8787"
+      - "${DPROV_HOST_PORT:-8787}:8787"
     volumes:
       - dprov-data:/data          # durable SQLite trace stores + tenancy db
     environment:

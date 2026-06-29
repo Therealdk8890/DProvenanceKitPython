@@ -75,11 +75,13 @@ prints the report summary and fails the build on regression.
 ## Deploy
 
 ```bash
-docker compose up --build         # http://localhost:8787/  — seeded key is in the logs
+docker compose up --build                         # http://localhost:8787/
+DPROV_HOST_PORT=8788 docker compose up --build     # if 8787 is taken
 ```
 
 The image is pure standard library (no `pip install`), runs with `DPROV_STORAGE=sqlite`, and
-persists `/data` to a named volume (per-project trace stores + the tenancy DB).
+persists `/data` to a named volume (per-project trace stores + the tenancy DB). The seeded
+API key is printed once in the logs (`docker compose logs`).
 
 ## Tests
 

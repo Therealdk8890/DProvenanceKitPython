@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from dataclasses import dataclass
 from urllib.parse import urlsplit
@@ -302,6 +303,58 @@ def test_usage_metering_and_quota(tmp_path, monkeypatch):
 def test_usage_unmetered_in_static_mode():
     s, u = call(server(), "GET", "/api/usage")
     assert s == 200 and u["metered"] is False
+
+
+# ── Stripe billing webhook ───────────────────────────────────────────────────────
+
+
+def test_stripe_signature_and_plan_mapping():
+    from dprov_server.billing import plan_for_event, sign, verify_signature
+
+    secret, body = "whsec_test", b'{"hello":1}'
+    ts = int(time.time())
+    hdr = sign(body, secret, ts)
+    assert verify_signature(body, hdr, secret) is True
+    assert verify_signature(body + b"x", hdr, secret) is False        # tampered body
+    assert verify_signature(body, hdr, "whsec_wrong") is False        # wrong secret
+    assert verify_signature(body, sign(body, secret, ts - 10_000), secret, tolerance=300) is False  # stale
+
+    active = {"type": "customer.subscription.updated",
+              "data": {"object": {"metadata": {"project_id": "proj_1"},
+                                   "items": {"data": [{"price": {"lookup_key": "pro_monthly"}}]}}}}
+    assert plan_for_event(active) == ("proj_1", "pro")
+    assert plan_for_event(active, {"pro_monthly": "free"}) == ("proj_1", "free")  # price map override
+    deleted = {"type": "customer.subscription.deleted", "data": {"object": {"metadata": {"project_id": "proj_1"}}}}
+    assert plan_for_event(deleted) == ("proj_1", "free")
+    assert plan_for_event({"type": "x", "data": {"object": {}}}) is None  # no project_id
+
+
+def test_stripe_webhook_upgrades_plan(tmp_path):
+    from dprov_server.billing import sign
+
+    t = Tenancy(str(tmp_path / "tenants.sqlite"))
+    pid = t.create_project("acme", plan="free")
+    srv = Server(tenancy=t, stripe_secret="whsec_test")
+
+    body = json.dumps({
+        "type": "customer.subscription.updated",
+        "data": {"object": {"metadata": {"project_id": pid},
+                            "items": {"data": [{"price": {"lookup_key": "pro"}}]}}},
+    }).encode()
+    hdr = sign(body, "whsec_test", int(time.time()))
+
+    status, _h, out = srv.handle("POST", "/webhooks/stripe", {"Stripe-Signature": hdr}, body)
+    rep = json.loads(out)
+    assert status == 200 and rep["plan"] == "pro" and rep["updated"] is True
+    assert t.get_plan(pid) == "pro"
+
+    # bad signature is rejected
+    bad, _h, _b = srv.handle("POST", "/webhooks/stripe", {"Stripe-Signature": "t=1,v1=deadbeef"}, body)
+    assert bad == 400
+
+    # not configured -> 503
+    s503, _h, _b = Server(tenancy=t, stripe_secret="").handle("POST", "/webhooks/stripe", {}, body)
+    assert s503 == 503
 
 
 # ── End-to-end through the real CloudTraceStore SDK (no sockets) ─────────────────

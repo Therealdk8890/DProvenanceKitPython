@@ -15,6 +15,7 @@ It speaks the Trace Specification v1 cloud wire format (§7), so the library's
 | `GET` | `/api/runs`, `/api/runs/{id}` | runs + fingerprints for the dashboard |
 | `POST` | `/api/gate` | **regression gate**: golden vs candidate → verdict |
 | `GET` | `/api/usage` | per-project plan, usage, and limits |
+| `POST` | `/webhooks/stripe` | Stripe billing webhook (signature-verified) |
 | `GET` | `/` | the dashboard |
 
 Everything is generic over any consumer payload (events stored type-erased as
@@ -73,9 +74,20 @@ returns the current plan, usage, and limits (the dashboard's billing panel). Def
 | `free` | 10,000 | 500 |
 | `pro` | 10,000,000 | 100,000 |
 
-**Billing seam:** a Stripe webhook (checkout / subscription updated) maps to a single call —
-`Tenancy.set_plan(project_id, plan)` (or `admin.py set-plan`). Wire that up and the quota
-tier follows the subscription. The payment processor itself is the one piece left to add.
+**Billing — Stripe webhook.** `POST /webhooks/stripe` is implemented: it verifies the Stripe
+signature (HMAC-SHA256 over the raw body, with timestamp tolerance — stdlib, no Stripe SDK),
+reads the project from `data.object.metadata.project_id`, maps the subscription to a plan
+(cancelled → `free`; otherwise the price's `lookup_key`/`id` via `DPROV_STRIPE_PRICE_PLANS`,
+default `pro`), and calls `Tenancy.set_plan`. Configure:
+
+```bash
+DPROV_STRIPE_WEBHOOK_SECRET=whsec_…                       # required to enable the endpoint
+DPROV_STRIPE_PRICE_PLANS="price_abc:pro,price_def:free"   # optional price → plan map
+```
+
+What's left is on Stripe's side, not the server's: create the webhook endpoint + signing
+secret in the Stripe dashboard, and attach `metadata.project_id` at checkout. (`admin.py
+set-plan` remains for manual changes.)
 
 ## The regression gate in CI
 
@@ -106,22 +118,24 @@ API key is printed once in the logs (`docker compose logs`).
 ## Tests
 
 ```bash
-python -m pytest server/tests      # 18 tests
+python -m pytest server/tests      # 20 tests
 ```
 
 Wire compatibility (ingest / query / capabilities / auth / poison-batch), the regression
 gate (catches a skipped critical step, passes identical runs, lenient policy, 404), **durable
 SQLite storage across a restart**, **multi-tenant auth** (create / resolve / revoke; keys
 stored hashed), **role scopes** (a read key can't ingest), **usage metering + quota** (429
-when over, lifted by a plan upgrade), the **CI gate CLI** exit codes, and an **end-to-end test
-driving the real `CloudTraceStore` SDK** against the server in-process.
+when over, lifted by a plan upgrade), the **Stripe webhook** (signature verify, plan mapping,
+plan upgrade), the **CI gate CLI** exit codes, and an **end-to-end test driving the real
+`CloudTraceStore` SDK** against the server in-process.
 
 ## What's MVP vs production
 
 Done: the SDK → ingest → query → **regression gate** → dashboard loop on the exact wire
 contract; durable per-project storage with an **indexed `get_run`**; multi-tenant projects +
 hashed, revocable, **role-scoped** API keys; **usage metering + per-plan quotas** with a
-`set_plan` billing seam; a one-command CI gate; containerized deploy. Still ahead for a real
-SaaS: wiring an actual payment processor (Stripe) into the `set_plan` seam, per-**user**
-accounts/roles (today roles are per-key), and horizontal scale on a managed datastore
-(Postgres) — the in-memory/SQLite backends are held at parity, so that's a store swap.
+`set_plan` billing seam; a one-command CI gate; containerized deploy; a **signature-verified Stripe webhook** mapping
+subscriptions to plans. Still ahead for a real SaaS: the Stripe **dashboard** config (endpoint
++ secret + checkout metadata — the server side is done), per-**user** accounts/roles (today
+roles are per-key), and horizontal scale on a managed datastore (Postgres) — the
+in-memory/SQLite backends are held at parity, so that's a store swap.

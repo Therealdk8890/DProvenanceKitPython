@@ -53,6 +53,7 @@ from dprovenancekit.query import (  # noqa: E402
     SequenceNode,
 )
 
+from .billing import parse_price_plans, plan_for_event, verify_signature  # noqa: E402
 from .storage import ALL_RUNS, fetch_run, flush as flush_store, make_store  # noqa: E402
 
 SCHEMA_VERSION = "1.0"
@@ -142,10 +143,17 @@ class Server:
         keys); each project's store is built lazily and cached.
     """
 
-    def __init__(self, projects: Optional[Dict[str, Project]] = None, tenancy=None):
+    def __init__(self, projects: Optional[Dict[str, Project]] = None, tenancy=None,
+                 stripe_secret: Optional[str] = None, price_plans: Optional[Dict[str, str]] = None):
         self._static: Optional[Dict[str, Project]] = None
         self.tenancy = None
         self._stores: Dict[str, Any] = {}
+        self._stripe_secret = (
+            stripe_secret if stripe_secret is not None else os.environ.get("DPROV_STRIPE_WEBHOOK_SECRET")
+        )
+        self._price_plans = (
+            price_plans if price_plans is not None else parse_price_plans(os.environ.get("DPROV_STRIPE_PRICE_PLANS"))
+        )
         if projects is not None:
             self._static = projects
         elif tenancy is not None:
@@ -180,6 +188,8 @@ class Server:
                 return self._html(self._dashboard())
             if method == "GET" and path == "/api/health":
                 return self._json(200, {"status": "ok", "schemaVersions": [SCHEMA_VERSION]})
+            if method == "POST" and path == "/webhooks/stripe":
+                return self._stripe_webhook(headers, body)  # authed by signature, not Bearer
 
             # Everything else is authenticated and scoped to a project.
             project = self._auth(headers)
@@ -233,6 +243,25 @@ class Server:
     def _require(self, project: Project, needed: str) -> None:
         if _ROLE_RANK.get(project.role, 0) < _ROLE_RANK[needed]:
             raise HTTPError(403, {"error": "FORBIDDEN", "need": needed, "have": project.role})
+
+    # -- billing webhook ---------------------------------------------------------
+
+    def _stripe_webhook(self, headers: Dict[str, str], body: bytes) -> Tuple[int, Dict[str, str], bytes]:
+        if not self._stripe_secret:
+            raise HTTPError(503, {"error": "BILLING_NOT_CONFIGURED"})
+        sig = _header(headers, "stripe-signature") or ""
+        if not verify_signature(body, sig, self._stripe_secret):
+            raise HTTPError(400, {"error": "BAD_SIGNATURE"})
+        try:
+            event = json.loads(body.decode("utf-8"))
+        except Exception:
+            raise HTTPError(400, {"error": "BAD_PAYLOAD"})
+        mapping = plan_for_event(event, self._price_plans)
+        if mapping is None or self.tenancy is None:
+            return self._json(200, {"received": True, "ignored": True})
+        project_id, plan = mapping
+        updated = self.tenancy.set_plan(project_id, plan)
+        return self._json(200, {"received": True, "project": project_id, "plan": plan, "updated": updated})
 
     # -- usage metering + quotas (tenancy mode only) -----------------------------
 

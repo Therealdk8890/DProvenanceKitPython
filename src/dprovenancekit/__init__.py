@@ -196,4 +196,14 @@ from .perturbation import EvaluationPerturbationLayer, PerturbationMode
 # View models (pure logic)
 from .viewmodel import SpanViewModel, FlattenedSpanNode, flatten_span_tree
 
+# Regression-gate test helper
+from .testing import (
+    RegressionGate,
+    RegressionReport,
+    RegressionError,
+    assert_no_regression,
+    exact_equality_evaluator,
+    run_fingerprint,
+)
+
 __version__ = "0.1.0"

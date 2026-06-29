@@ -169,6 +169,7 @@ The standard corpus scores **Precision 1.000 / Recall 1.000 / F1 1.000** across 
 | Benchmark harness, failure diagnoser, corpus | `benchmark`, `corpus` |
 | Pure view models for a trace viewer | `viewmodel` |
 | Framework adapters (LangChain / LangGraph) | `integrations.langchain` |
+| Regression-gate test helper | `testing` |
 
 The SwiftUI `DProvenanceUI` target is intentionally **not** ported (it is Apple-platform UI); its pure value-model layer (`SpanViewModel`, flattening) is ported in `viewmodel`.
 
@@ -215,13 +216,39 @@ with tracer.trace(context_id="customer-42") as cb:
 
 ---
 
+## Regression gate
+
+`dprovenancekit.testing` turns "did my agent regress?" into one assertion you can drop into any test or CI step. Give it a *golden* run (known-good) and a *candidate* run (what your current code produced); it aligns them and fails with a readable diagnostic if the candidate diverged.
+
+```python
+from dprovenancekit.testing import assert_no_regression
+
+assert_no_regression(golden=golden_run, candidate=candidate_run)
+```
+
+Strict by default — any removed, added, or changed (ambiguous) step fails, and a removed CRITICAL step is additionally a HIGH-severity regression. Loosen with `max_regression_level` (gate only on severity) or `allow_divergent_steps` (tolerate benign per-step changes), or pass a custom `evaluator` to define what "equivalent" means (e.g. ignore volatile fields like token counts). `RegressionGate(...).check(...)` returns a `RegressionReport` (no raise) for richer assertions. Detecting *reordered* steps requires a span-aware profile (`AlignmentProfile.developer_debug_v1`); the default linear profile treats a pure reorder as still-matching. Complements `AlignmentSnapshotValidator` (an exact output-hash snapshot): the gate works on two runs and reasons about regression severity.
+
+---
+
+## Example: regression testing
+
+[`examples/regression_testing.py`](examples/regression_testing.py) is the end-to-end story in ~150 readable lines: record a **golden** run of a fact-checking agent (retrieve → verify → decide), then catch a later run that skips its verification step — via both the fast **fingerprint** check and the detailed **alignment** verdict (which flags the dropped `claimVerified` step as a HIGH regression).
+
+```bash
+python examples/regression_testing.py
+```
+
+It self-asserts its verdicts, so it doubles as an executable test of the headline use case.
+
+---
+
 ## Tests
 
 ```bash
 python -m pytest
 ```
 
-121 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 27 cross-language conformance checks against the frozen Trace Specification v1 vectors, and 14 LangChain integration tests (one runs only when `langchain-core` is installed, otherwise skipped).
+135 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 27 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain integration tests (one runs only when `langchain-core` is installed, otherwise skipped), 13 regression-gate tests, and the regression-testing example run as a self-asserting test.
 
 ---
 

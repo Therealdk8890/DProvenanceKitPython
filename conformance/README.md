@@ -61,3 +61,17 @@ regenerated file.
 **Add a new SDK (Rust / TypeScript / …):** implement [`TRACE_SPEC_v1.md`](TRACE_SPEC_v1.md),
 load the same `vectors/*.json`, and assert your implementation reproduces each case. No
 new fixtures required — the contract is already frozen.
+
+## Conforming implementations
+
+| SDK | Conformance harness | Status |
+| --- | --- | --- |
+| Python (reference oracle) | [`tests/test_conformance.py`](../tests/test_conformance.py) | ✅ all vectors |
+| Swift | `ConformanceHarness/` in the Swift repo — `swift run --package-path ConformanceHarness` | ✅ all vectors |
+
+The Swift harness vendors a copy of these `vectors/*.json` and drives the real Swift SDK
+(SQLite fingerprint, query evaluator, profile-hash contract, alignment engine). Running it
+is what closed the cross-language loop — and surfaced two contract refinements now folded
+into v1: §2 made explicit that sorting is *required* (the Swift store now sets `.sortedKeys`),
+and the alignment vectors now pin an explicit `id` per event (the canonical ordering
+tiebreaks on `(sequence, id)`, so the vector must carry the ids for any SDK to reproduce it).

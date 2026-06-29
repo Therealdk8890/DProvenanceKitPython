@@ -236,7 +236,7 @@ with traced_run(store, context_id="ticket-42"):
     reply = answer(question, sources)
 ```
 
-`@traced` records a `"<name>.start"` / `".end"` / `".error"` event pair per call in its own **span** (the function name is the **engine**), nests calls in the span tree, and emits the same `DERIVED_FROM` / `INFORMED` provenance edges as the framework adapters. `record_event(...)` drops an ad-hoc event (a decision, a chosen branch). Outside a `traced_run` the decorators are transparent — instrumented code is safe to call untraced — and `async def` is supported. The trace it produces is identical in shape to the adapter-produced ones, so fingerprint / diff / align / the regression gate all apply.
+`@traced` records a `"<name>.start"` / `".end"` / `".error"` event pair per call in its own **span** (the function name is the **engine**), nests calls in the span tree, and emits the same `DERIVED_FROM` / `INFORMED` provenance edges as the framework adapters. `record_event(...)` drops an ad-hoc event (a decision, a chosen branch). Plain functions, `async def`, generators, and async generators are all supported (for a generator, start/end bracket the full iteration). Instrumentation never changes behavior — capture is failure-proof and exceptions pass through unchanged. Outside a `traced_run` the decorators are transparent, so instrumented code is safe to call untraced. The trace it produces is identical in shape to the adapter-produced ones, so fingerprint / diff / align / the regression gate all apply.
 
 ---
 
@@ -246,7 +246,7 @@ with traced_run(store, context_id="ticket-42"):
 python -m pytest
 ```
 
-131 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 27 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain integration tests (one runs only when `langchain-core` is installed, otherwise skipped), and 10 instrumentation-layer tests.
+137 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 27 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain integration tests (one runs only when `langchain-core` is installed, otherwise skipped), and 16 instrumentation-layer tests.
 
 ---
 

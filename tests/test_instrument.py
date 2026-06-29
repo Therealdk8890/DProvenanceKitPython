@@ -131,6 +131,129 @@ def test_exception_records_error_and_propagates():
     assert err.payload.priority is TracePriority.CRITICAL
     assert err.payload.attributes["error_type"] == "ValueError"
     assert err.payload.attributes["message"] == "kaboom"
+    # The error event is DERIVED_FROM its start (queryable lineage, like the adapters).
+    incoming = {(e.source_id, e.type) for e in store.lineage_edges(err.id)}
+    assert (by_type["boom.start"].id, TraceEdgeType.DERIVED_FROM) in incoming
+
+
+# ── Behavior preservation: capture must never crash the wrapped call ─────────────
+
+
+class _Unreprable:
+    def __repr__(self):
+        raise RuntimeError("repr blew up")
+
+
+def test_unreprable_argument_does_not_break_the_call():
+    store = InMemoryTraceStore()
+
+    @traced
+    def use(obj):
+        return "ok"
+
+    with traced_run(store, context_id="c") as run:
+        # An argument whose repr() raises must NOT prevent the call or crash it.
+        assert use(_Unreprable()) == "ok"
+
+    by_type = _events_by_type(_get_run(store, run))
+    assert by_type["use.end"].payload.attributes["result"] == "'ok'"
+    # The arg is recorded as a safe placeholder, not propagated.
+    assert "unreprable" in by_type["use.start"].payload.attributes["args"][0]
+
+
+def test_unreprable_result_does_not_break_the_call():
+    store = InMemoryTraceStore()
+
+    @traced
+    def make():
+        return _Unreprable()
+
+    with traced_run(store, context_id="c") as run:
+        result = make()  # must return the value, not raise
+        assert isinstance(result, _Unreprable)
+
+    by_type = _events_by_type(_get_run(store, run))
+    assert "unreprable" in by_type["make.end"].payload.attributes["result"]
+
+
+# ── Generators ───────────────────────────────────────────────────────────────────
+
+
+def test_generator_brackets_full_iteration():
+    store = InMemoryTraceStore()
+
+    @traced
+    def stream(n):
+        for i in range(n):
+            yield i
+
+    with traced_run(store, context_id="c") as run:
+        # start/end bracket iteration, not object creation: nothing recorded until consumed.
+        gen = stream(3)
+        assert _get_run(store, run) is None or _get_run(store, run).events == []
+        assert list(gen) == [0, 1, 2]
+
+    types = [e.payload.type_identifier for e in _get_run(store, run).events]
+    assert types == ["stream.start", "stream.end"]
+
+
+def test_generator_records_error_raised_during_iteration():
+    store = InMemoryTraceStore()
+
+    @traced
+    def stream():
+        yield 1
+        raise ValueError("mid-stream")
+
+    with traced_run(store, context_id="c") as run:
+        with pytest.raises(ValueError, match="mid-stream"):
+            list(stream())
+
+    by_type = _events_by_type(_get_run(store, run))
+    assert "stream.start" in by_type
+    assert "stream.end" not in by_type
+    assert by_type["stream.error"].payload.attributes["error_type"] == "ValueError"
+
+
+def test_async_generator_is_traced():
+    store = InMemoryTraceStore()
+
+    @traced
+    async def astream(n):
+        for i in range(n):
+            yield i
+
+    async def main():
+        with traced_run(store, context_id="c") as run:
+            out = [x async for x in astream(2)]
+            return run, out
+
+    run, out = asyncio.run(main())
+    assert out == [0, 1]
+    types = [e.payload.type_identifier for e in _get_run(store, run).events]
+    assert types == ["astream.start", "astream.end"]
+
+
+# ── Threads ──────────────────────────────────────────────────────────────────────
+
+
+def test_asyncio_to_thread_propagates_the_run():
+    store = InMemoryTraceStore()
+
+    @traced
+    def blocking(x):
+        return x * 2
+
+    async def main():
+        with traced_run(store, context_id="c") as run:
+            result = await asyncio.to_thread(blocking, 5)
+            return run, result
+
+    run, result = asyncio.run(main())
+    assert result == 10
+    # to_thread copies the context, so the step IS recorded across the thread boundary.
+    types = [e.payload.type_identifier for e in _get_run(store, run).events]
+    assert types == ["blocking.start", "blocking.end"]
 
 
 # ── record_event ─────────────────────────────────────────────────────────────────

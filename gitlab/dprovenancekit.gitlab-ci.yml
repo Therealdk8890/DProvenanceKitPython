@@ -1,0 +1,47 @@
+# DProvenanceKit regression gate for GitLab CI — parity with the GitHub Action.
+#
+# Include it in your .gitlab-ci.yml:
+#
+#   include:
+#     - remote: 'https://raw.githubusercontent.com/Therealdk8890/DProvenanceKitPython/main/gitlab/dprovenancekit.gitlab-ci.yml'
+#
+# Then set (as CI/CD variables or job variables):
+#   DPROV_DB              path to the SQLite trace database holding both runs
+#   DPROV_GOLDEN          golden (known-good) run id
+#   DPROV_CANDIDATE       candidate run id to gate
+# Optional:
+#   DPROV_GOLDEN_DB / DPROV_CANDIDATE_DB   separate dbs (default: DPROV_DB)
+#   DPROV_MAX_LEVEL       none|low|medium|high   (default: none)
+#   DPROV_ALLOW_DIVERGENT true|false             (default: false)
+#   DPROV_FAIL_ON_REGRESSION true|false          (default: true)
+#   DPROV_INSTALL_SPEC    pip requirement        (default: dprovenancekit)
+#   DPROV_GITLAB_TOKEN    token with 'api' scope to post the MR note (CI_JOB_TOKEN cannot)
+
+dprovenancekit-gate:
+  image: python:3.12-slim
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  variables:
+    DPROV_MAX_LEVEL: "none"
+    DPROV_ALLOW_DIVERGENT: "false"
+    DPROV_FAIL_ON_REGRESSION: "true"
+    DPROV_INSTALL_SPEC: "dprovenancekit"
+  script:
+    - python -m pip install --disable-pip-version-check "$DPROV_INSTALL_SPEC"
+    - curl -sSfL "https://raw.githubusercontent.com/Therealdk8890/DProvenanceKitPython/main/gitlab/mr_note.py" -o mr_note.py
+    - |
+      GOLDEN_DB="${DPROV_GOLDEN_DB:-$DPROV_DB}"
+      CANDIDATE_DB="${DPROV_CANDIDATE_DB:-$DPROV_DB}"
+      set -- --golden-db "$GOLDEN_DB" --candidate-db "$CANDIDATE_DB" \
+             --golden "$DPROV_GOLDEN" --candidate "$DPROV_CANDIDATE" \
+             --max-level "$DPROV_MAX_LEVEL" --json
+      if [ "$DPROV_ALLOW_DIVERGENT" = "true" ]; then set -- "$@" --allow-divergent; fi
+      set +e
+      python -m dprovenancekit.cli gate "$@" > dprov-report.json
+      GATE_RC=$?
+      set -e
+      cat dprov-report.json
+      python mr_note.py < dprov-report.json || true
+      if [ "$GATE_RC" = "2" ]; then exit 2; fi
+      if [ "$DPROV_FAIL_ON_REGRESSION" != "false" ]; then exit "$GATE_RC"; fi
+      exit 0

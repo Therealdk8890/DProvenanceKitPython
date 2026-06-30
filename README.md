@@ -173,6 +173,9 @@ dprovenancekit gate --golden-db baseline.sqlite --golden "$GOLDEN" \
                     --candidate-db candidate.sqlite --candidate "$CANDIDATE_RUN_ID"
 ```
 
+Prebuilt CI integrations wrap this and comment the diff on the PR/MR:
+a [GitHub Action](action/README.md) and a [GitLab CI template](gitlab/README.md).
+
 ---
 
 ## Benchmark corpus

@@ -71,6 +71,7 @@ from .circuit_breaker import CircuitBreaker, CircuitState
 # Live querying + anomalies
 from .live_engine import LiveTraceQueryEngine, TraceQuerySubscription, QueryState
 from .anomaly import Anomaly, AnomalyRule, AnomalyDetector, LiveAnomalySubscription
+from .rules import ToolDropRule
 
 # Diff + replay
 from .diff import TraceDiffEngine, TraceDiffResult, Change, ChangeKind
@@ -209,4 +210,4 @@ from .testing import (
 # Framework-agnostic instrumentation (decorators / context manager)
 from .instrument import TracedEvent, traced, traced_run, record_event
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

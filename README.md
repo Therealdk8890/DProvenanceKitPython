@@ -146,6 +146,26 @@ class UnverifiedConflictRule(AnomalyRule):
 anomalies = AnomalyDetector(store).detect_anomalies([UnverifiedConflictRule()])
 ```
 
+Or drop in a ready-made rule from the built-in library instead of writing your own:
+
+```python
+from dprovenancekit import AnomalyDetector, ToolDropRule
+
+# Flag any run that never performed a required step (e.g. an agent that stopped
+# calling a tool it should always call).
+anomalies = AnomalyDetector(store).detect_anomalies([ToolDropRule("safety_check")])
+```
+
+### 7. Gate a pull request on regressions
+
+Run the regression gate in CI with no server — point it at a local SQLite trace database
+and a golden/candidate run id. Exit code is `0` (pass), `1` (regression), or `2` (usage error):
+
+```bash
+dprovenancekit gate --db traces.sqlite --golden "$GOLDEN_RUN_ID" --candidate "$CANDIDATE_RUN_ID"
+dprovenancekit gate --db traces.sqlite --golden "$G" --candidate "$C" --max-level low --json
+```
+
 ---
 
 ## Benchmark corpus

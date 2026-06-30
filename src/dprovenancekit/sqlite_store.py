@@ -427,6 +427,15 @@ class SQLiteTraceStore(TraceStore):
     def flush(self) -> None:
         self._writer.flush()
 
+    def close(self) -> None:
+        """Stop the background writer (if running) and close the database connection.
+
+        Safe to call when ``start_writer=False`` (no thread was started) — it still flushes
+        any buffered events and releases the SQLite file handle.
+        """
+        self._writer.shutdown()
+        self._db.close()
+
     @property
     def drop_stats(self) -> TraceDropStats:
         return self._buffer.drop_stats + self._drop_tally.snapshot

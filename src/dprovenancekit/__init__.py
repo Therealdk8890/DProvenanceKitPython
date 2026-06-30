@@ -71,7 +71,7 @@ from .circuit_breaker import CircuitBreaker, CircuitState
 # Live querying + anomalies
 from .live_engine import LiveTraceQueryEngine, TraceQuerySubscription, QueryState
 from .anomaly import Anomaly, AnomalyRule, AnomalyDetector, LiveAnomalySubscription
-from .rules import ToolDropRule, LoopingRule
+from .rules import ToolDropRule, LoopingRule, build_rule, build_rules
 
 # Diff + replay
 from .diff import TraceDiffEngine, TraceDiffResult, Change, ChangeKind

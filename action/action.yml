@@ -30,6 +30,14 @@ inputs:
     description: "Post a sticky summary comment on the pull request (true | false)."
     required: false
     default: "true"
+  anomaly-rules:
+    description: "Path to a JSON rules config. When set, runs the out-of-the-box anomaly rules over the candidate run."
+    required: false
+    default: ""
+  fail-on-anomaly:
+    description: "Fail the job when an anomaly rule fires (true | false)."
+    required: false
+    default: "false"
   install-spec:
     description: "pip requirement to install the gate from (e.g. 'dprovenancekit', 'dprovenancekit==0.2.0', or a VCS URL)."
     required: false
@@ -56,6 +64,12 @@ outputs:
   report-json:
     description: "Full gate report as a JSON string."
     value: ${{ steps.gate.outputs.report-json }}
+  anomaly-count:
+    description: "Number of anomalies the rules fired on (0 when anomaly-rules is unset)."
+    value: "${{ steps.anomalies.outputs.anomaly-count || '0' }}"
+  anomalies-json:
+    description: "Anomaly findings as a JSON string ('{}' when anomaly-rules is unset)."
+    value: "${{ steps.anomalies.outputs.anomalies-json || '{}' }}"
 
 runs:
   using: "composite"
@@ -80,6 +94,16 @@ runs:
         DPROV_MAX_LEVEL: ${{ inputs.max-level }}
         DPROV_ALLOW_DIVERGENT: ${{ inputs.allow-divergent }}
 
+    - name: Run anomaly rules
+      id: anomalies
+      if: ${{ inputs.anomaly-rules != '' }}
+      shell: bash
+      run: python "${{ github.action_path }}/run_anomalies.py"
+      env:
+        DPROV_DB: ${{ inputs.db-path }}
+        DPROV_CANDIDATE: ${{ inputs.candidate-run-id }}
+        DPROV_ANOMALY_RULES: ${{ inputs.anomaly-rules }}
+
     - name: Comment on pull request
       if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
       shell: bash
@@ -93,4 +117,11 @@ runs:
       shell: bash
       run: |
         echo "::error title=DProvenanceKit::Regression gate failed (severity: ${{ steps.gate.outputs.regression-level }})"
+        exit 1
+
+    - name: Enforce anomaly rules
+      if: ${{ inputs.fail-on-anomaly == 'true' && steps.anomalies.outputs.anomaly-count != '' && steps.anomalies.outputs.anomaly-count != '0' }}
+      shell: bash
+      run: |
+        echo "::error title=DProvenanceKit::${{ steps.anomalies.outputs.anomaly-count }} anomaly rule(s) fired"
         exit 1

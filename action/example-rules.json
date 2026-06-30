@@ -1,0 +1,6 @@
+{
+  "rules": [
+    { "type": "tool_drop", "required_step": "safety_check" },
+    { "type": "looping", "step": "web_search", "max_repeats": 5 }
+  ]
+}

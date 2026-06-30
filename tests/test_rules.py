@@ -14,6 +14,8 @@ from dprovenancekit import (
     ToolDropRule,
     TraceableEvent,
     TracePriority,
+    build_rule,
+    build_rules,
 )
 
 
@@ -111,3 +113,69 @@ def test_looping_rule_threshold_is_strictly_more_than_max():
 def test_looping_rule_validates_max_repeats():
     with pytest.raises(ValueError):
         LoopingRule("call", 0)
+
+
+@pytest.mark.parametrize("bad", ["5", None, [5], True])
+def test_looping_rule_rejects_non_int_max_repeats_with_valueerror(bad):
+    # A typo'd config (e.g. quoting the number) must surface as ValueError, not a raw TypeError.
+    with pytest.raises(ValueError):
+        LoopingRule("call", bad)
+
+
+@pytest.mark.parametrize("bad", [123, "", None, {"x": 1}])
+def test_rules_reject_non_string_step(bad):
+    with pytest.raises(ValueError):
+        ToolDropRule(bad)
+    with pytest.raises(ValueError):
+        LoopingRule(bad, 2)
+
+
+# ── registry (build_rule / build_rules) ──────────────────────────────────────────
+
+
+def test_build_rule_constructs_known_types():
+    drop = build_rule({"type": "tool_drop", "required_step": "safety_check"})
+    assert isinstance(drop, ToolDropRule)
+    assert drop.required_step == "safety_check"
+
+    loop = build_rule({"type": "looping", "step": "web_search", "max_repeats": 5})
+    assert isinstance(loop, LoopingRule)
+    assert loop.step == "web_search" and loop.max_repeats == 5
+
+
+def test_build_rule_honors_custom_name():
+    rule = build_rule({"type": "tool_drop", "required_step": "x", "name": "custom"})
+    assert rule.name == "custom"
+
+
+def test_build_rule_rejects_unknown_type():
+    with pytest.raises(ValueError, match="unknown rule type"):
+        build_rule({"type": "nope"})
+
+
+def test_build_rule_rejects_missing_field():
+    with pytest.raises(ValueError, match="missing required field"):
+        build_rule({"type": "looping", "step": "x"})  # no max_repeats
+
+
+def test_build_rule_rejects_non_object_spec():
+    with pytest.raises(ValueError, match="must be an object"):
+        build_rule("tool_drop")
+
+
+def test_build_rules_builds_a_list():
+    rules = build_rules(
+        [
+            {"type": "tool_drop", "required_step": "a"},
+            {"type": "looping", "step": "b", "max_repeats": 2},
+        ]
+    )
+    assert [type(r).__name__ for r in rules] == ["ToolDropRule", "LoopingRule"]
+
+
+def test_build_rule_surfaces_invalid_field_as_valueerror():
+    # A quoted number is the most common misconfiguration; it must be a ValueError, not TypeError.
+    with pytest.raises(ValueError):
+        build_rule({"type": "looping", "step": "x", "max_repeats": "5"})
+    with pytest.raises(ValueError):
+        build_rule({"type": "tool_drop", "required_step": 123})

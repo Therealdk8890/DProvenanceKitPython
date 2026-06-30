@@ -114,3 +114,13 @@ def test_gate_missing_run_returns_usage_error(trace_db, capsys):
     err = capsys.readouterr().err
     assert code == 2
     assert "not found" in err
+
+
+def test_gate_unopenable_db_exits_2(tmp_path, trace_db, capsys):
+    _, ids = trace_db
+    # A directory is not a valid SQLite file; the gate must exit 2, not crash with a traceback.
+    code = main(
+        ["gate", "--db", str(tmp_path), "--golden", str(ids["golden"]), "--candidate", str(ids["pass"])]
+    )
+    assert code == 2
+    assert "could not open database" in capsys.readouterr().err

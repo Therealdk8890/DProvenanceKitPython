@@ -42,6 +42,7 @@ from dprovenancekit import (  # noqa: E402
     TraceEvent,
     TraceQueryDSL,
     TraceReplayEngine,
+    render_report_html,
     run_fingerprint,
 )
 from dprovenancekit.query import (  # noqa: E402
@@ -221,6 +222,9 @@ class Server:
             if method == "POST" and path == "/api/diff":
                 self._require(project, "read")
                 return self._diff(project, body)
+            if method == "POST" and path == "/api/report":
+                self._require(project, "read")
+                return self._report(project, body)
             if method == "POST" and path == "/api/gate":
                 self._require(project, "read")
                 return self._gate(project, body)
@@ -400,6 +404,22 @@ class Server:
             "event_changes": [_event_change_json(c) for c in result.event_changes],
             "divergences": [_divergence_json(d) for d in result.divergences],
         })
+
+    def _report(self, project: Project, body: bytes) -> Tuple[int, Dict[str, str], bytes]:
+        """A standalone, shareable HTML report of a gate result (print-to-PDF friendly)."""
+        req = json.loads(body.decode("utf-8")) if body else {}
+        golden = _get_run(project, str(req.get("golden_run_id", "")))
+        candidate = _get_run(project, str(req.get("candidate_run_id", "")))
+        report = RegressionGate(
+            max_regression_level=RegressionLevel(req.get("max_regression_level", "none")),
+            allow_divergent_steps=bool(req.get("allow_divergent_steps", False)),
+        ).check(golden, candidate)
+        html_doc = render_report_html(
+            report,
+            golden_label=golden.context_id or str(golden.run_id),
+            candidate_label=candidate.context_id or str(candidate.run_id),
+        )
+        return self._html(html_doc)
 
     # -- the regression gate: the paid differentiator ----------------------------
 

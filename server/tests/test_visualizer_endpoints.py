@@ -131,3 +131,38 @@ def test_visualizer_endpoints_require_auth():
     call(srv, "POST", "/ingest", [ev(rid, 0, "a")])
     assert call(srv, "GET", f"/api/runs/{rid}/replay", key=None)[0] == 401
     assert call(srv, "POST", "/api/diff", {"base_run_id": rid, "comparison_run_id": rid}, key=None)[0] == 401
+
+
+# ── report (HTML export) ─────────────────────────────────────────────────────────
+
+
+def test_report_returns_standalone_html():
+    srv = server()
+    g, c = str(uuid.uuid4()), str(uuid.uuid4())
+    call(srv, "POST", "/ingest", [ev(g, 0, "retrieved"), ev(g, 1, "verify", priority=3), ev(g, 2, "decide", priority=3)])
+    call(srv, "POST", "/ingest", [ev(c, 0, "retrieved"), ev(c, 1, "decide", priority=3)])  # dropped a critical step
+
+    status, headers, out = srv.handle(
+        "POST", "/api/report",
+        {"Authorization": f"Bearer {API_KEY}"},
+        json.dumps({"golden_run_id": g, "candidate_run_id": c}).encode(),
+    )
+    assert status == 200
+    assert headers["Content-Type"].startswith("text/html")
+    body = out.decode()
+    assert body.startswith("<!doctype html>")
+    assert "REGRESSION" in body
+    assert "verify" in body
+
+
+def test_report_missing_run_is_404():
+    srv = server()
+    g = str(uuid.uuid4())
+    call(srv, "POST", "/ingest", [ev(g, 0, "a")])
+    s, body = call(srv, "POST", "/api/report", {"golden_run_id": g, "candidate_run_id": str(uuid.uuid4())})
+    assert s == 404 and body["error"] == "RUN_NOT_FOUND"
+
+
+def test_report_requires_auth():
+    srv = server()
+    assert call(srv, "POST", "/api/report", {"golden_run_id": "x", "candidate_run_id": "y"}, key=None)[0] == 401

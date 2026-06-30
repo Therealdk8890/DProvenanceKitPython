@@ -101,6 +101,7 @@
       </div>
       <div class="field"><label>&nbsp;</label><label style="font-size:13px;color:var(--text)"><input type="checkbox" id="allowdiv" style="vertical-align:-2px"> allow divergent</label></div>
       <div class="field"><label>&nbsp;</label><button class="primary" onclick="runGate()">Run gate</button></div>
+      <div class="field"><label>&nbsp;</label><button onclick="exportReport()">Export report</button></div>
     </div>
     <div id="verdict"></div>
   </section>
@@ -256,6 +257,24 @@ async function runGate(){
         <div class="grp"><div class="label">divergent</div>${chips(rep.divergent_steps)}</div>
         <pre>${rep.summary}</pre>
       </div>`;
+  }catch(e){ v.innerHTML = `<div class="err">${e.message}</div>`; }
+}
+
+async function exportReport(){
+  const v = document.getElementById('verdict');
+  const golden = document.getElementById('golden').value, candidate = document.getElementById('candidate').value;
+  if(!golden || !candidate){ v.innerHTML = '<div class="err">Pick a golden and a candidate run.</div>'; return; }
+  try{
+    const r = await fetch('/api/report', {method:'POST', headers: hdr(), body: JSON.stringify({
+      golden_run_id: golden, candidate_run_id: candidate,
+      max_regression_level: document.getElementById('maxlevel').value,
+      allow_divergent_steps: document.getElementById('allowdiv').checked,
+    })});
+    if(!r.ok){ const e = await r.json().catch(()=>({})); v.innerHTML = `<div class="err">${e.error || ('HTTP '+r.status)}</div>`; return; }
+    const html = await r.text();
+    const w = window.open('', '_blank');
+    if(w){ w.document.write(html); w.document.close(); }
+    else { v.innerHTML = '<div class="err">Pop-up blocked — allow pop-ups to open the report.</div>'; }
   }catch(e){ v.innerHTML = `<div class="err">${e.message}</div>`; }
 }
 

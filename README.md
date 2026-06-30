@@ -4,7 +4,15 @@
 
 When an agent's reasoning drifts between runs, DProvenanceKit turns each execution into a queryable, diffable trace so you can see *what changed and why* — not just *what happened*.
 
-> Run → Record → Query → Diff → Detect Regressions
+> Run → Record → Query → Diff → Detect regressions → Gate in CI → Visualize
+
+**It's not just the library** — it ships the surfaces that make reasoning regressions actionable:
+
+- **Gate in CI** — a server-less `dprovenancekit gate` CLI, plus a drop-in [GitHub Action](action/README.md) and [GitLab CI template](gitlab/README.md) that fail a PR/MR when an agent's reasoning drifts from a golden baseline, and comment the diff.
+- **Out-of-the-box anomaly rules** — Tool Drop and Looping detection with a JSON rule registry, runnable locally or on every PR.
+- **A visualizer** — a web dashboard with a single-run span tree + JSON payload inspector, a side-by-side semantic diff, and shareable HTML reports ([`server/`](server/README.md)).
+
+See it all in one runnable script: [`python examples/end_to_end_demo.py`](examples/end_to_end_demo.py).
 
 This is a faithful, dependency-free port of the Swift library to Python. It keeps the same architecture and guarantees — synchronous non-blocking recording, priority-aware backpressure, one query language over two backends held at parity, structural diffing, formally-modeled semantic alignment, and by-tier drop accounting so load-shedding is never silent.
 
@@ -205,7 +213,7 @@ Both corpora score **Precision 1.000 / Recall 1.000 / F1 1.000** — 8 standard 
 | Stores (in-memory, WAL SQLite, raw read, cloud) | `store`, `sqlite_store`, `raw_store`, `cloud_store` |
 | Priority-aware write buffer | `write_buffer` |
 | Query DSL + two backends (AST eval + SQL compiler) | `query` |
-| Live querying + anomaly detection | `live_engine`, `anomaly` |
+| Live querying + anomaly detection + rule library | `live_engine`, `anomaly`, `rules` |
 | Structural diff + span-aware snapshot diff | `diff`, `snapshot_diff` |
 | Deterministic replay | `replay` |
 | Semantic alignment engine + evidence + verification | `alignment_*`, `verification` |
@@ -214,7 +222,9 @@ Both corpora score **Precision 1.000 / Recall 1.000 / F1 1.000** — 8 standard 
 | Framework adapters (LangChain / LangGraph) | `integrations.langchain` |
 | Framework adapters (OpenAI Agents SDK) | `integrations.openai_agents` |
 | Regression-gate test helper | `testing` |
+| Shareable HTML regression report | `report` |
 | Framework-agnostic instrumentation (decorators) | `instrument` |
+| Headless CLI — `gate`, `anomalies`, `runs`, `evaluate` | `cli` |
 
 The SwiftUI `DProvenanceUI` target is intentionally **not** ported (it is Apple-platform UI); its pure value-model layer (`SpanViewModel`, flattening) is ported in `viewmodel`.
 

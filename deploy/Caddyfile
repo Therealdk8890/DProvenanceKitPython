@@ -1,5 +1,0 @@
-# Automatic HTTPS (Let's Encrypt) for $DOMAIN, proxied to the backend over the
-# internal compose network. $DOMAIN is supplied from the environment.
-{$DOMAIN} {
-	reverse_proxy dprovenancekit:8787
-}

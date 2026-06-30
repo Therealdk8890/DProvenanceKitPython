@@ -4,13 +4,13 @@
 
 When an agent's reasoning drifts between runs, DProvenanceKit turns each execution into a queryable, diffable trace so you can see *what changed and why* — not just *what happened*.
 
-> Run → Record → Query → Diff → Detect regressions → Gate in CI → Visualize
+> Run → Record → Query → Diff → Detect regressions → Gate in CI
 
 **It's not just the library** — it ships the surfaces that make reasoning regressions actionable:
 
 - **Gate in CI** — a server-less `dprovenancekit gate` CLI, plus a drop-in [GitHub Action](action/README.md) and [GitLab CI template](gitlab/README.md) that fail a PR/MR when an agent's reasoning drifts from a golden baseline, and comment the diff.
 - **Out-of-the-box anomaly rules** — Tool Drop and Looping detection with a JSON rule registry, runnable locally or on every PR.
-- **A visualizer** — a web dashboard with a single-run span tree + JSON payload inspector, a side-by-side semantic diff, and shareable HTML reports ([`server/`](server/README.md)).
+- **A hosted visualizer** — a web dashboard (single-run span tree, JSON payload inspector, side-by-side semantic diff, shareable HTML reports) backed by a regression-gate API and multi-tenant control plane. Available as a separate commercial service.
 
 See it all in one runnable script: [`python examples/end_to_end_demo.py`](examples/end_to_end_demo.py).
 
@@ -50,7 +50,7 @@ in [RELEASING.md](RELEASING.md).
 ## 5-minute demo
 
 > Want the whole arc in one runnable script — record → query → gate → detect anomalies →
-> diff → report, then hand the same runs to the CLI and the visualizer? Run
+> diff → report, then hand the same runs to the CLI? Run
 > [`python examples/end_to_end_demo.py`](examples/end_to_end_demo.py). The steps below build it up piece by piece.
 
 ### 1. Define your events

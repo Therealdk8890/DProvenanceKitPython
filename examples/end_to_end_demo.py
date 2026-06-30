@@ -2,7 +2,7 @@
 """End-to-end demo — the whole DProvenanceKit arc in one runnable script.
 
     Record → Query → Gate → Detect anomalies → Diff → Report,
-    then hand the same runs to the CLI and the visualizer.
+    then hand the same runs to the CLI and CI.
 
 A research agent answers a support question. We record a healthy *golden* run and a
 *regressed* candidate — it looped its search tool and skipped the verification step — then
@@ -11,7 +11,7 @@ watch every layer catch the regression. Run it:
     python examples/end_to_end_demo.py
 
 It writes an HTML report and a SQLite trace database next to this script, prints the exact
-CLI / CI / visualizer commands to use them, and self-asserts the expected verdicts so it
+CLI / CI commands to use them, and self-asserts the expected verdicts so it
 doubles as an executable end-to-end test.
 """
 
@@ -97,7 +97,7 @@ def _record(store, context_id, steps):
 
 def _record_erased(store, context_id, steps):
     """Record the same scenario type-erased (``AnyTraceableEvent``) — the on-disk / wire form
-    the CLI and the hosted visualizer read."""
+    the CLI reads."""
     kit = DProvenanceKit(AnyTraceableEvent)
     with kit.run(context_id=context_id, store=store) as run:
         for engine, action, detail in steps:
@@ -160,8 +160,8 @@ def run_demo(output_dir, log=print):
         fh.write(html)
     log(f"   wrote {os.path.relpath(report_path)}  (open it, or Print → Save as PDF)")
 
-    # 7. Hand off to the CLI + visualizer --------------------------------------
-    _banner(log, 7, "Take the same runs to CI and the visualizer")
+    # 7. Hand off to the CLI + CI ----------------------------------------------
+    _banner(log, 7, "Take the same runs to CI")
     db_path = os.path.join(output_dir, "demo-traces.sqlite")
     for ext in ("", "-wal", "-shm"):
         try:
@@ -174,8 +174,6 @@ def run_demo(output_dir, log=print):
     sql.close()
 
     rel = os.path.relpath(db_path)
-    data_dir = os.path.dirname(rel) or "."
-    project = os.path.splitext(os.path.basename(rel))[0]
     log(f"   wrote {rel}  (golden={str(gid)[:8]}  candidate={str(cid)[:8]})")
     log("")
     log("   Gate it in CI (the same engine the GitHub Action / GitLab template wrap):")
@@ -185,8 +183,7 @@ def run_demo(output_dir, log=print):
     log("   List / select runs (baseline selection):")
     log(f"     dprovenancekit runs --db {rel} --latest --format id")
     log("   Visualize (span tree, payload inspector, side-by-side diff, report export):")
-    log(f"     DPROV_STORAGE=sqlite DPROV_DATA_DIR={data_dir} DPROV_API_KEYS=demo-key:{project} python server/run.py")
-    log("     then open http://127.0.0.1:8787/   (dashboard API key: demo-key)")
+    log("     available in the hosted DProvenanceKit service (a separate commercial product)")
 
     # The whole arc must agree the candidate regressed — also makes this an end-to-end test.
     assert not report.passed, "expected the candidate to be a REGRESSION"

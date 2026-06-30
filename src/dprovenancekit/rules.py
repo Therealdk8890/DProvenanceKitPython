@@ -16,7 +16,7 @@ every store backend and in the live engine exactly like a hand-written rule.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from .anomaly import AnomalyRule
 from .query import TraceQueryDSL, TraceRun
@@ -43,6 +43,8 @@ class ToolDropRule(AnomalyRule):
     """
 
     def __init__(self, required_step: str, *, name: Optional[str] = None) -> None:
+        if not isinstance(required_step, str) or not required_step:
+            raise ValueError("required_step must be a non-empty string")
         self._required_step = required_step
         self._name = name or f"tool_drop:{required_step}"
 
@@ -78,8 +80,10 @@ class LoopingRule(AnomalyRule):
     """
 
     def __init__(self, step: str, max_repeats: int, *, name: Optional[str] = None) -> None:
-        if max_repeats < 1:
-            raise ValueError("LoopingRule.max_repeats must be >= 1")
+        if not isinstance(step, str) or not step:
+            raise ValueError("step must be a non-empty string")
+        if not isinstance(max_repeats, int) or isinstance(max_repeats, bool) or max_repeats < 1:
+            raise ValueError("LoopingRule.max_repeats must be an int >= 1")
         self._step = step
         self._max_repeats = max_repeats
         self._name = name or f"looping:{step}"
@@ -108,4 +112,45 @@ class LoopingRule(AnomalyRule):
         )
 
 
-__all__ = ["ToolDropRule", "LoopingRule"]
+# MARK: - Registry --------------------------------------------------------------
+#
+# Maps a ``type`` string to a builder that constructs the rule from a plain dict spec, so a
+# team can declare rules in a JSON/YAML config (e.g. for CI) instead of writing Python:
+#
+#     {"rules": [
+#         {"type": "tool_drop", "required_step": "safety_check"},
+#         {"type": "looping", "step": "web_search", "max_repeats": 5}
+#     ]}
+
+_RULE_BUILDERS = {
+    "tool_drop": lambda s: ToolDropRule(s["required_step"], name=s.get("name")),
+    "looping": lambda s: LoopingRule(s["step"], s["max_repeats"], name=s.get("name")),
+}
+
+
+def build_rule(spec: Dict[str, Any]) -> AnomalyRule:
+    """Construct an :class:`AnomalyRule` from a plain dict spec (e.g. parsed from JSON).
+
+    Raises :class:`ValueError` for a missing/unknown ``type`` or a missing required field.
+    """
+    try:
+        rule_type = spec["type"]
+    except (KeyError, TypeError):
+        raise ValueError("rule spec must be an object with a 'type' field")
+    builder = _RULE_BUILDERS.get(rule_type)
+    if builder is None:
+        raise ValueError(
+            f"unknown rule type {rule_type!r}; known types: {sorted(_RULE_BUILDERS)}"
+        )
+    try:
+        return builder(spec)
+    except KeyError as exc:
+        raise ValueError(f"rule {rule_type!r} is missing required field {exc}")
+
+
+def build_rules(specs: Iterable[Dict[str, Any]]) -> List[AnomalyRule]:
+    """Construct a list of rules from an iterable of dict specs."""
+    return [build_rule(spec) for spec in specs]
+
+
+__all__ = ["ToolDropRule", "LoopingRule", "build_rule", "build_rules"]

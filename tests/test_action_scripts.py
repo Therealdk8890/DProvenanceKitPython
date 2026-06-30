@@ -28,6 +28,7 @@ def _load(name):
 
 run_gate = _load("run_gate")
 pr_comment = _load("pr_comment")
+run_anomalies = _load("run_anomalies")
 
 
 # ── fixtures ─────────────────────────────────────────────────────────────────────
@@ -226,3 +227,71 @@ def test_post_comment_dry_run_without_token(capsys):
     result = pr_comment.post_comment({"passed": True, "steps_by_change": {}}, {})
     assert result is None
     assert pr_comment._MARKER in capsys.readouterr().out
+
+
+# ── run_anomalies ────────────────────────────────────────────────────────────────
+
+
+def test_run_anomalies_render_annotations_and_summary():
+    report = {
+        "count": 1,
+        "anomalies": [
+            {"rule": "looping:web_search", "run_id": "r", "description": "repeated 6 times"}
+        ],
+    }
+    anns = run_anomalies.render_annotations(report)
+    assert len(anns) == 1
+    assert anns[0].startswith("::warning") and "web_search" in anns[0]
+
+    summary = run_anomalies.render_summary(report)
+    assert "1 anomaly" in summary and "looping:web_search" in summary
+    assert "No anomalies" in run_anomalies.render_summary({"count": 0, "anomalies": []})
+
+
+def test_run_anomalies_sanitizes_log_injection():
+    # Trace-derived text (e.g. context_id) must not be able to inject a workflow command
+    # into the job log or break out of the markdown table.
+    report = {
+        "count": 1,
+        "anomalies": [
+            {"rule": "tool_drop:x", "run_id": "r", "description": "ctx\n::error::pwned | x"}
+        ],
+    }
+    ann = run_anomalies.render_annotations(report)[0]
+    assert "\n" not in ann and "\r" not in ann  # cannot start a new ::error:: command
+
+    summary = run_anomalies.render_summary(report)
+    assert "\\|" in summary  # the injected pipe is escaped
+    # The injected newline did not split the description across rows.
+    data_rows = [r for r in summary.splitlines() if r.startswith("| `tool_drop:x`")]
+    assert len(data_rows) == 1
+    assert "::error::pwned" in data_rows[0]  # present but inert (single line, escaped pipe)
+
+
+def test_run_anomalies_publishes_outputs(tmp_path, capsys):
+    db = str(tmp_path / "a.sqlite")
+    store = SQLiteTraceStore(AnyTraceableEvent, db, start_writer=False)
+    candidate = _record(store, "cand", [("web_search", TracePriority.STRUCTURAL, "{}")] * 6)
+    store.flush()
+    store._db.close()
+
+    rules = tmp_path / "rules.json"
+    rules.write_text(
+        json.dumps({"rules": [{"type": "looping", "step": "web_search", "max_repeats": 5}]}),
+        encoding="utf-8",
+    )
+    out = tmp_path / "out.txt"
+    rc = run_anomalies.main(
+        {
+            "DPROV_DB": db,
+            "DPROV_CANDIDATE": str(candidate),
+            "DPROV_ANOMALY_RULES": str(rules),
+            "GITHUB_OUTPUT": str(out),
+        }
+    )
+    assert rc == 0
+    parsed = _parse_github_output(out)
+    assert parsed["anomaly-count"] == "1"
+    assert json.loads(parsed["anomalies-json"])["count"] == 1
+    # The warning annotation is emitted to the log.
+    assert "::warning" in capsys.readouterr().out

@@ -55,6 +55,7 @@ def _run_gate(argv) -> int:
     """
     import argparse
     import json
+    import sqlite3
     import uuid
 
     from .alignment_models import RegressionLevel
@@ -90,14 +91,16 @@ def _run_gate(argv) -> int:
         print("error: --golden/--candidate must be valid run ids (UUIDs)", file=sys.stderr)
         return 2
 
-    store = SQLiteTraceStore(AnyTraceableEvent, args.db, start_writer=False)
+    try:
+        store = SQLiteTraceStore(AnyTraceableEvent, args.db, start_writer=False)
+    except (sqlite3.Error, OSError) as exc:
+        print(f"error: could not open database {args.db}: {exc}", file=sys.stderr)
+        return 2
     try:
         golden = store.get_run(golden_id)
         candidate = store.get_run(candidate_id)
     finally:
-        db = getattr(store, "_db", None)
-        if db is not None and hasattr(db, "close"):
-            db.close()
+        store.close()
 
     not_found = [name for name, run in (("golden", golden), ("candidate", candidate)) if run is None]
     if not_found:
@@ -134,19 +137,108 @@ def _run_gate(argv) -> int:
     return 0 if report.passed else 1
 
 
+def _run_anomalies(argv) -> int:
+    """``dprovenancekit anomalies`` — run anomaly rules over recorded runs.
+
+    Loads rules from a JSON config and evaluates them against a local SQLite database, either
+    over a single run (``--run``) or every run in the store. Exit codes::
+
+        0  no anomalies
+        1  anomalies found
+        2  usage / config / run-not-found error
+    """
+    import argparse
+    import json
+    import sqlite3
+    import uuid
+
+    from .anomaly import AnomalyDetector
+    from .event import AnyTraceableEvent
+    from .rules import build_rules
+    from .sqlite_store import SQLiteTraceStore
+
+    ap = argparse.ArgumentParser(
+        prog="dprovenancekit anomalies",
+        description="Run out-of-the-box anomaly rules over recorded runs.",
+    )
+    ap.add_argument("--db", required=True, help="path to the SQLite trace database")
+    ap.add_argument("--rules", required=True, help="path to a JSON rules config")
+    ap.add_argument("--run", default=None, help="restrict to a single run id (default: all runs)")
+    ap.add_argument("--json", action="store_true", help="emit the findings as JSON")
+    args = ap.parse_args(argv)
+
+    try:
+        with open(args.rules, encoding="utf-8") as fh:
+            config = json.load(fh)
+        specs = config["rules"] if isinstance(config, dict) else config
+        rules = build_rules(specs)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        print(f"error: could not load rules from {args.rules}: {exc}", file=sys.stderr)
+        return 2
+
+    run_id = None
+    if args.run is not None:
+        try:
+            run_id = uuid.UUID(args.run)
+        except ValueError:
+            print("error: --run must be a valid run id (UUID)", file=sys.stderr)
+            return 2
+
+    try:
+        store = SQLiteTraceStore(AnyTraceableEvent, args.db, start_writer=False)
+    except (sqlite3.Error, OSError) as exc:
+        print(f"error: could not open database {args.db}: {exc}", file=sys.stderr)
+        return 2
+    try:
+        if run_id is not None:
+            run = store.get_run(run_id)
+            if run is None:
+                print(f"error: run not found in {args.db}: {args.run}", file=sys.stderr)
+                return 2
+            found = [r.make_anomaly(run) for r in rules if r.anomaly_query.ast.evaluate(run)]
+        else:
+            found = AnomalyDetector(store).detect_anomalies(rules)
+    finally:
+        store.close()
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "count": len(found),
+                    "anomalies": [
+                        {"rule": a.rule_name, "run_id": str(a.run_id), "description": a.description}
+                        for a in found
+                    ],
+                },
+                indent=2,
+            )
+        )
+    elif not found:
+        print("No anomalies detected.")
+    else:
+        print(f"{len(found)} anomaly(ies) detected:")
+        for anomaly in found:
+            print(f"  [{anomaly.rule_name}] {anomaly.description}")
+
+    return 1 if found else 0
+
+
 def main(argv=None) -> int:
     if argv is None:
         argv = sys.argv[1:]
 
     if argv and argv[0] == "gate":
         return _run_gate(argv[1:])
+    if argv and argv[0] == "anomalies":
+        return _run_anomalies(argv[1:])
 
     print("DProvenanceKit CLI Evaluator")
     print("============================")
 
     mode = argv[0] if argv else "evaluate"
     if mode not in ("evaluate", "diagnose", "stability"):
-        print("Usage: dprovenancekit <gate|evaluate|diagnose|stability>")
+        print("Usage: dprovenancekit <gate|anomalies|evaluate|diagnose|stability>")
         return 0
 
     runner = BenchmarkRunner()

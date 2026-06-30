@@ -107,6 +107,16 @@
   </section>
 
   <section class="panel" style="grid-column:1 / -1">
+    <h2>Run inspector</h2>
+    <div class="row-controls">
+      <div class="field"><label>Run</label><select id="inspect-run"></select></div>
+      <div class="field"><label>&nbsp;</label><button class="primary" onclick="inspectRun()">Inspect</button></div>
+      <div class="field"><label>&nbsp;</label><span class="empty" style="font-style:normal">span tree · click an event to inspect its payload</span></div>
+    </div>
+    <div id="inspect-out"></div>
+  </section>
+
+  <section class="panel" style="grid-column:1 / -1">
     <h2>Reasoning diff</h2>
     <div class="row-controls">
       <div class="field"><label>Base run</label><select id="diff-base"></select></div>
@@ -147,7 +157,7 @@ async function loadRuns(){
     </tr>`).join('');
 
   const opts = RUNS.map(r => `<option value="${r.run_id}">${(r.context_id||r.run_id.slice(0,8))} · ${short(r.fingerprint)}</option>`).join('');
-  for(const id of ['golden','candidate','diff-base','diff-cmp']){
+  for(const id of ['golden','candidate','diff-base','diff-cmp','inspect-run']){
     const sel = document.getElementById(id);
     if(sel) sel.innerHTML = opts;
   }
@@ -204,6 +214,29 @@ async function runDiff(){
         <div class="col"><h3>base</h3><div class="tree">${renderRoots(baseSnap.roots, 'base', baseM)}</div></div>
         <div class="col"><h3>comparison</h3><div class="tree">${renderRoots(cmpSnap.roots, 'cmp', cmpM)}</div></div>
       </div>`;
+  }catch(e){ out.innerHTML = `<div class="err">${e.message}</div>`; }
+}
+
+async function inspectRun(){
+  const out = document.getElementById('inspect-out');
+  const id = document.getElementById('inspect-run').value;
+  if(!id){ out.innerHTML = '<div class="err">Pick a run.</div>'; return; }
+  out.innerHTML = '<div class="empty">Loading…</div>';
+  try{
+    const r = await fetch(`/api/runs/${id}/replay`, {headers:hdr()});
+    const data = await r.json();
+    if(!r.ok){ out.innerHTML = `<div class="err">${data.error || ('HTTP '+r.status)}</div>`; return; }
+    const snap = data.snapshot, mf = snap.manifest, orphans = (snap.orphaned_events||[]).length;
+    const stat = (cls,n,label) => `<span class="stat ${cls}"><b>${n}</b> ${label}</span>`;
+    out.innerHTML = `
+      <div class="diff-summary">
+        ${stat('', mf.total_events, 'events')}${stat('', mf.reconstructed_spans, 'spans')}
+        ${mf.contaminated_spans ? stat('rem', mf.contaminated_spans, 'contaminated') : ''}
+        ${orphans ? stat('mod', orphans, 'orphaned') : ''}
+        ${(mf.sequence_gaps||[]).length ? stat('mod', mf.sequence_gaps.length, 'gaps') : ''}
+      </div>
+      <div class="tree">${renderRoots(snap.roots, 'single', {})}</div>
+      ${orphans ? `<div class="grp"><div class="label">orphaned events</div><div class="tree">${(snap.orphaned_events||[]).map(e => renderEvent(e, 'single', {})).join('')}</div></div>` : ''}`;
   }catch(e){ out.innerHTML = `<div class="err">${e.message}</div>`; }
 }
 

@@ -165,6 +165,12 @@ and a golden/candidate run id. Exit code is `0` (pass), `1` (regression), or `2`
 ```bash
 dprovenancekit gate --db traces.sqlite --golden "$GOLDEN_RUN_ID" --candidate "$CANDIDATE_RUN_ID"
 dprovenancekit gate --db traces.sqlite --golden "$G" --candidate "$C" --max-level low --json
+
+# Gate across separate databases (a restored baseline vs. this PR's run), resolving
+# the golden run id from the baseline instead of hardcoding it:
+GOLDEN=$(dprovenancekit runs --db baseline.sqlite --context my-agent --latest --format id)
+dprovenancekit gate --golden-db baseline.sqlite --golden "$GOLDEN" \
+                    --candidate-db candidate.sqlite --candidate "$CANDIDATE_RUN_ID"
 ```
 
 ---

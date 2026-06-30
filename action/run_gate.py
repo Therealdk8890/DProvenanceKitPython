@@ -27,9 +27,12 @@ _DELIM = "__DPROV_OUTPUT_EOF__"
 
 def build_gate_argv(env):
     """Build the ``python -m dprovenancekit.cli gate`` command from the step environment."""
+    golden_db = env.get("DPROV_GOLDEN_DB") or env["DPROV_DB"]
+    candidate_db = env.get("DPROV_CANDIDATE_DB") or env["DPROV_DB"]
     argv = [
         sys.executable, "-m", "dprovenancekit.cli", "gate",
-        "--db", env["DPROV_DB"],
+        "--golden-db", golden_db,
+        "--candidate-db", candidate_db,
         "--golden", env["DPROV_GOLDEN"],
         "--candidate", env["DPROV_CANDIDATE"],
         "--max-level", (env.get("DPROV_MAX_LEVEL") or "none"),

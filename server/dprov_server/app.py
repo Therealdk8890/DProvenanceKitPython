@@ -4,7 +4,9 @@ The open-source library (Apache 2.0) is the client; this is the service. It spea
 Specification v1 cloud wire format (§7) so the existing ``CloudTraceStore`` works against it
 unchanged — ``POST /ingest``, ``POST /query``, ``GET /capabilities`` — and adds the
 monetizable layer on top: a **regression gate** API (``POST /api/gate``) and the data a
-dashboard renders (``GET /api/runs``, ``GET /api/runs/{id}``).
+viewer renders — run list/detail (``GET /api/runs``, ``GET /api/runs/{id}``), the reconstructed
+span tree + payloads (``GET /api/runs/{id}/replay``), and a span-aware semantic diff of two
+runs (``POST /api/diff``).
 
 It is generic over any consumer payload: ingested events are stored type-erased as
 ``AnyTraceableEvent`` (carrying ``type``, ``priority``, and the canonical payload JSON),
@@ -36,8 +38,10 @@ from dprovenancekit import (  # noqa: E402
     InMemoryTraceStore,
     RegressionGate,
     RegressionLevel,
+    SnapshotDiffEngine,
     TraceEvent,
     TraceQueryDSL,
+    TraceReplayEngine,
     run_fingerprint,
 )
 from dprovenancekit.query import (  # noqa: E402
@@ -208,7 +212,15 @@ class Server:
                 return self._list_runs(project)
             if method == "GET" and path.startswith("/api/runs/"):
                 self._require(project, "read")
-                return self._run_detail(project, path.rsplit("/", 1)[1])
+                parts = path[len("/api/runs/"):].split("/")
+                if len(parts) == 1 and parts[0]:
+                    return self._run_detail(project, parts[0])
+                if len(parts) == 2 and parts[1] == "replay":
+                    return self._run_replay(project, parts[0])
+                return self._json(404, {"error": "NOT_FOUND", "path": path})
+            if method == "POST" and path == "/api/diff":
+                self._require(project, "read")
+                return self._diff(project, body)
             if method == "POST" and path == "/api/gate":
                 self._require(project, "read")
                 return self._gate(project, body)
@@ -354,6 +366,41 @@ class Server:
             ],
         })
 
+    def _run_replay(self, project: Project, run_id: str) -> Tuple[int, Dict[str, str], bytes]:
+        """The reconstructed span tree + full event payloads — the data a viewer renders
+        (span-tree pane + JSON payload inspector), which ``_run_detail`` deliberately omits."""
+        run = _get_run(project, run_id)
+        snapshot = TraceReplayEngine(run.events).snapshot()
+        return self._json(200, {**_run_summary(run), "snapshot": _snapshot_json(snapshot)})
+
+    def _diff(self, project: Project, body: bytes) -> Tuple[int, Dict[str, str], bytes]:
+        """Span-aware semantic diff of two runs (``SnapshotDiffEngine``) — span add/remove/
+        reparent/contamination, per-event add/remove/modify, and first divergence."""
+        req = json.loads(body.decode("utf-8")) if body else {}
+        base = _get_run(project, str(req.get("base_run_id", "")))
+        comparison = _get_run(project, str(req.get("comparison_run_id", "")))
+        base_snap = TraceReplayEngine(base.events).snapshot()
+        comp_snap = TraceReplayEngine(comparison.events).snapshot()
+        result = SnapshotDiffEngine().diff(base_snap, comp_snap)
+        s = result.summary
+        return self._json(200, {
+            "base_run_id": str(base.run_id),
+            "comparison_run_id": str(comparison.run_id),
+            "is_identical": result.is_identical,
+            "summary": {
+                "added_spans": s.added_spans,
+                "removed_spans": s.removed_spans,
+                "added_events": s.added_events,
+                "removed_events": s.removed_events,
+                "modified_events": s.modified_events,
+                "contaminated_spans": s.contaminated_spans,
+                "divergence_points": s.divergence_points,
+            },
+            "span_changes": [_span_change_json(c) for c in result.span_changes],
+            "event_changes": [_event_change_json(c) for c in result.event_changes],
+            "divergences": [_divergence_json(d) for d in result.divergences],
+        })
+
     # -- the regression gate: the paid differentiator ----------------------------
 
     def _gate(self, project: Project, body: bytes) -> Tuple[int, Dict[str, str], bytes]:
@@ -448,3 +495,106 @@ def _get_run(project: Project, run_id: str):
     if run is None:
         raise HTTPError(404, {"error": "RUN_NOT_FOUND", "run_id": run_id})
     return run
+
+
+# ── replay / diff serialization (the visualizer data contract) ────────────────────
+
+
+def _payload_json(payload) -> Any:
+    """The event's payload for the JSON inspector. Prefer the original raw JSON carried by
+    ``AnyTraceableEvent`` (what was actually recorded); fall back to a concrete event's dict."""
+    raw = getattr(payload, "raw_json", None)
+    if raw is not None:
+        try:
+            return json.loads(raw)
+        except (ValueError, TypeError):
+            return raw
+    try:
+        return payload.to_dict()
+    except Exception:  # noqa: BLE001 - a payload that refuses to serialize is non-fatal
+        return None
+
+
+def _replay_event_json(re) -> Dict[str, Any]:
+    e = re.event
+    return {
+        "source": re.source.value,
+        "replay_order": re.replay_order,
+        "sequence": e.sequence,
+        "type": e.payload.type_identifier,
+        "engine": e.engine_name,
+        "priority": int(e.payload.priority),
+        "span_id": e.span_id,
+        "parent_span_id": e.parent_span_id,
+        "timestamp": e.timestamp,
+        "payload": _payload_json(e.payload),
+    }
+
+
+def _span_node_json(node) -> Dict[str, Any]:
+    return {
+        "span_id": node.span_id,
+        "start_sequence": node.start_sequence,
+        "end_sequence": node.end_sequence,
+        "contains_quarantined_events": node.contains_quarantined_events,
+        "events": [_replay_event_json(re) for re in node.events],
+        "children": [_span_node_json(c) for c in node.children],
+    }
+
+
+def _snapshot_json(snapshot) -> Dict[str, Any]:
+    m = snapshot.manifest
+    md = snapshot.metadata
+    return {
+        "roots": [_span_node_json(r) for r in snapshot.roots],
+        "orphaned_events": [_replay_event_json(re) for re in snapshot.orphaned_events],
+        "manifest": {
+            "total_events": m.total_events,
+            "committed_events": m.committed_events,
+            "quarantined_events": m.quarantined_events,
+            "orphaned_events": m.orphaned_events,
+            "duplicate_event_ids": m.duplicate_event_ids,
+            "reconstructed_spans": m.reconstructed_spans,
+            "contaminated_spans": m.contaminated_spans,
+            "sequence_gaps": [
+                {"lower_bound": g.lower_bound, "upper_bound": g.upper_bound} for g in m.sequence_gaps
+            ],
+        },
+        "metadata": {
+            "generated_at": md.generated_at,
+            "max_sequence_included": md.max_sequence_included,
+            "source_counts": {src.value: cnt for src, cnt in md.source_counts.items()},
+        },
+    }
+
+
+def _span_change_json(c) -> Dict[str, Any]:
+    return {
+        "kind": c.kind.value,
+        "span_id": c.span_id,
+        "parent_span_id": c.parent_span_id,
+        "from_parent": c.from_parent,
+        "to_parent": c.to_parent,
+        "from_contaminated": c.from_contaminated,
+        "to_contaminated": c.to_contaminated,
+    }
+
+
+def _event_change_json(c) -> Dict[str, Any]:
+    return {
+        "kind": c.kind.value,
+        "span_id": c.span_id,
+        "event": _replay_event_json(c.event) if c.event is not None else None,
+        "before": _replay_event_json(c.before) if c.before is not None else None,
+        "after": _replay_event_json(c.after) if c.after is not None else None,
+    }
+
+
+def _divergence_json(d) -> Dict[str, Any]:
+    return {
+        "span_id": d.span_id,
+        "common_prefix_length": d.common_prefix_length,
+        "divergence_sequence": d.divergence_sequence,
+        "left_event": _replay_event_json(d.left_event) if d.left_event is not None else None,
+        "right_event": _replay_event_json(d.right_event) if d.right_event is not None else None,
+    }

@@ -42,16 +42,111 @@ def _print_case_line(c) -> None:
     )
 
 
+def _run_gate(argv) -> int:
+    """``dprovenancekit gate`` — fail when a candidate run regresses against a golden run.
+
+    Server-less: loads both runs from a local WAL SQLite database (the same on-disk format
+    the hosted backend uses) and runs the library's own :class:`RegressionGate`. Exit codes
+    mirror ``server/dprov_gate.py``::
+
+        0  no regression (gate passed)
+        1  regression detected
+        2  usage / run-not-found error
+    """
+    import argparse
+    import json
+    import uuid
+
+    from .alignment_models import RegressionLevel
+    from .event import AnyTraceableEvent
+    from .sqlite_store import SQLiteTraceStore
+    from .testing import RegressionGate
+
+    ap = argparse.ArgumentParser(
+        prog="dprovenancekit gate",
+        description="Fail the build when a candidate run regresses against a golden run.",
+    )
+    ap.add_argument("--db", required=True, help="path to the SQLite trace database")
+    ap.add_argument("--golden", required=True, help="golden (known-good) run id")
+    ap.add_argument("--candidate", required=True, help="candidate run id to gate")
+    ap.add_argument(
+        "--max-level",
+        default="none",
+        choices=["none", "low", "medium", "high"],
+        help="worst severity that still passes (default: none = strict)",
+    )
+    ap.add_argument(
+        "--allow-divergent",
+        action="store_true",
+        help="tolerate per-step changes; gate only on severity",
+    )
+    ap.add_argument("--json", action="store_true", help="emit the report as JSON")
+    args = ap.parse_args(argv)
+
+    try:
+        golden_id = uuid.UUID(args.golden)
+        candidate_id = uuid.UUID(args.candidate)
+    except ValueError:
+        print("error: --golden/--candidate must be valid run ids (UUIDs)", file=sys.stderr)
+        return 2
+
+    store = SQLiteTraceStore(AnyTraceableEvent, args.db, start_writer=False)
+    try:
+        golden = store.get_run(golden_id)
+        candidate = store.get_run(candidate_id)
+    finally:
+        db = getattr(store, "_db", None)
+        if db is not None and hasattr(db, "close"):
+            db.close()
+
+    not_found = [name for name, run in (("golden", golden), ("candidate", candidate)) if run is None]
+    if not_found:
+        print(f"error: run not found in {args.db}: {', '.join(not_found)}", file=sys.stderr)
+        return 2
+
+    report = RegressionGate(
+        max_regression_level=RegressionLevel(args.max_level),
+        allow_divergent_steps=args.allow_divergent,
+    ).check(golden, candidate)
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "passed": report.passed,
+                    "regression_level": report.regression_level.value,
+                    "strength": report.strength,
+                    "max_regression_level": report.max_regression_level.value,
+                    "allow_divergent_steps": report.allow_divergent_steps,
+                    "fingerprint_match": report.fingerprint_match,
+                    "golden_fingerprint": report.golden_fingerprint,
+                    "candidate_fingerprint": report.candidate_fingerprint,
+                    "steps_by_change": report.steps_by_change,
+                    "reasoning": report.reasoning,
+                    "summary": report.summary(),
+                },
+                indent=2,
+            )
+        )
+    else:
+        print(report.summary())
+
+    return 0 if report.passed else 1
+
+
 def main(argv=None) -> int:
     if argv is None:
         argv = sys.argv[1:]
+
+    if argv and argv[0] == "gate":
+        return _run_gate(argv[1:])
 
     print("DProvenanceKit CLI Evaluator")
     print("============================")
 
     mode = argv[0] if argv else "evaluate"
     if mode not in ("evaluate", "diagnose", "stability"):
-        print("Usage: dprovenancekit <evaluate|diagnose|stability>")
+        print("Usage: dprovenancekit <gate|evaluate|diagnose|stability>")
         return 0
 
     runner = BenchmarkRunner()

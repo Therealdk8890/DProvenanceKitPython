@@ -1,6 +1,6 @@
 # DProvenanceKit — hosted backend
 
-The **managed service** for DProvenanceKit. The library stays the free, BSL-licensed
+The **managed service** for DProvenanceKit. The library stays the free, Apache 2.0-licensed
 client; this is the server it talks to, plus the layer worth paying for: a **regression
 gate** API and a dashboard.
 

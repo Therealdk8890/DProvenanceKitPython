@@ -1,6 +1,6 @@
 """DProvenanceKit hosted backend — the managed service the ``CloudTraceStore`` SDK targets.
 
-The open-source library (BSL) is the client; this is the service. It speaks the Trace
+The open-source library (Apache 2.0) is the client; this is the service. It speaks the Trace
 Specification v1 cloud wire format (§7) so the existing ``CloudTraceStore`` works against it
 unchanged — ``POST /ingest``, ``POST /query``, ``GET /capabilities`` — and adds the
 monetizable layer on top: a **regression gate** API (``POST /api/gate``) and the data a

@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dprovenancekit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Reasoning observability and regression testing for AI systems — a Python port of DProvenanceKit."
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "BSL-1.1" }
+license = { text = "Apache-2.0" }
 authors = [{ name = "DProvenanceKit" }]
 keywords = ["observability", "ai", "agents", "tracing", "provenance", "regression"]
 classifiers = [
@@ -22,7 +22,7 @@ classifiers = [
     "Topic :: Software Development :: Debuggers",
     "Topic :: Software Development :: Quality Assurance",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "License :: Other/Proprietary License",
+    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Typing :: Typed",
 ]

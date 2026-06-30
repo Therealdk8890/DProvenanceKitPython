@@ -307,4 +307,4 @@ python -m pytest
 
 ## License
 
-Distributed under the **Business Source License 1.1**, same as the upstream Swift project. See [LICENSE](LICENSE).
+Distributed under the **Apache License 2.0**. See [LICENSE](LICENSE).

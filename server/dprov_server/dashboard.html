@@ -50,6 +50,25 @@
   .err{color:var(--bad);font-size:13px;margin-top:8px}
   tr.sel{background:#15202e}
   code{font-family:var(--mono);background:var(--panel2);padding:1px 5px;border-radius:5px;font-size:12px}
+  /* reasoning diff */
+  .diff-summary{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .stat{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:5px 11px;font-size:13px;color:var(--muted)}
+  .stat b{font-family:var(--mono);color:var(--text)}
+  .stat.add b{color:var(--ok)} .stat.rem b{color:var(--bad)} .stat.mod b{color:var(--warn)}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .col h3{font-size:12px;color:var(--muted);margin:0 0 8px;text-transform:uppercase;letter-spacing:.5px}
+  .tree{font-family:var(--mono);font-size:12px}
+  .span{margin:6px 0;border-left:2px solid var(--border);padding-left:10px}
+  .span > .span-hd{color:var(--muted);padding:2px 0}
+  .span.span-removed>.span-hd{color:var(--bad)} .span.span-added>.span-hd{color:var(--ok)} .span.span-reparented>.span-hd{color:var(--warn)}
+  .ev{padding:2px 6px;border-radius:5px;cursor:pointer}
+  .ev:hover{background:var(--panel2)}
+  .ev .seq{color:var(--muted);display:inline-block;min-width:22px;text-align:right;margin-right:8px}
+  .ev .eng{color:var(--muted);font-size:11px;margin-left:8px}
+  .ev-removed{background:var(--badbg);color:#ffb4ab} .ev-added{background:var(--okbg);color:#9be7a8} .ev-modified{background:var(--warnbg);color:#f1d58c}
+  .ev.diverge{outline:1px dashed var(--warn);outline-offset:1px}
+  .ev-pay{display:none;margin:4px 0 4px 28px;font-size:11px;max-height:220px;overflow:auto}
+  .ev.open .ev-pay{display:block}
 </style>
 </head>
 <body>
@@ -85,6 +104,17 @@
     </div>
     <div id="verdict"></div>
   </section>
+
+  <section class="panel" style="grid-column:1 / -1">
+    <h2>Reasoning diff</h2>
+    <div class="row-controls">
+      <div class="field"><label>Base run</label><select id="diff-base"></select></div>
+      <div class="field"><label>Comparison run</label><select id="diff-cmp"></select></div>
+      <div class="field"><label>&nbsp;</label><button class="primary" onclick="runDiff()">Diff</button></div>
+      <div class="field"><label>&nbsp;</label><span class="empty" style="font-style:normal">click an event to inspect its payload</span></div>
+    </div>
+    <div id="diff-out"></div>
+  </section>
 </main>
 
 <script>
@@ -116,11 +146,90 @@ async function loadRuns(){
     </tr>`).join('');
 
   const opts = RUNS.map(r => `<option value="${r.run_id}">${(r.context_id||r.run_id.slice(0,8))} · ${short(r.fingerprint)}</option>`).join('');
-  for(const id of ['golden','candidate']){
+  for(const id of ['golden','candidate','diff-base','diff-cmp']){
     const sel = document.getElementById(id);
-    sel.innerHTML = opts;
+    if(sel) sel.innerHTML = opts;
   }
-  if(RUNS.length > 1) document.getElementById('candidate').selectedIndex = 1;
+  if(RUNS.length > 1){
+    document.getElementById('candidate').selectedIndex = 1;
+    document.getElementById('diff-cmp').selectedIndex = 1;
+  }
+}
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function evKey(e){ return `${e.span_id}|${e.sequence}|${e.type}`; }
+
+async function runDiff(){
+  const out = document.getElementById('diff-out');
+  const base = document.getElementById('diff-base').value, cmp = document.getElementById('diff-cmp').value;
+  if(!base || !cmp){ out.innerHTML = '<div class="err">Pick a base and a comparison run.</div>'; return; }
+  out.innerHTML = '<div class="empty">Computing diff…</div>';
+  try{
+    const [diffR, baseR, cmpR] = await Promise.all([
+      fetch('/api/diff', {method:'POST', headers:hdr(), body:JSON.stringify({base_run_id:base, comparison_run_id:cmp})}),
+      fetch(`/api/runs/${base}/replay`, {headers:hdr()}),
+      fetch(`/api/runs/${cmp}/replay`, {headers:hdr()}),
+    ]);
+    const diff = await diffR.json();
+    if(!diffR.ok){ out.innerHTML = `<div class="err">${diff.error || ('HTTP '+diffR.status)}</div>`; return; }
+    const baseSnap = (await baseR.json()).snapshot, cmpSnap = (await cmpR.json()).snapshot;
+
+    const removedEv = new Set(), addedEv = new Set(), modifiedEv = new Set(), divergeEv = new Set();
+    for(const c of diff.event_changes){
+      if(c.kind === 'removed' && c.event) removedEv.add(evKey(c.event));
+      else if(c.kind === 'added' && c.event) addedEv.add(evKey(c.event));
+      else if(c.kind === 'modified'){ if(c.before) modifiedEv.add(evKey(c.before)); if(c.after) modifiedEv.add(evKey(c.after)); }
+    }
+    for(const d of diff.divergences){ if(d.left_event) divergeEv.add(evKey(d.left_event)); if(d.right_event) divergeEv.add(evKey(d.right_event)); }
+    const removedSpan = new Set(), addedSpan = new Set(), reSpan = new Set();
+    for(const s of diff.span_changes){
+      if(s.kind === 'removed') removedSpan.add(s.span_id);
+      else if(s.kind === 'added') addedSpan.add(s.span_id);
+      else if(s.kind === 'reparented') reSpan.add(s.span_id);
+    }
+
+    const sm = diff.summary;
+    const stat = (cls,n,label) => `<span class="stat ${cls}"><b>${n}</b> ${label}</span>`;
+    const baseM = {removedEv, modifiedEv, divergeEv, removedSpan, reSpan};
+    const cmpM = {addedEv, modifiedEv, divergeEv, addedSpan, reSpan};
+    out.innerHTML = `
+      <div class="diff-summary">
+        ${diff.is_identical ? '<span class="stat"><b>identical</b></span>' : ''}
+        ${stat('add', sm.added_spans, 'spans +')}${stat('rem', sm.removed_spans, 'spans −')}
+        ${stat('add', sm.added_events, 'events +')}${stat('rem', sm.removed_events, 'events −')}${stat('mod', sm.modified_events, 'events ~')}
+        ${stat('', sm.divergence_points, 'divergences')}
+      </div>
+      <div class="cols">
+        <div class="col"><h3>base</h3><div class="tree">${renderRoots(baseSnap.roots, 'base', baseM)}</div></div>
+        <div class="col"><h3>comparison</h3><div class="tree">${renderRoots(cmpSnap.roots, 'cmp', cmpM)}</div></div>
+      </div>`;
+  }catch(e){ out.innerHTML = `<div class="err">${e.message}</div>`; }
+}
+
+function renderRoots(roots, side, m){ return (roots||[]).map(n => renderSpan(n, side, m)).join('') || '<div class="empty">—</div>'; }
+
+function renderSpan(node, side, m){
+  const isRem = side === 'base' && m.removedSpan && m.removedSpan.has(node.span_id);
+  const isAdd = side === 'cmp' && m.addedSpan && m.addedSpan.has(node.span_id);
+  const isRe = node.span_id != null && m.reSpan && m.reSpan.has(node.span_id);
+  const cls = isRem ? 'span-removed' : isAdd ? 'span-added' : isRe ? 'span-reparented' : '';
+  const hd = node.span_id ? `span ${node.span_id}${isRe ? ' · reparented' : ''}` : 'root';
+  const events = (node.events||[]).map(e => renderEvent(e, side, m)).join('');
+  const children = (node.children||[]).map(c => renderSpan(c, side, m)).join('');
+  return `<div class="span ${cls}"><div class="span-hd">${esc(hd)}</div>${events}${children}</div>`;
+}
+
+function renderEvent(e, side, m){
+  const k = evKey(e);
+  let cls = '';
+  if(side === 'base' && m.removedEv && m.removedEv.has(k)) cls = 'ev-removed';
+  else if(side === 'cmp' && m.addedEv && m.addedEv.has(k)) cls = 'ev-added';
+  else if(m.modifiedEv && m.modifiedEv.has(k)) cls = 'ev-modified';
+  const div = (m.divergeEv && m.divergeEv.has(k)) ? ' diverge' : '';
+  const pay = esc(JSON.stringify(e.payload, null, 2));
+  return `<div class="ev ${cls}${div}" onclick="this.classList.toggle('open')">`
+    + `<span class="seq">${e.sequence}</span><span>${esc(e.type)}</span><span class="eng">${esc(e.engine||'')}</span>`
+    + `<pre class="ev-pay" onclick="event.stopPropagation()">${pay}</pre></div>`;
 }
 
 async function runGate(){

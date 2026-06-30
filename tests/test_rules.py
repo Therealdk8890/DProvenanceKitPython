@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import pytest
+
 from dprovenancekit import (
     AnomalyDetector,
     DProvenanceKit,
     InMemoryTraceStore,
+    LoopingRule,
     ToolDropRule,
     TraceableEvent,
     TracePriority,
@@ -73,3 +76,38 @@ def test_tool_drop_rule_custom_name_and_dsl_query():
     _record(store, "ok", ["retrieve", "answer"])
     hits = store.query_runs(rule.anomaly_query)
     assert [r.run_id for r in hits] == [bad]
+
+
+# ── LoopingRule ──────────────────────────────────────────────────────────────────
+
+
+def test_looping_rule_flags_repeated_step():
+    store = InMemoryTraceStore()
+    looping = _record(store, "looping", ["call", "call", "call"])  # 3x call
+    fine = _record(store, "fine", ["call", "done"])  # 1x call
+
+    anomalies = AnomalyDetector(store).detect_anomalies([LoopingRule("call", max_repeats=2)])
+
+    flagged = {a.run_id for a in anomalies}
+    assert looping in flagged
+    assert fine not in flagged
+    assert len(anomalies) == 1
+
+    anomaly = anomalies[0]
+    assert anomaly.rule_name == "looping:call"
+    assert "repeated 3 times" in anomaly.description
+
+
+def test_looping_rule_threshold_is_strictly_more_than_max():
+    store = InMemoryTraceStore()
+    at_limit = _record(store, "at", ["call", "call"])  # exactly 2 — still healthy
+    over = _record(store, "over", ["call", "call", "call"])  # 3 — looping
+
+    flagged = {a.run_id for a in AnomalyDetector(store).detect_anomalies([LoopingRule("call", 2)])}
+    assert over in flagged
+    assert at_limit not in flagged
+
+
+def test_looping_rule_validates_max_repeats():
+    with pytest.raises(ValueError):
+        LoopingRule("call", 0)

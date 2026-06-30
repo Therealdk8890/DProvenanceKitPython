@@ -1,0 +1,96 @@
+name: "DProvenanceKit regression gate"
+description: "Fail a pull request when an agent's reasoning regresses against a golden run, and comment the diff."
+branding:
+  icon: "git-pull-request"
+  color: "purple"
+
+inputs:
+  db-path:
+    description: "Path to the SQLite trace database containing both runs."
+    required: true
+  golden-run-id:
+    description: "Run id of the golden (known-good) trace."
+    required: true
+  candidate-run-id:
+    description: "Run id of the candidate trace to gate."
+    required: true
+  max-level:
+    description: "Worst regression severity that still passes: none | low | medium | high."
+    required: false
+    default: "none"
+  allow-divergent:
+    description: "Tolerate per-step changes; gate only on severity (true | false)."
+    required: false
+    default: "false"
+  fail-on-regression:
+    description: "Fail the job when a regression is detected (true | false)."
+    required: false
+    default: "true"
+  comment:
+    description: "Post a sticky summary comment on the pull request (true | false)."
+    required: false
+    default: "true"
+  install-spec:
+    description: "pip requirement to install the gate from (e.g. 'dprovenancekit', 'dprovenancekit==0.2.0', or a VCS URL)."
+    required: false
+    default: "dprovenancekit"
+  python-version:
+    description: "Python version to set up."
+    required: false
+    default: "3.x"
+  github-token:
+    description: "Token used to post the PR comment. Defaults to the job's GITHUB_TOKEN."
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  passed:
+    description: "true when no regression was detected, false otherwise."
+    value: ${{ steps.gate.outputs.passed }}
+  regression-level:
+    description: "Engine-assessed severity: none | low | medium | high."
+    value: ${{ steps.gate.outputs.regression-level }}
+  summary:
+    description: "Human-readable gate summary."
+    value: ${{ steps.gate.outputs.summary }}
+  report-json:
+    description: "Full gate report as a JSON string."
+    value: ${{ steps.gate.outputs.report-json }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install dprovenancekit
+      shell: bash
+      run: python -m pip install --disable-pip-version-check "${{ inputs.install-spec }}"
+
+    - name: Run regression gate
+      id: gate
+      shell: bash
+      run: python "${{ github.action_path }}/run_gate.py"
+      env:
+        DPROV_DB: ${{ inputs.db-path }}
+        DPROV_GOLDEN: ${{ inputs.golden-run-id }}
+        DPROV_CANDIDATE: ${{ inputs.candidate-run-id }}
+        DPROV_MAX_LEVEL: ${{ inputs.max-level }}
+        DPROV_ALLOW_DIVERGENT: ${{ inputs.allow-divergent }}
+
+    - name: Comment on pull request
+      if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
+      shell: bash
+      run: python "${{ github.action_path }}/pr_comment.py"
+      env:
+        DPROV_REPORT_JSON: ${{ steps.gate.outputs.report-json }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+
+    - name: Enforce gate
+      if: ${{ inputs.fail-on-regression == 'true' && steps.gate.outputs.passed != 'true' }}
+      shell: bash
+      run: |
+        echo "::error title=DProvenanceKit::Regression gate failed (severity: ${{ steps.gate.outputs.regression-level }})"
+        exit 1

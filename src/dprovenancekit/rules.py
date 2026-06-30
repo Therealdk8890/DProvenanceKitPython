@@ -65,4 +65,47 @@ class ToolDropRule(AnomalyRule):
         )
 
 
-__all__ = ["ToolDropRule"]
+class LoopingRule(AnomalyRule):
+    """Flag runs where a step repeats more than a threshold — an agent stuck in a loop.
+
+    A run is anomalous iff ``step`` occurs **more than** ``max_repeats`` times (i.e. at least
+    ``max_repeats + 1``). Use it to catch an agent that calls the same tool over and over.
+
+    Args:
+        step: the ``type_identifier`` of the repeating step/tool.
+        max_repeats: the largest number of occurrences still considered healthy (>= 1).
+        name: optional rule-name override (default ``"looping:<step>"``).
+    """
+
+    def __init__(self, step: str, max_repeats: int, *, name: Optional[str] = None) -> None:
+        if max_repeats < 1:
+            raise ValueError("LoopingRule.max_repeats must be >= 1")
+        self._step = step
+        self._max_repeats = max_repeats
+        self._name = name or f"looping:{step}"
+
+    @property
+    def step(self) -> str:
+        return self._step
+
+    @property
+    def max_repeats(self) -> int:
+        return self._max_repeats
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def anomaly_query(self) -> TraceQueryDSL:
+        return TraceQueryDSL().requiring_repeated_step(self._step, self._max_repeats + 1)
+
+    def describe(self, run: TraceRun) -> str:
+        seen = sum(1 for e in run.events if e.payload.type_identifier == self._step)
+        return (
+            f"step '{self._step}' repeated {seen} times (> {self._max_repeats} allowed) "
+            f"in run {run.run_id} (context '{run.context_id}')"
+        )
+
+
+__all__ = ["ToolDropRule", "LoopingRule"]

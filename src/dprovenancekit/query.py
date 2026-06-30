@@ -98,6 +98,28 @@ class MissingStep(TraceQueryNode):
 
 
 @dataclass(frozen=True)
+class CountStep(TraceQueryNode):
+    """A run matches iff ``step`` occurs at least ``min_count`` times.
+
+    ``min_count`` MUST be >= 1. A 0-or-more predicate would match every run in memory but
+    only step-bearing runs in SQL (the ``GROUP BY`` sees only runs that have the step), so
+    the two backends would diverge. :class:`ContainsStep` is exactly the ``min_count == 1``
+    case.
+    """
+
+    step: str
+    min_count: int
+
+    def __post_init__(self) -> None:
+        if self.min_count < 1:
+            raise ValueError("CountStep.min_count must be >= 1")
+
+    def evaluate(self, run: TraceRun) -> bool:
+        seen = sum(1 for e in run.events if e.payload.type_identifier == self.step)
+        return seen >= self.min_count
+
+
+@dataclass(frozen=True)
 class SequenceNode(TraceQueryNode):
     steps: tuple
 
@@ -174,6 +196,10 @@ class TraceQueryDSL:
     def missing_step(self, step: str) -> "TraceQueryDSL":
         return self._append_to_and(MissingStep(step))
 
+    def requiring_repeated_step(self, step: str, min_count: int) -> "TraceQueryDSL":
+        """Match runs where ``step`` occurs at least ``min_count`` (>= 1) times."""
+        return self._append_to_and(CountStep(step=step, min_count=min_count))
+
     def requiring_sequence(self, sequence: List[str]) -> "TraceQueryDSL":
         return self._append_to_and(SequenceNode(steps=tuple(sequence)))
 
@@ -223,6 +249,9 @@ class TraceQueryPlanner:
             return {IndexConstraint("engineName", ast.name)}
         if isinstance(ast, ContainsStep):
             return {IndexConstraint("decisionType", ast.step)}
+        if isinstance(ast, CountStep):
+            # min_count >= 1 is enforced, so a match always implies the step is present.
+            return {IndexConstraint("decisionType", ast.step)}
         if isinstance(ast, SequenceNode):
             return {IndexConstraint("decisionType", s) for s in ast.steps}
         if isinstance(ast, AfterNode):
@@ -248,7 +277,7 @@ class TraceQueryPlanner:
             return out
         if isinstance(ast, NotNode):
             return TraceQueryPlanner.extract_all_referenced_decision_types(ast.node)
-        if isinstance(ast, (ContainsStep, MissingStep)):
+        if isinstance(ast, (ContainsStep, MissingStep, CountStep)):
             return {ast.step}
         if isinstance(ast, SequenceNode):
             return set(ast.steps)
@@ -316,6 +345,15 @@ class TraceQueryCompiler:
             return CompiledSQLQuery(
                 "SELECT run_id FROM runs EXCEPT "
                 "SELECT DISTINCT run_id FROM trace_events WHERE type = ?",
+                [node.step],
+            )
+
+        if isinstance(node, CountStep):
+            # min_count is a validated int (>= 1), so it is safe to inline; only the
+            # user-supplied ``type`` is bound. GROUP BY run_id sees only step-bearing runs.
+            return CompiledSQLQuery(
+                "SELECT run_id FROM trace_events WHERE type = ? "
+                f"GROUP BY run_id HAVING COUNT(*) >= {int(node.min_count)}",
                 [node.step],
             )
 

@@ -146,14 +146,15 @@ class UnverifiedConflictRule(AnomalyRule):
 anomalies = AnomalyDetector(store).detect_anomalies([UnverifiedConflictRule()])
 ```
 
-Or drop in a ready-made rule from the built-in library instead of writing your own:
+Or drop in ready-made rules from the built-in library instead of writing your own:
 
 ```python
-from dprovenancekit import AnomalyDetector, ToolDropRule
+from dprovenancekit import AnomalyDetector, LoopingRule, ToolDropRule
 
-# Flag any run that never performed a required step (e.g. an agent that stopped
-# calling a tool it should always call).
-anomalies = AnomalyDetector(store).detect_anomalies([ToolDropRule("safety_check")])
+anomalies = AnomalyDetector(store).detect_anomalies([
+    ToolDropRule("safety_check"),              # never ran a required step
+    LoopingRule("web_search", max_repeats=5),  # stuck repeating the same tool call
+])
 ```
 
 ### 7. Gate a pull request on regressions

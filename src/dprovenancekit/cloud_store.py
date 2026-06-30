@@ -388,4 +388,7 @@ def _serialize_node(node) -> dict:
         return {"type": "after", "step": node.step, "followedBy": node.followed_by}
     if isinstance(node, BeforeNode):
         return {"type": "before", "step": node.step, "precededBy": node.preceded_by}
-    return {}
+    raise NotImplementedTraceError(
+        f"query node {type(node).__name__} is not supported over the cloud query wire "
+        "(Trace Spec v1); it is available on the in-memory and SQLite backends"
+    )

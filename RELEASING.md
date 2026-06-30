@@ -1,6 +1,6 @@
 # Releasing `dprovenancekit` to PyPI
 
-The library is the free, BSL-licensed client SDK. The hosted backend (`server/`) is **not**
+The library is the free, Apache 2.0-licensed client SDK. The hosted backend (`server/`) is **not**
 packaged here — only `src/dprovenancekit` is published.
 
 ## One command (manual)

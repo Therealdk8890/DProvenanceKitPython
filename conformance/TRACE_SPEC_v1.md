@@ -249,6 +249,12 @@ i.e. telemetry/diagnostic events are excluded) returns:
 - per-event **alignment states**, each one of: `exactMatch`, `semanticMatch`,
   `reordered`, `ambiguous`, `added`, `removed`.
 
+Degrading a CRITICAL step is the high-severity signal: a critical step that is **removed**
+(`high`, strength `0.95`) or **reordered** (`high`, strength `1.0`, since reordering a
+critical step can invert a dependency) drives the regression level. Reordering of
+non-critical (structural/diagnostic) steps stays `none`. The exact verdicts are pinned by the
+vectors below; an SDK reproduces them rather than re-deriving the thresholds.
+
 The canonical alignment ordering sorts by `(sequence, id)` — where, for a matched/removed
 alignment the key is its **base** event's `(sequence, id)`, and for an added alignment its
 **comparison** event's. The `id` tiebreak only bites when two alignments share a sequence

@@ -354,7 +354,11 @@ class DProvenanceCorpus:
                         ExpectedFinding(AlignmentFinding.reordered_execution("decision", 1, 0)),
                         ExpectedFinding(
                             AlignmentFinding.regression_risk_finding(
-                                RegressionRisk(RegressionLevel.HIGH, 1.0, "")
+                                RegressionRisk(
+                                    RegressionLevel.HIGH,
+                                    1.0,
+                                    "Critical reasoning steps reordered: decision, decision",
+                                )
                             )
                         ),
                     ],
@@ -375,7 +379,9 @@ class DProvenanceCorpus:
                         ExpectedFinding(AlignmentFinding.critical_step_removed("decision")),
                         ExpectedFinding(
                             AlignmentFinding.regression_risk_finding(
-                                RegressionRisk(RegressionLevel.HIGH, 0.95, "")
+                                RegressionRisk(
+                                    RegressionLevel.HIGH, 0.95, "Critical reasoning steps removed: decision"
+                                )
                             )
                         ),
                     ],

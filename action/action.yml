@@ -8,6 +8,14 @@ inputs:
   db-path:
     description: "Path to the SQLite trace database containing both runs."
     required: true
+  golden-db:
+    description: "SQLite db holding the golden run, if separate from db-path (e.g. a restored baseline)."
+    required: false
+    default: ""
+  candidate-db:
+    description: "SQLite db holding the candidate run, if separate from db-path."
+    required: false
+    default: ""
   golden-run-id:
     description: "Run id of the golden (known-good) trace."
     required: true
@@ -89,6 +97,8 @@ runs:
       run: python "${{ github.action_path }}/run_gate.py"
       env:
         DPROV_DB: ${{ inputs.db-path }}
+        DPROV_GOLDEN_DB: ${{ inputs.golden-db || inputs.db-path }}
+        DPROV_CANDIDATE_DB: ${{ inputs.candidate-db || inputs.db-path }}
         DPROV_GOLDEN: ${{ inputs.golden-run-id }}
         DPROV_CANDIDATE: ${{ inputs.candidate-run-id }}
         DPROV_MAX_LEVEL: ${{ inputs.max-level }}

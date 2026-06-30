@@ -41,6 +41,10 @@ in [RELEASING.md](RELEASING.md).
 
 ## 5-minute demo
 
+> Want the whole arc in one runnable script — record → query → gate → detect anomalies →
+> diff → report, then hand the same runs to the CLI and the visualizer? Run
+> [`python examples/end_to_end_demo.py`](examples/end_to_end_demo.py). The steps below build it up piece by piece.
+
 ### 1. Define your events
 
 Any frozen dataclass that subclasses `TraceableEvent`, exposing a stable `type_identifier` and a `priority`:

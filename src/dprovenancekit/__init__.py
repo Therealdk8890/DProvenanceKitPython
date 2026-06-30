@@ -206,6 +206,7 @@ from .testing import (
     exact_equality_evaluator,
     run_fingerprint,
 )
+from .report import render_report_html
 
 # Framework-agnostic instrumentation (decorators / context manager)
 from .instrument import TracedEvent, traced, traced_run, record_event

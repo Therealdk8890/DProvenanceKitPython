@@ -21,7 +21,7 @@ from typing import Dict, List, Optional, Set, Type
 
 from .drop_stats import TraceDropStats, TraceDropTally
 from .edge import TraceEdge, TraceEdgeType
-from .event import TraceableEvent, TraceEvent, TraceEventRow
+from .event import RunRow, TraceableEvent, TraceEvent, TraceEventRow
 from .priority import TracePriority
 from .query import TraceQueryCompiler, TraceQueryDSL, TraceRun
 from .store import TraceStore
@@ -456,6 +456,31 @@ class SQLiteTraceStore(TraceStore):
             if run is not None:
                 runs.append(run)
         return runs
+
+    def list_run_metadata(self) -> List[RunRow]:
+        """Run metadata (no events) from the ``runs`` table, newest first by start time.
+
+        Cheap and event-free — for picking a baseline run (e.g. the latest known-good run for
+        a context) without materializing every run. Flushes pending writes first, like
+        :meth:`query_runs`.
+        """
+        self.flush()
+        rows = self._db.query(
+            "SELECT run_id, context_id, start_time, end_time, event_count, fingerprint "
+            "FROM runs ORDER BY start_time DESC, run_id DESC"
+        )
+        return [
+            RunRow(
+                run_id=r[0],
+                context_id=r[1],
+                start_time=int(r[2] or 0),
+                end_time=int(r[3] or 0),
+                event_count=int(r[4] or 0),
+                fingerprint=r[5] or "",
+            )
+            for r in rows
+            if r[0] is not None
+        ]
 
     def get_run(self, id: uuid.UUID) -> Optional[TraceRun]:
         """Fetch a single run by id, indexed on ``run_id`` (no full scan). Flushes pending

@@ -124,3 +124,33 @@ def test_gate_unopenable_db_exits_2(tmp_path, trace_db, capsys):
     )
     assert code == 2
     assert "could not open database" in capsys.readouterr().err
+
+
+def test_gate_across_separate_databases(tmp_path):
+    # Golden in a restored baseline db, candidate in this PR's db — the baseline-selection flow.
+    golden_db = str(tmp_path / "baseline.sqlite")
+    candidate_db = str(tmp_path / "candidate.sqlite")
+
+    gstore = SQLiteTraceStore(AnyTraceableEvent, golden_db, start_writer=False)
+    golden = _record(gstore, "golden", GOLDEN_STEPS)
+    gstore.close()
+
+    cstore = SQLiteTraceStore(AnyTraceableEvent, candidate_db, start_writer=False)
+    matching = _record(cstore, "candidate", GOLDEN_STEPS)
+    regressed = _record(cstore, "candidate-regressed", [GOLDEN_STEPS[0], GOLDEN_STEPS[2]])
+    cstore.close()
+
+    ok = main(["gate", "--golden-db", golden_db, "--golden", str(golden),
+               "--candidate-db", candidate_db, "--candidate", str(matching)])
+    assert ok == 0
+
+    fail = main(["gate", "--golden-db", golden_db, "--golden", str(golden),
+                 "--candidate-db", candidate_db, "--candidate", str(regressed)])
+    assert fail == 1
+
+
+def test_gate_requires_a_db_source(trace_db, capsys):
+    _, ids = trace_db
+    code = main(["gate", "--golden", str(ids["golden"]), "--candidate", str(ids["pass"])])
+    assert code == 2
+    assert "provide --db" in capsys.readouterr().err

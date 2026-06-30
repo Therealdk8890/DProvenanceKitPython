@@ -122,6 +122,21 @@ def test_run_gate_publishes_regression_without_failing_wrapper(trace_db, tmp_pat
     assert parsed["regression-level"] == "high"
 
 
+def test_build_gate_argv_passes_separate_dbs():
+    # When golden/candidate dbs are unset, both default to DPROV_DB.
+    argv = run_gate.build_gate_argv({"DPROV_DB": "b.sqlite", "DPROV_GOLDEN": "g", "DPROV_CANDIDATE": "c"})
+    assert argv[argv.index("--golden-db") + 1] == "b.sqlite"
+    assert argv[argv.index("--candidate-db") + 1] == "b.sqlite"
+
+    # Separate dbs override the shared default.
+    argv2 = run_gate.build_gate_argv(
+        {"DPROV_DB": "b.sqlite", "DPROV_GOLDEN_DB": "base.sqlite", "DPROV_CANDIDATE_DB": "pr.sqlite",
+         "DPROV_GOLDEN": "g", "DPROV_CANDIDATE": "c"}
+    )
+    assert argv2[argv2.index("--golden-db") + 1] == "base.sqlite"
+    assert argv2[argv2.index("--candidate-db") + 1] == "pr.sqlite"
+
+
 def test_run_gate_reports_usage_error_on_missing_run(trace_db, tmp_path, capsys):
     db, ids = trace_db
     rc = run_gate.main(

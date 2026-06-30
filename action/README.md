@@ -40,6 +40,8 @@ jobs:
 | Input | Default | Description |
 | --- | --- | --- |
 | `db-path` | — (required) | SQLite trace database holding both runs. |
+| `golden-db` | `db-path` | SQLite db holding the golden run, if separate (e.g. a restored baseline). |
+| `candidate-db` | `db-path` | SQLite db holding the candidate run, if separate. |
 | `golden-run-id` | — (required) | Run id of the golden (known-good) trace. |
 | `candidate-run-id` | — (required) | Run id of the candidate trace to gate. |
 | `max-level` | `none` | Worst severity that still passes: `none` \| `low` \| `medium` \| `high`. |
@@ -90,11 +92,33 @@ candidate run. Findings surface as inline `::warning::` annotations and a job su
 
 The same rules run anywhere without the action via `dprovenancekit anomalies --db traces.sqlite --rules rules.json [--run <id>] [--json]`.
 
+## Baseline selection
+
+The golden run usually comes from `main` and the candidate from the PR. Restore a baseline
+database (built on `main`, cached or committed), record the PR's run into a separate database,
+and resolve the run ids with `dprovenancekit runs` — no hardcoded ids:
+
+```yaml
+      - name: Resolve run ids
+        run: |
+          echo "GOLDEN=$(dprovenancekit runs --db baseline.sqlite --context my-agent --latest --format id)" >> "$GITHUB_ENV"
+          echo "CANDIDATE=$(dprovenancekit runs --db candidate.sqlite --context my-agent --latest --format id)" >> "$GITHUB_ENV"
+
+      - uses: Therealdk8890/DProvenanceKitPython/action@v1
+        with:
+          golden-db: baseline.sqlite
+          candidate-db: candidate.sqlite
+          db-path: candidate.sqlite      # still required; used as the shared default
+          golden-run-id: ${{ env.GOLDEN }}
+          candidate-run-id: ${{ env.CANDIDATE }}
+```
+
+`dprovenancekit runs --db <db> [--context <id>] [--latest] [--format id | --json]` lists or
+selects runs; `--latest` exits non-zero when nothing matches, so a missing baseline fails the
+step loudly instead of silently passing an empty id.
+
 ## Notes
 
-- **Baseline selection** (how the golden run is produced/located for a PR) is left to your
-  workflow today — provide the run ids and a database that contains both. Convenience for
-  selecting the golden run from `main` is a planned follow-up.
 - **Fork PRs:** `GITHUB_TOKEN` is read-only on pull requests from forks, so the comment step
   is skipped with a notice rather than failing the job. The gate verdict (and job
   pass/fail) is unaffected.

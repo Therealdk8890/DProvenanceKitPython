@@ -359,7 +359,7 @@ It self-asserts its verdicts, so it doubles as an executable test of the headlin
 python -m pytest
 ```
 
-168 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 28 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain integration tests, 16 OpenAI Agents SDK integration tests, 16 instrumentation-layer tests, 13 regression-gate tests, and the regression-testing example run as a self-asserting test. (The real-framework tests run only when `langchain-core` / `openai-agents` are installed, otherwise skipped.)
+246 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 28 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain integration tests, 16 OpenAI Agents SDK integration tests, 16 instrumentation-layer tests, 13 regression-gate tests, ecosystem integration tests (FastAPI, Jupyter, MCP, CrewAI), visualizer tests, and the regression-testing example run as a self-asserting test. (The real-framework tests run only when the integrations are installed, otherwise skipped.)
 
 ---
 

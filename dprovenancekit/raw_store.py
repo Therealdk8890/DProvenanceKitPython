@@ -40,6 +40,15 @@ class RawTraceStore:
     def __init__(self, path: str):
         self._db = SQLiteConnection(path)
 
+    def close(self) -> None:
+        self._db.close()
+
+    def __enter__(self) -> "RawTraceStore":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
     def fetch_all_runs(self) -> List[RawTraceRun]:
         rows = self._db.query(
             "SELECT run_id, context_id, start_time, end_time, event_count "

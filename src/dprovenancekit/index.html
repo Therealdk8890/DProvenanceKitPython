@@ -27,6 +27,10 @@
         .loading { text-align: center; padding: 40px; color: #6b7280; font-style: italic; }
         
         .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 500; background: #e5e7eb; color: #374151; margin-left: 8px; }
+        
+        .diff-added { background: #f0fdf4; border-color: #bbf7d0; }
+        .diff-removed { background: #fef2f2; border-color: #fecaca; }
+        .diff-modified { background: #fefce8; border-color: #fef08a; }
     </style>
 </head>
 <body>
@@ -44,10 +48,13 @@
     </div>
 
     <script>
+        let allRuns = [];
+        
         async function fetchRuns() {
             try {
                 const response = await fetch('/api/runs');
                 const runs = await response.json();
+                allRuns = runs;
                 
                 const listEl = document.getElementById('run-list');
                 document.getElementById('runs-loading').style.display = 'none';
@@ -96,8 +103,23 @@
                     return;
                 }
                 
+                let compareOptions = `<option value="">None (Single Trace View)</option>`;
+                allRuns.forEach(r => {
+                    if (r.run_id !== run.run_id) {
+                        compareOptions += `<option value="${r.run_id}">${r.context_id || r.run_id} (${new Date(r.start_time * 1000).toLocaleString()})</option>`;
+                    }
+                });
+                
                 let html = `
-                    <h2>Trace: ${run.context_id || 'Unknown'}</h2>
+                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                        <h2>Trace: ${run.context_id || 'Unknown'}</h2>
+                        <div>
+                            <label style="font-size: 14px; font-weight: 500; margin-right: 8px;">Compare against baseline:</label>
+                            <select id="compare-select" style="padding: 6px; border-radius: 4px; border: 1px solid #d1d5db;" onchange="loadDiff('${run.run_id}', this.value)">
+                                ${compareOptions}
+                            </select>
+                        </div>
+                    </div>
                     <p class="run-meta" style="margin-bottom: 20px;">
                         Run ID: ${run.run_id}<br>
                         Fingerprint: ${run.fingerprint}
@@ -129,6 +151,89 @@
             } catch (error) {
                 console.error("Error fetching run details:", error);
                 viewEl.innerHTML = '<div class="loading" style="color: #ef4444;">Error loading trace details.</div>';
+            }
+        }
+        
+        async function loadDiff(candidateId, goldenId) {
+            if (!goldenId) {
+                loadRun(candidateId);
+                return;
+            }
+            
+            const viewEl = document.getElementById('trace-view');
+            viewEl.innerHTML = '<div class="loading">Computing structural diff...</div>';
+            
+            try {
+                const response = await fetch(`/api/diff?golden=${goldenId}&candidate=${candidateId}`);
+                const result = await response.json();
+                
+                if (result.error) {
+                    viewEl.innerHTML = `<div class="loading" style="color: #ef4444;">${result.error}</div>`;
+                    return;
+                }
+                
+                let goldenRun = allRuns.find(r => r.run_id === goldenId) || {context_id: goldenId};
+                let candidateRun = allRuns.find(r => r.run_id === candidateId) || {context_id: candidateId};
+                
+                let compareOptions = `<option value="">None (Single Trace View)</option>`;
+                allRuns.forEach(r => {
+                    if (r.run_id !== candidateId) {
+                        let selected = r.run_id === goldenId ? 'selected' : '';
+                        compareOptions += `<option value="${r.run_id}" ${selected}>${r.context_id || r.run_id} (${new Date(r.start_time * 1000).toLocaleString()})</option>`;
+                    }
+                });
+                
+                let html = `
+                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                        <h2>Unified Diff View</h2>
+                        <div>
+                            <label style="font-size: 14px; font-weight: 500; margin-right: 8px;">Baseline (Golden):</label>
+                            <select id="compare-select" style="padding: 6px; border-radius: 4px; border: 1px solid #d1d5db;" onchange="loadDiff('${candidateId}', this.value)">
+                                ${compareOptions}
+                            </select>
+                        </div>
+                    </div>
+                    <p class="run-meta" style="margin-bottom: 20px;">
+                        <strong>Candidate:</strong> ${candidateRun.context_id}<br>
+                        <strong>Golden:</strong> ${goldenRun.context_id}
+                    </p>
+                    <div class="event-list">
+                `;
+                
+                result.alignments.forEach(align => {
+                    let cardClass = "event-card";
+                    let badgeLabel = align.kind;
+                    let badgeColor = "#e5e7eb";
+                    
+                    if (align.kind === "added") { cardClass += " diff-added"; badgeColor = "#dcfce7"; }
+                    else if (align.kind === "removed") { cardClass += " diff-removed"; badgeColor = "#fee2e2"; }
+                    else if (align.kind === "exactMatch") { badgeColor = "#f3f4f6"; }
+                    else { cardClass += " diff-modified"; badgeColor = "#fef9c3"; }
+                    
+                    let eventData = align.candidate || align.base;
+                    if (!eventData) return;
+                    
+                    const payloadStr = JSON.stringify(eventData.data, null, 2);
+                    
+                    html += `
+                        <div class="${cardClass}">
+                            <div class="event-header">
+                                <div>
+                                    <span class="event-type">#${eventData.sequence} ${eventData.type_identifier}</span>
+                                    <span class="badge" style="background: ${badgeColor}; border: 1px solid rgba(0,0,0,0.1);">${badgeLabel}</span>
+                                </div>
+                            </div>
+                            <div class="event-payload">${payloadStr}</div>
+                        </div>
+                    `;
+                });
+                
+                html += `</div>`;
+                viewEl.innerHTML = html;
+                
+            } catch (error) {
+                console.error("Error fetching diff:", error);
+                viewEl.innerHTML = '<div class="loading" style="color: #ef4444;">Error loading diff details.</div>';
             }
         }
 

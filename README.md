@@ -1,5 +1,7 @@
 # DProvenanceKit (Python)
 
+[![CI](https://github.com/Therealdk8890/DProvenanceKitPython/actions/workflows/ci.yml/badge.svg)](https://github.com/Therealdk8890/DProvenanceKitPython/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/dprovenancekit)](https://pypi.org/project/dprovenancekit/)
 **Reasoning observability and regression testing for AI systems — a Python port of the Swift [DProvenanceKit](https://github.com/Therealdk8890/DProvenanceKit).**
 
 When an agent's reasoning drifts between runs, DProvenanceKit turns each execution into a queryable, diffable trace so you can see *what changed and why* — not just *what happened*.

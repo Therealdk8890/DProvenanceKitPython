@@ -34,6 +34,8 @@ def create_handler(db_path: str):
                 self.serve_file("index.html", "text/html")
             elif path == "/api/runs":
                 self.serve_api_runs()
+            elif path.startswith("/api/diff"):
+                self.serve_api_diff(parsed.query)
             elif path.startswith("/api/runs/"):
                 run_id_str = path.split("/")[-1]
                 self.serve_api_run(run_id_str)
@@ -122,6 +124,76 @@ def create_handler(db_path: str):
             except ValueError:
                 self.send_error(400, "Invalid run ID format")
             except Exception as e:
+                self.send_error(500, f"Internal Server Error: {e}")
+
+        def serve_api_diff(self, query_string):
+            try:
+                from urllib.parse import parse_qs
+                from .testing import exact_equality_evaluator
+                from .alignment_engine import TraceAlignmentEngine
+                from .alignment_models import AlignmentConfiguration, AlignmentProfile
+                
+                query_params = parse_qs(query_string)
+                golden_id_str = query_params.get("golden", [""])[0]
+                candidate_id_str = query_params.get("candidate", [""])[0]
+                
+                if not golden_id_str or not candidate_id_str:
+                    self.send_error(400, "Missing golden or candidate run IDs")
+                    return
+                
+                golden_id = uuid.UUID(golden_id_str)
+                candidate_id = uuid.UUID(candidate_id_str)
+                
+                store = SQLiteTraceStore(AnyTraceableEvent, db_path, start_writer=False)
+                golden_run = store.get_run(golden_id)
+                candidate_run = store.get_run(candidate_id)
+                store.close()
+                
+                if not golden_run or not candidate_run:
+                    self.send_error(404, "Run not found")
+                    return
+                
+                engine = TraceAlignmentEngine(
+                    AlignmentConfiguration(
+                        profile=AlignmentProfile.strict_audit_v1,
+                        equivalence_evaluator=exact_equality_evaluator()
+                    )
+                )
+                
+                result = engine.align(base=golden_run, comparison=candidate_run)
+                
+                alignments_data = []
+                for alignment in result.alignments:
+                    base_payload = None
+                    candidate_payload = None
+                    if alignment.base_event:
+                        base_payload = {
+                            "sequence": alignment.base_event.sequence,
+                            "type_identifier": alignment.base_event.payload.type_identifier,
+                            "data": _json_serializable(alignment.base_event.payload)
+                        }
+                    if alignment.comparison_event:
+                        candidate_payload = {
+                            "sequence": alignment.comparison_event.sequence,
+                            "type_identifier": alignment.comparison_event.payload.type_identifier,
+                            "data": _json_serializable(alignment.comparison_event.payload)
+                        }
+                        
+                    alignments_data.append({
+                        "kind": alignment.state.kind.value,
+                        "base": base_payload,
+                        "candidate": candidate_payload
+                    })
+                    
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"alignments": alignments_data}, default=str).encode("utf-8"))
+            except ValueError:
+                self.send_error(400, "Invalid run ID format")
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
                 self.send_error(500, f"Internal Server Error: {e}")
 
     return UIHandler

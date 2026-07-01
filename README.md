@@ -232,7 +232,7 @@ Both corpora score **Precision 1.000 / Recall 1.000 / F1 1.000** — 8 standard 
 | Server and sync client | `server`, `ui_server`, `sync_client` |
 | Pure view models for a trace viewer | `viewmodel` |
 | Framework-agnostic instrumentation | `instrument` |
-| Framework adapters | `integrations.langchain`, `integrations.fastapi`, `integrations.jupyter`, `integrations.llama_index`, `integrations.mcp` |
+| Framework adapters | `integrations.langchain`, `integrations.fastapi`, `integrations.jupyter`, `integrations.llama_index`, `integrations.mcp`, `integrations.google_genai`, `integrations.crewai` |
 | Framework adapters (OpenAI Agents SDK) | `integrations.openai_agents` |
 | Regression-gate test helper | `testing` |
 | Shareable HTML regression report | `report` |
@@ -299,6 +299,47 @@ register(store)   # registers a global tracing processor
 ```
 
 [`DProvenanceTracingProcessor`](src/dprovenancekit/integrations/openai_agents.py) implements the SDK's `TracingProcessor`: each agent run becomes a trace-run (`context_id` = the trace name), and every span start/end becomes a typed event — `agent.start`, `generation.end`, `function.start`, `guardrail.error`, … — in execution order. The span's `span_id`/`parent_id` become the **span tree**, the active agent/tool/model becomes the **engine**, errors and triggered guardrails are recorded at `CRITICAL`, and lifecycle **provenance edges** are emitted (same `DERIVED_FROM`/`INFORMED` model). One registered processor captures every run; the same `fingerprint`/diff/align tooling then applies.
+
+### LlamaIndex
+
+```bash
+pip install dprovenancekit[llama-index]
+```
+
+```python
+from llama_index.core import Settings
+from dprovenancekit.integrations.llama_index import DProvenanceLlamaIndexCallbackHandler
+
+# Attach the callback handler globally
+tracer = DProvenanceLlamaIndexCallbackHandler(store)
+Settings.callback_manager.add_handler(tracer)
+
+# Execute queries normally; they will be recorded to the trace store
+response = index.as_query_engine().query("What did the author do growing up?")
+```
+
+### CrewAI
+
+```bash
+pip install dprovenancekit[crewai]
+```
+
+```python
+from crewai import Crew
+from dprovenancekit.integrations.crewai import CrewAITracer
+
+# Attach the tracer to capture CrewAI agent events
+tracer = CrewAITracer(store)
+
+crew = Crew(
+    agents=[researcher, writer],
+    tasks=[research_task, write_task],
+    step_callback=tracer.step_callback,
+    task_callback=tracer.task_callback
+)
+
+result = crew.kickoff()
+```
 
 ---
 

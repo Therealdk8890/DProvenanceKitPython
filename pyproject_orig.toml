@@ -35,12 +35,10 @@ dev = ["pytest>=7.0", "fastapi", "httpx", "IPython", "pytest-asyncio"]
 # needed to wire DProvenanceKit into the corresponding framework.
 langchain = ["langchain-core>=0.2"]
 openai-agents = ["openai-agents>=0.1"]
-llama-index = ["llama-index-core"]
-crewai = ["crewai"]
-google-genai = ["google-genai"]
 fastapi = ["fastapi", "starlette"]
 jupyter = ["ipython"]
 mcp = ["mcp"]
+crewai = ["langchain-core"]
 
 [project.scripts]
 dprovenancekit = "dprovenancekit.cli:main"

@@ -201,9 +201,6 @@ from .visualizer import render_trace_html
 # Framework-agnostic instrumentation (decorators / context manager)
 from .instrument import TracedEvent, traced, traced_run, record_event
 
-# High-level Facade API
-from .facade import trace
-
 __version__ = "0.2.0"
 
 
@@ -382,5 +379,4 @@ __all__ = [
     "traced",
     "traced_run",
     "record_event",
-    "trace",
 ]

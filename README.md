@@ -339,6 +339,18 @@ with traced_run(store, context_id="ticket-42"):
 
 ---
 
+## Example: regression testing
+
+[`examples/regression_testing.py`](examples/regression_testing.py) is the end-to-end story in ~150 readable lines: record a **golden** run of a fact-checking agent, then catch a later run that skips its verification step — via both the fast **fingerprint** check and the detailed **alignment** verdict (which flags the dropped `claimVerified` step as a HIGH regression).
+
+```bash
+python examples/regression_testing.py
+```
+
+It self-asserts its verdicts, so it doubles as an executable test of the headline use case.
+
+---
+
 ## Tests
 
 ```bash

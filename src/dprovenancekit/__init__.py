@@ -71,6 +71,7 @@ from .circuit_breaker import CircuitBreaker, CircuitState
 # Live querying + anomalies
 from .live_engine import LiveTraceQueryEngine, TraceQuerySubscription, QueryState
 from .anomaly import Anomaly, AnomalyRule, AnomalyDetector, LiveAnomalySubscription
+from .rules import ToolDropRule, LoopingRule, build_rule, build_rules
 
 # Diff + replay
 from .diff import TraceDiffEngine, TraceDiffResult, Change, ChangeKind
@@ -196,4 +197,18 @@ from .perturbation import EvaluationPerturbationLayer, PerturbationMode
 # View models (pure logic)
 from .viewmodel import SpanViewModel, FlattenedSpanNode, flatten_span_tree
 
-__version__ = "0.1.0"
+# Regression-gate test helper
+from .testing import (
+    RegressionGate,
+    RegressionReport,
+    RegressionError,
+    assert_no_regression,
+    exact_equality_evaluator,
+    run_fingerprint,
+)
+from .report import render_report_html
+
+# Framework-agnostic instrumentation (decorators / context manager)
+from .instrument import TracedEvent, traced, traced_run, record_event
+
+__version__ = "0.2.0"

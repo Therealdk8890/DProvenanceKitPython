@@ -21,7 +21,7 @@ from typing import Dict, List, Optional, Set, Type
 
 from .drop_stats import TraceDropStats, TraceDropTally
 from .edge import TraceEdge, TraceEdgeType
-from .event import TraceableEvent, TraceEvent, TraceEventRow
+from .event import RunRow, TraceableEvent, TraceEvent, TraceEventRow
 from .priority import TracePriority
 from .query import TraceQueryCompiler, TraceQueryDSL, TraceRun
 from .store import TraceStore
@@ -427,6 +427,15 @@ class SQLiteTraceStore(TraceStore):
     def flush(self) -> None:
         self._writer.flush()
 
+    def close(self) -> None:
+        """Stop the background writer (if running) and close the database connection.
+
+        Safe to call when ``start_writer=False`` (no thread was started) — it still flushes
+        any buffered events and releases the SQLite file handle.
+        """
+        self._writer.shutdown()
+        self._db.close()
+
     @property
     def drop_stats(self) -> TraceDropStats:
         return self._buffer.drop_stats + self._drop_tally.snapshot
@@ -447,6 +456,37 @@ class SQLiteTraceStore(TraceStore):
             if run is not None:
                 runs.append(run)
         return runs
+
+    def list_run_metadata(self) -> List[RunRow]:
+        """Run metadata (no events) from the ``runs`` table, newest first by start time.
+
+        Cheap and event-free — for picking a baseline run (e.g. the latest known-good run for
+        a context) without materializing every run. Flushes pending writes first, like
+        :meth:`query_runs`.
+        """
+        self.flush()
+        rows = self._db.query(
+            "SELECT run_id, context_id, start_time, end_time, event_count, fingerprint "
+            "FROM runs ORDER BY start_time DESC, run_id DESC"
+        )
+        return [
+            RunRow(
+                run_id=r[0],
+                context_id=r[1],
+                start_time=int(r[2] or 0),
+                end_time=int(r[3] or 0),
+                event_count=int(r[4] or 0),
+                fingerprint=r[5] or "",
+            )
+            for r in rows
+            if r[0] is not None
+        ]
+
+    def get_run(self, id: uuid.UUID) -> Optional[TraceRun]:
+        """Fetch a single run by id, indexed on ``run_id`` (no full scan). Flushes pending
+        events first, mirroring :meth:`query_runs`, and parallels ``InMemoryTraceStore``."""
+        self.flush()
+        return self._fetch_run(id)
 
     def _fetch_run(self, id: uuid.UUID) -> Optional[TraceRun]:
         ctx_rows = self._db.query("SELECT context_id FROM runs WHERE run_id = ?", (str(id),))

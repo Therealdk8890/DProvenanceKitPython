@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Callable, Dict, List, Optional
 
@@ -598,6 +598,20 @@ EngineFactory = Callable[[Callable], TraceAlignmentEngine]
 ContextualEngineFactory = Callable[[EnvironmentContext, Callable], TraceAlignmentEngine]
 
 
+def _match_key(finding: AlignmentFinding) -> AlignmentFinding:
+    """Identity of a finding for ground-truth matching.
+
+    A finding's ``reasoning`` is human-facing explanatory prose, not part of its semantic
+    identity: ``RegressionRisk(HIGH, 0.95, "Critical step removed: decision")`` is the *same*
+    finding the ground truth means by ``RegressionRisk(HIGH, 0.95, "")``. Comparing the prose
+    would otherwise turn a correct detection into a simultaneous false positive + false
+    negative. Level and strength remain significant; only the free-text reasoning is erased.
+    """
+    if finding.kind == AlignmentFindingKind.REGRESSION_RISK and finding.regression_risk is not None:
+        return replace(finding, regression_risk=replace(finding.regression_risk, reasoning=""))
+    return finding
+
+
 class BenchmarkRunner:
     def run_repeated_evaluation(
         self,
@@ -642,14 +656,19 @@ class BenchmarkRunner:
             timeline = [self._timeline_entry(ev) for ev in collected_events]
 
             # Multiset matching: consume actual findings as expectations are matched.
+            # Matching is on semantic identity (_match_key), not human-facing reasoning prose.
             true_positives: List[AlignmentFinding] = []
             false_positives: List[AlignmentFinding] = []
             false_negatives: List[ExpectedFinding] = []
             available_actual = list(actual_findings)
 
             for expected in b_case.expected_findings:
-                if expected.finding in available_actual:
-                    available_actual.remove(expected.finding)
+                expected_key = _match_key(expected.finding)
+                match = next(
+                    (a for a in available_actual if _match_key(a) == expected_key), None
+                )
+                if match is not None:
+                    available_actual.remove(match)
                     true_positives.append(expected.finding)
                     category_tp[expected.finding.category_name] = category_tp.get(expected.finding.category_name, 0) + 1
                     global_tp += 1

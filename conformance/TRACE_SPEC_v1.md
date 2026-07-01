@@ -40,18 +40,22 @@ encoded as **UTF-8**. Decoding MUST reconstruct an equal payload (round-trip).
 
 Vectors: [`vectors/payload_encoding.json`](vectors/payload_encoding.json).
 
-> **Conformance Note — insignificant whitespace.** The v1 reference (Python
-> `json.dumps(…, sort_keys=True)`) emits `", "` and `": "` separators, e.g.
-> `{"a": 1, "b": 2}`. Swift's `JSONEncoder.sortedKeys` emits compact separators,
-> `{"a":1,"b":2}`. **These are byte-different but semantically identical.** v1 does
-> **not** require byte-identical payload encoding across SDKs, because:
+> **Conformance Note — sorted keys, insignificant whitespace.** Sorting is **required**: a
+> default encoder that preserves insertion order is *not* conformant. The Python reference
+> (`json.dumps(…, sort_keys=True)`) emits `", "` and `": "` separators, e.g.
+> `{"a": 1, "b": 2}`; the Swift store sets `JSONEncoder.outputFormatting = [.sortedKeys]`,
+> emitting `{"a":1,"b":2}` — same keys in the same order, different separators. **These are
+> byte-different but semantically identical.** v1 does **not** require byte-identical payload
+> encoding across SDKs, because:
 >   1. the run fingerprint (§5) does not depend on payload bytes, and
 >   2. equivalence (§10) compares decoded payloads, not bytes.
 >
 > An SDK is conformant if it (a) sorts keys, (b) is UTF-8, and (c) round-trips. The
 > `payload_encoding.json` vector pins the *reference* byte form; an SDK with compact
-> separators reproduces the same logical object and is conformant. If a future v2 needs
-> a single byte-exact form (e.g. for content-addressing payloads), it MUST mandate
+> separators reproduces the same logical object and is conformant. (The Swift store
+> originally used a default `JSONEncoder()`, which does **not** sort; `.sortedKeys` was
+> added to satisfy this section — surfaced by the Swift conformance run.) A future v2
+> wanting a single byte-exact form (e.g. for content-addressing payloads) MUST mandate
 > compact separators and drop this note.
 
 ---
@@ -245,14 +249,29 @@ i.e. telemetry/diagnostic events are excluded) returns:
 - per-event **alignment states**, each one of: `exactMatch`, `semanticMatch`,
   `reordered`, `ambiguous`, `added`, `removed`.
 
-The canonical alignment ordering sorts by `(sequence, id)`.
+Degrading a CRITICAL step is the high-severity signal: a critical step that is **removed**
+(`high`, strength `0.95`) or **reordered** (`high`, strength `1.0`, since reordering a
+critical step can invert a dependency) drives the regression level. Reordering of
+non-critical (structural/diagnostic) steps stays `none`. The exact verdicts are pinned by the
+vectors below; an SDK reproduces them rather than re-deriving the thresholds.
+
+The canonical alignment ordering sorts by `(sequence, id)` — where, for a matched/removed
+alignment the key is its **base** event's `(sequence, id)`, and for an added alignment its
+**comparison** event's. The `id` tiebreak only bites when two alignments share a sequence
+(e.g. a matched step and an added step both at sequence *n*); there the lexicographic order
+of the event UUIDs decides. Because UUIDs are otherwise free, **the alignment vectors pin an
+explicit `id` on every base/comparison event** so the ordering is reproducible by any SDK: a
+conforming harness MUST build its runs with the ids carried in the vector (not freshly
+generated ones), or the tied cases will order differently. (Surfaced by the Swift conformance
+run, which initially mis-ordered an added step until it adopted the vector's ids.)
 
 **Canonical conformance evaluator** (`ExactEquality_v1`): `similarity(a, b) = 1.0` iff
 the decoded payloads are fully equal, else `0.0`. This makes alignment vectors
 language-neutral (no fuzzy scoring to reproduce).
 
 Vectors: [`vectors/alignment_verdict.json`](vectors/alignment_verdict.json) — base +
-comparison runs with the resulting level and ordered state kinds.
+comparison runs (each event carrying an explicit `id`) with the resulting level and ordered
+state kinds.
 
 ---
 

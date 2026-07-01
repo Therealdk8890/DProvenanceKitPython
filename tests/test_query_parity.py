@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from dprovenancekit import DProvenanceKit, InMemoryTraceStore, SQLiteTraceStore, TraceQueryDSL
 from conftest import TestEvent
 
@@ -73,9 +75,42 @@ def test_operator_parity_matrix(tmp_path):
         "sequence": TraceQueryDSL().requiring_sequence(["processStarted", "errorDetected", "processFinished"]),
         "sequence-miss": TraceQueryDSL().requiring_sequence(["processFinished", "processStarted"]),
         "and": TraceQueryDSL().requiring_step("errorDetected").missing_step("rollback"),
+        # CountStep: stepCompleted occurs twice in the scenario.
+        "count-exact": TraceQueryDSL().requiring_repeated_step("stepCompleted", 2),
+        "count-over": TraceQueryDSL().requiring_repeated_step("stepCompleted", 3),
+        "count-one": TraceQueryDSL().requiring_repeated_step("errorDetected", 1),
+        "count-and": TraceQueryDSL().requiring_repeated_step("stepCompleted", 2).missing_step("rollback"),
     }
 
     for name, query in queries.items():
         db_path = str(tmp_path / f"{name}.sqlite")
         mem, sql = _matches(scenario, query, db_path)
         assert mem == sql, f"Backend divergence on query: {name}"
+
+
+def test_count_step_matches_at_threshold_and_excludes_below(temp_db_path):
+    def scenario(record):
+        record(TestEvent.step_completed(1))
+        record(TestEvent.step_completed(2))
+
+    hit = _matches(scenario, TraceQueryDSL().requiring_repeated_step("stepCompleted", 2), temp_db_path)
+    assert hit[0] == hit[1] == ["case"]
+
+    miss = _matches(scenario, TraceQueryDSL().requiring_repeated_step("stepCompleted", 3), temp_db_path)
+    assert miss[0] == miss[1] == []
+
+
+def test_count_step_requires_positive_min_count():
+    with pytest.raises(ValueError):
+        TraceQueryDSL().requiring_repeated_step("stepCompleted", 0)
+
+
+def test_count_step_is_rejected_by_the_cloud_wire_serializer():
+    from dprovenancekit import NotImplementedTraceError
+    from dprovenancekit.cloud_store import _serialize_node
+    from dprovenancekit.query import CountStep
+
+    # CountStep is a local-backend capability; the cloud wire (Trace Spec v1) must fail loudly
+    # rather than silently serialize it to an empty node.
+    with pytest.raises(NotImplementedTraceError):
+        _serialize_node(CountStep(step="stepCompleted", min_count=2))

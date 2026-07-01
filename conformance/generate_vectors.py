@@ -25,6 +25,7 @@ from conformance_event import (
     EXACT_EQUALITY_EVALUATOR_ID,
     ConformanceEvent,
     build_run,
+    deterministic_uuid,
     dsl_from_wire_dsl,
     exact_equality_evaluator,
 )
@@ -311,6 +312,18 @@ _PROFILES = {
 }
 
 
+def _pin_event_ids(spec: dict) -> None:
+    """Pin deterministic event ids into an alignment sample so the vector is
+    self-contained. The canonical alignment ordering tiebreaks on ``(sequence, id)``
+    (TRACE_SPEC_v1 §10.2), so a conforming SDK can only reproduce the ordering if it
+    builds its runs with these exact ids — hence they travel in the vector, not as an
+    implicit generation-time detail.
+    """
+    for run_index, key in ((0, "base"), (1, "comparison")):
+        for i, ev in enumerate(spec[key]):
+            ev["id"] = str(deterministic_uuid((run_index + 1) * 1000 + i))
+
+
 def _verdict_for(case: dict) -> dict:
     config = AlignmentConfiguration(
         profile=_PROFILES[case["profile"]],
@@ -382,9 +395,23 @@ def gen_alignment_verdict() -> dict:
                 {"type": "finalDecisionMade", "attributes": {"approved": True}},
             ],
         },
+        {
+            "description": "Two critical steps run in the opposite order -> HIGH regression "
+            "(reordering a critical step can invert a dependency).",
+            "profile": "developer_debug_v1",
+            "base": [
+                {"type": "documentEvaluated", "attributes": {"doc": "A"}},
+                {"type": "finalDecisionMade", "attributes": {"approved": True}},
+            ],
+            "comparison": [
+                {"type": "finalDecisionMade", "attributes": {"approved": True}},
+                {"type": "documentEvaluated", "attributes": {"doc": "A"}},
+            ],
+        },
     ]
     cases = []
     for spec in samples:
+        _pin_event_ids(spec)
         cases.append({**spec, "expected": _verdict_for(spec)})
     return {
         "spec_version": SPEC_VERSION,

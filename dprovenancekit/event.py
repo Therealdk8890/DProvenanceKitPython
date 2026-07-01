@@ -149,18 +149,29 @@ class AnyTraceableEvent(TraceableEvent):
 
     @classmethod
     def decode(cls, data: bytes) -> "TraceableEvent":
-        # AnyTraceableEvent should decode without knowing the schema.
-        # But wait, we don't have the type and priority here?
-        # Actually, sqlite_store.py should not be using decode() if it's AnyTraceableEvent,
-        # but it does. So we just parse it as raw JSON and put dummy values if needed,
-        # or we could extract type and priority from the JSON if they exist.
+        """Decode a stored payload written by any event type.
+
+        Two shapes are recognized: this class's own ``to_dict`` envelope (an exact
+        roundtrip, preserving identity and priority), and payloads written by other
+        event types, where best-effort ``type`` / ``priority`` keys let CLI tools read
+        databases they did not write.
+        """
         json_str = data.decode("utf-8")
         try:
             parsed = json.loads(json_str)
+            # Exact key-set match: a genuine envelope has precisely these three keys,
+            # while a foreign payload can carry same-named *user attributes* alongside
+            # its own "type"/"priority" and must not be mistaken for an envelope.
+            if parsed.keys() == {"type_identifier_value", "priority_value", "raw_json"}:
+                return cls(
+                    type_identifier_value=parsed["type_identifier_value"],
+                    priority_value=parsed["priority_value"],
+                    raw_json=parsed["raw_json"],
+                )
             return cls(
                 type_identifier_value=parsed.get("type", "unknown"),
                 priority_value=parsed.get("priority", 0),
-                raw_json=json_str
+                raw_json=json_str,
             )
         except Exception:
             return cls("unknown", 0, json_str)

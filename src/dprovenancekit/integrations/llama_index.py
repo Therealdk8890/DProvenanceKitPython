@@ -9,17 +9,17 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping, Optional, cast
+from typing import Any, Dict, Mapping, Optional
 
 from ..edge import TraceEdgeType
 from ..event import TraceableEvent
 from ..kit import ActiveTraceRun
 from ..priority import TracePriority
 
-
 try:
     from llama_index.core.callbacks.base_handler import BaseCallbackHandler
     from llama_index.core.callbacks.schema import CBEventType, EventPayload
+
     _HAS_LLAMA_INDEX = True
 except ImportError:
     BaseCallbackHandler = object  # type: ignore[assignment,misc]
@@ -75,7 +75,9 @@ class LlamaIndexTraceEvent(TraceableEvent):
         attrs = {k: v for k, v in data.items() if k not in ("type", "priority")}
         return cls.make(
             type_name=data["type"],
-            priority=TracePriority(int(data.get("priority", int(TracePriority.STRUCTURAL)))),
+            priority=TracePriority(
+                int(data.get("priority", int(TracePriority.STRUCTURAL)))
+            ),
             attributes=attrs,
         )
 
@@ -84,10 +86,7 @@ class DProvenanceLlamaIndexCallbackHandler(BaseCallbackHandler):
     """LlamaIndex callback handler that pushes events into an ActiveTraceRun."""
 
     def __init__(self, trace_run: ActiveTraceRun, link_lifecycle: bool = True):
-        super().__init__(
-            event_starts_to_ignore=[],
-            event_ends_to_ignore=[]
-        )
+        super().__init__(event_starts_to_ignore=[], event_ends_to_ignore=[])
         self.trace_run = trace_run
         self.link_lifecycle = link_lifecycle
         self._span_stack: list[uuid.UUID] = []
@@ -112,11 +111,15 @@ class DProvenanceLlamaIndexCallbackHandler(BaseCallbackHandler):
             for k, v in payload.items():
                 # Avoid storing full node texts or massive prompts by default to keep trace sizes down,
                 # unless they are the direct queries.
-                if k not in ["nodes", "chunks", "prompt"]: 
+                if k not in ["nodes", "chunks", "prompt"]:
                     attrs[k] = str(v)
 
         event = LlamaIndexTraceEvent.make(
-            type_name=f"{event_type.value}Started" if hasattr(event_type, "value") else f"{event_type}Started",
+            type_name=(
+                f"{event_type.value}Started"
+                if hasattr(event_type, "value")
+                else f"{event_type}Started"
+            ),
             priority=TracePriority.STRUCTURAL,
             attributes=attrs,
         )
@@ -148,10 +151,16 @@ class DProvenanceLlamaIndexCallbackHandler(BaseCallbackHandler):
                 if k not in ["nodes", "chunks", "response"]:
                     attrs[k] = str(v)
                 elif k == "response":
-                    attrs["response_preview"] = str(v)[:500] + ("..." if len(str(v)) > 500 else "")
+                    attrs["response_preview"] = str(v)[:500] + (
+                        "..." if len(str(v)) > 500 else ""
+                    )
 
         event = LlamaIndexTraceEvent.make(
-            type_name=f"{event_type.value}Ended" if hasattr(event_type, "value") else f"{event_type}Ended",
+            type_name=(
+                f"{event_type.value}Ended"
+                if hasattr(event_type, "value")
+                else f"{event_type}Ended"
+            ),
             priority=TracePriority.STRUCTURAL,
             attributes=attrs,
         )
@@ -161,7 +170,7 @@ class DProvenanceLlamaIndexCallbackHandler(BaseCallbackHandler):
             engine_name="llama_index",
             span_id=end_span_id,
         )
-        
+
         if self.link_lifecycle and start_span_id:
             self.trace_run.link(
                 source_span_id=end_span_id,
@@ -172,6 +181,9 @@ class DProvenanceLlamaIndexCallbackHandler(BaseCallbackHandler):
     def start_trace(self, trace_id: Optional[str] = None) -> None:
         pass
 
-    def end_trace(self, trace_id: Optional[str] = None, trace_map: Optional[Dict[str, List[str]]] = None) -> None:
+    def end_trace(
+        self,
+        trace_id: Optional[str] = None,
+        trace_map: Optional[Dict[str, List[str]]] = None,
+    ) -> None:
         pass
-

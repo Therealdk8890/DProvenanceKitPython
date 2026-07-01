@@ -113,7 +113,9 @@ class AlignmentConfiguration:
         primary_reason = ""
 
         # 1. Type match.
-        type_sim = 1.0 if base.payload.type_identifier == comp.payload.type_identifier else 0.0
+        type_sim = (
+            1.0 if base.payload.type_identifier == comp.payload.type_identifier else 0.0
+        )
         type_contribution = type_sim * profile.type_weight
         score += type_contribution
         if type_contribution > 0:
@@ -127,7 +129,9 @@ class AlignmentConfiguration:
             primary_reason = "Exact Type Match"
 
         # 2. Payload similarity.
-        payload_sim = self.equivalence_evaluator.evaluate_similarity(base.payload, comp.payload)
+        payload_sim = self.equivalence_evaluator.evaluate_similarity(
+            base.payload, comp.payload
+        )
         payload_contribution = payload_sim * profile.payload_weight
         score += payload_contribution
         if payload_contribution > 0:
@@ -144,7 +148,10 @@ class AlignmentConfiguration:
         # 3. Structural context (span awareness).
         structural_sim = 0.0
         if profile.alignment_mode != AlignmentMode.LINEAR:
-            if base.parent_span_id == comp.parent_span_id and base.parent_span_id is not None:
+            if (
+                base.parent_span_id == comp.parent_span_id
+                and base.parent_span_id is not None
+            ):
                 structural_sim = 1.0
             elif base.parent_span_id is None and comp.parent_span_id is None:
                 structural_sim = 1.0
@@ -180,4 +187,3 @@ class AlignmentConfiguration:
             primary_reason=primary_reason, final_score=score, ranked_evidence=evidence
         )
         return score, explanation
-

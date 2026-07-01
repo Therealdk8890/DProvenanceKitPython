@@ -55,7 +55,9 @@ class LiveTraceQueryEngine:
                 self._global_subscriptions.add(subscription.query_id)
             else:
                 for type_ in referenced:
-                    self._impacted_by_type.setdefault(type_, set()).add(subscription.query_id)
+                    self._impacted_by_type.setdefault(type_, set()).add(
+                        subscription.query_id
+                    )
 
     def process(self, event: TraceEvent, run: TraceRun) -> None:
         with self._lock:
@@ -84,4 +86,3 @@ class LiveTraceQueryEngine:
                         state.matching_runs.discard(run.run_id)
 
                 self._query_states[query_id] = state
-

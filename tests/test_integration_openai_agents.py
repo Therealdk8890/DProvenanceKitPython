@@ -25,7 +25,6 @@ from dprovenancekit.integrations.openai_agents import (
     OpenAIAgentsTraceEvent,
 )
 
-
 # ── Stand-ins for the SDK's Trace / Span / SpanData ─────────────────────────────
 
 
@@ -64,22 +63,32 @@ def drive_agent_trace(proc, *, trace_id="trace-1", name="research-run"):
     proc.on_trace_start(trace)
 
     agent = FakeSpan(
-        "s_agent", trace_id,
-        FakeSpanData("agent", name="Researcher", tools=["search"], handoffs=[], output_type=None),
+        "s_agent",
+        trace_id,
+        FakeSpanData(
+            "agent", name="Researcher", tools=["search"], handoffs=[], output_type=None
+        ),
     )
     proc.on_span_start(agent)
 
     gen = FakeSpan(
-        "s_gen", trace_id,
-        FakeSpanData("generation", model="gpt-4o", input="prompt", output="answer",
-                     usage={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}),
+        "s_gen",
+        trace_id,
+        FakeSpanData(
+            "generation",
+            model="gpt-4o",
+            input="prompt",
+            output="answer",
+            usage={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+        ),
         parent_id="s_agent",
     )
     proc.on_span_start(gen)
     proc.on_span_end(gen)
 
     fn = FakeSpan(
-        "s_fn", trace_id,
+        "s_fn",
+        trace_id,
         FakeSpanData("function", name="search", input="kittens", output="3 results"),
         parent_id="s_agent",
     )
@@ -101,7 +110,10 @@ def test_event_roundtrip_and_canonical_encoding():
     )
     assert ev.type_identifier == "function.end"
     assert ev.priority is TracePriority.STRUCTURAL
-    assert ev.encode().decode() == '{"name": "search", "output": "r", "priority": 2, "type": "function.end"}'
+    assert (
+        ev.encode().decode()
+        == '{"name": "search", "output": "r", "priority": 2, "type": "function.end"}'
+    )
     assert OpenAIAgentsTraceEvent.decode(ev.encode()) == ev
 
 
@@ -176,8 +188,12 @@ def test_span_error_is_recorded_as_critical():
     proc = DProvenanceTracingProcessor(store)
     trace = FakeTrace("t", "run")
     proc.on_trace_start(trace)
-    span = FakeSpan("s1", "t", FakeSpanData("function", name="search"),
-                    error={"message": "tool exploded", "data": {"code": 500}})
+    span = FakeSpan(
+        "s1",
+        "t",
+        FakeSpanData("function", name="search"),
+        error={"message": "tool exploded", "data": {"code": 500}},
+    )
     proc.on_span_start(span)
     proc.on_span_end(span)
     run_id = proc.run_id_for("t")
@@ -195,7 +211,9 @@ def test_triggered_guardrail_is_critical():
     proc = DProvenanceTracingProcessor(store)
     trace = FakeTrace("t", "run")
     proc.on_trace_start(trace)
-    span = FakeSpan("s1", "t", FakeSpanData("guardrail", name="jailbreak", triggered=True))
+    span = FakeSpan(
+        "s1", "t", FakeSpanData("guardrail", name="jailbreak", triggered=True)
+    )
     proc.on_span_start(span)
     proc.on_span_end(span)
     run_id = proc.run_id_for("t")
@@ -211,7 +229,11 @@ def test_capture_payloads_off_omits_io():
     proc = DProvenanceTracingProcessor(store, capture_payloads=False)
     trace = FakeTrace("t", "run")
     proc.on_trace_start(trace)
-    span = FakeSpan("s1", "t", FakeSpanData("function", name="search", input="secret", output="secret"))
+    span = FakeSpan(
+        "s1",
+        "t",
+        FakeSpanData("function", name="search", input="secret", output="secret"),
+    )
     proc.on_span_start(span)
     proc.on_span_end(span)
     run_id = proc.run_id_for("t")
@@ -254,7 +276,9 @@ def test_concurrent_traces_route_to_separate_runs():
 
 def test_force_flush_writes_open_trace():
     with tempfile.TemporaryDirectory() as tmp:
-        store = SQLiteTraceStore(OpenAIAgentsTraceEvent, f"{tmp}/t.sqlite", start_writer=False)
+        store = SQLiteTraceStore(
+            OpenAIAgentsTraceEvent, f"{tmp}/t.sqlite", start_writer=False
+        )
         proc = DProvenanceTracingProcessor(store)
         trace = FakeTrace("t", "run")
         proc.on_trace_start(trace)
@@ -262,7 +286,9 @@ def test_force_flush_writes_open_trace():
         proc.on_span_start(span)
         run_id = proc.run_id_for("t")
         proc.force_flush()  # without on_trace_end
-        rows = store._db.query("SELECT event_count FROM runs WHERE run_id = ?", (str(run_id),))
+        rows = store._db.query(
+            "SELECT event_count FROM runs WHERE run_id = ?", (str(run_id),)
+        )
     assert rows and rows[0][0] == 1
 
 
@@ -271,13 +297,17 @@ def test_force_flush_writes_open_trace():
 
 def _fingerprint_after(store: SQLiteTraceStore, run_id: uuid.UUID) -> str:
     store.flush()
-    rows = store._db.query("SELECT fingerprint FROM runs WHERE run_id = ?", (str(run_id),))
+    rows = store._db.query(
+        "SELECT fingerprint FROM runs WHERE run_id = ?", (str(run_id),)
+    )
     return rows[0][0]
 
 
 def test_same_path_shares_fingerprint_divergent_path_differs():
     with tempfile.TemporaryDirectory() as tmp:
-        store = SQLiteTraceStore(OpenAIAgentsTraceEvent, f"{tmp}/t.sqlite", start_writer=False)
+        store = SQLiteTraceStore(
+            OpenAIAgentsTraceEvent, f"{tmp}/t.sqlite", start_writer=False
+        )
         proc = DProvenanceTracingProcessor(store)
 
         a = drive_agent_trace(proc, trace_id="a", name="a")
@@ -286,13 +316,34 @@ def test_same_path_shares_fingerprint_divergent_path_differs():
         # Divergent: a function runs before the generation.
         trace = FakeTrace("c", "c")
         proc.on_trace_start(trace)
-        agent = FakeSpan("s_agent", "c", FakeSpanData("agent", name="Researcher", tools=["search"], handoffs=[]))
+        agent = FakeSpan(
+            "s_agent",
+            "c",
+            FakeSpanData("agent", name="Researcher", tools=["search"], handoffs=[]),
+        )
         proc.on_span_start(agent)
-        fn = FakeSpan("s_fn", "c", FakeSpanData("function", name="search", input="kittens", output="3 results"), parent_id="s_agent")
+        fn = FakeSpan(
+            "s_fn",
+            "c",
+            FakeSpanData(
+                "function", name="search", input="kittens", output="3 results"
+            ),
+            parent_id="s_agent",
+        )
         proc.on_span_start(fn)
         proc.on_span_end(fn)
-        gen = FakeSpan("s_gen", "c", FakeSpanData("generation", model="gpt-4o", input="prompt", output="answer",
-                       usage={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}), parent_id="s_agent")
+        gen = FakeSpan(
+            "s_gen",
+            "c",
+            FakeSpanData(
+                "generation",
+                model="gpt-4o",
+                input="prompt",
+                output="answer",
+                usage={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+            ),
+            parent_id="s_agent",
+        )
         proc.on_span_start(gen)
         proc.on_span_end(gen)
         proc.on_span_end(agent)
@@ -300,7 +351,11 @@ def test_same_path_shares_fingerprint_divergent_path_differs():
         proc.on_trace_end(trace)
 
         store.flush()
-        fp_a, fp_b, fp_c = _fingerprint_after(store, a), _fingerprint_after(store, b), _fingerprint_after(store, c)
+        fp_a, fp_b, fp_c = (
+            _fingerprint_after(store, a),
+            _fingerprint_after(store, b),
+            _fingerprint_after(store, c),
+        )
 
     assert fp_a == fp_b
     assert fp_a != fp_c
@@ -317,7 +372,9 @@ def test_response_span_uses_model_as_engine():
     trace = FakeTrace("t", "run")
     proc.on_trace_start(trace)
     resp = type("Resp", (), {"model": "gpt-4o-mini", "id": "resp_1"})()
-    span = FakeSpan("s1", "t", FakeSpanData("response", response=resp, usage={"total_tokens": 9}))
+    span = FakeSpan(
+        "s1", "t", FakeSpanData("response", response=resp, usage={"total_tokens": 9})
+    )
     proc.on_span_start(span)
     proc.on_span_end(span)
     run_id = proc.run_id_for("t")
@@ -353,8 +410,16 @@ def test_concurrent_traces_with_colliding_span_ids_keep_edges_isolated():
     # Both traces deliberately reuse the SAME span ids.
     proc.on_span_start(FakeSpan("s_parent", "t1", FakeSpanData("agent", name="A")))
     proc.on_span_start(FakeSpan("s_parent", "t2", FakeSpanData("agent", name="B")))
-    proc.on_span_start(FakeSpan("s_child", "t1", FakeSpanData("function", name="f1"), parent_id="s_parent"))
-    proc.on_span_start(FakeSpan("s_child", "t2", FakeSpanData("function", name="f2"), parent_id="s_parent"))
+    proc.on_span_start(
+        FakeSpan(
+            "s_child", "t1", FakeSpanData("function", name="f1"), parent_id="s_parent"
+        )
+    )
+    proc.on_span_start(
+        FakeSpan(
+            "s_child", "t2", FakeSpanData("function", name="f2"), parent_id="s_parent"
+        )
+    )
     rid1, rid2 = proc.run_id_for("t1"), proc.run_id_for("t2")
     proc.on_trace_end(t1)
     proc.on_trace_end(t2)
@@ -419,4 +484,3 @@ def test_real_span_data_objects_are_handled():
     by_type = _events_by_type(store.get_run(run_id))
     assert "function.start" in by_type and "function.end" in by_type
     assert by_type["function.start"].engine_name == "search"
-

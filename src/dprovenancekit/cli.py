@@ -26,7 +26,11 @@ def _make_engine(callback) -> TraceAlignmentEngine:
         profile=AlignmentProfile.developer_debug_v1,
         equivalence_evaluator=DProvenanceCorpus.standard_evaluator(),
     )
-    return TraceAlignmentEngine(config, capture_mode=VerificationCaptureMode.EVIDENCE_ONLY, meta_trace_callback=callback)
+    return TraceAlignmentEngine(
+        config,
+        capture_mode=VerificationCaptureMode.EVIDENCE_ONLY,
+        meta_trace_callback=callback,
+    )
 
 
 def _print_case_line(c) -> None:
@@ -68,9 +72,16 @@ def _run_gate(argv) -> int:
         prog="dprovenancekit gate",
         description="Fail the build when a candidate run regresses against a golden run.",
     )
-    ap.add_argument("--db", help="SQLite db holding both runs (shorthand for --golden-db/--candidate-db)")
-    ap.add_argument("--golden-db", help="SQLite db holding the golden run (default: --db)")
-    ap.add_argument("--candidate-db", help="SQLite db holding the candidate run (default: --db)")
+    ap.add_argument(
+        "--db",
+        help="SQLite db holding both runs (shorthand for --golden-db/--candidate-db)",
+    )
+    ap.add_argument(
+        "--golden-db", help="SQLite db holding the golden run (default: --db)"
+    )
+    ap.add_argument(
+        "--candidate-db", help="SQLite db holding the candidate run (default: --db)"
+    )
     ap.add_argument("--golden", required=True, help="golden (known-good) run id")
     ap.add_argument("--candidate", required=True, help="candidate run id to gate")
     ap.add_argument(
@@ -91,20 +102,27 @@ def _run_gate(argv) -> int:
         golden_id = uuid.UUID(args.golden)
         candidate_id = uuid.UUID(args.candidate)
     except ValueError:
-        print("error: --golden/--candidate must be valid run ids (UUIDs)", file=sys.stderr)
+        print(
+            "error: --golden/--candidate must be valid run ids (UUIDs)", file=sys.stderr
+        )
         return 2
 
     golden_db = args.golden_db or args.db
     candidate_db = args.candidate_db or args.db
     if not golden_db or not candidate_db:
-        print("error: provide --db (or both --golden-db and --candidate-db)", file=sys.stderr)
+        print(
+            "error: provide --db (or both --golden-db and --candidate-db)",
+            file=sys.stderr,
+        )
         return 2
 
     opened = {}
     try:
         for path in {golden_db, candidate_db}:
             try:
-                opened[path] = SQLiteTraceStore(AnyTraceableEvent, path, start_writer=False)
+                opened[path] = SQLiteTraceStore(
+                    AnyTraceableEvent, path, start_writer=False
+                )
             except (sqlite3.Error, OSError) as exc:
                 print(f"error: could not open database {path}: {exc}", file=sys.stderr)
                 return 2
@@ -179,7 +197,9 @@ def _run_anomalies(argv) -> int:
     )
     ap.add_argument("--db", required=True, help="path to the SQLite trace database")
     ap.add_argument("--rules", required=True, help="path to a JSON rules config")
-    ap.add_argument("--run", default=None, help="restrict to a single run id (default: all runs)")
+    ap.add_argument(
+        "--run", default=None, help="restrict to a single run id (default: all runs)"
+    )
     ap.add_argument("--json", action="store_true", help="emit the findings as JSON")
     args = ap.parse_args(argv)
 
@@ -211,7 +231,9 @@ def _run_anomalies(argv) -> int:
             if run is None:
                 print(f"error: run not found in {args.db}: {args.run}", file=sys.stderr)
                 return 2
-            found = [r.make_anomaly(run) for r in rules if r.anomaly_query.ast.evaluate(run)]
+            found = [
+                r.make_anomaly(run) for r in rules if r.anomaly_query.ast.evaluate(run)
+            ]
         else:
             found = AnomalyDetector(store).detect_anomalies(rules)
     finally:
@@ -223,7 +245,11 @@ def _run_anomalies(argv) -> int:
                 {
                     "count": len(found),
                     "anomalies": [
-                        {"rule": a.rule_name, "run_id": str(a.run_id), "description": a.description}
+                        {
+                            "rule": a.rule_name,
+                            "run_id": str(a.run_id),
+                            "description": a.description,
+                        }
                         for a in found
                     ],
                 },
@@ -263,10 +289,14 @@ def _run_runs(argv) -> int:
     )
     ap.add_argument("--db", required=True, help="path to the SQLite trace database")
     ap.add_argument("--context", default=None, help="only runs with this context_id")
-    ap.add_argument("--latest", action="store_true", help="select only the most recent matching run")
+    ap.add_argument(
+        "--latest", action="store_true", help="select only the most recent matching run"
+    )
     fmt = ap.add_mutually_exclusive_group()
     fmt.add_argument("--json", action="store_true", help="emit as JSON")
-    fmt.add_argument("--format", choices=["id"], help="print only run ids, one per line")
+    fmt.add_argument(
+        "--format", choices=["id"], help="print only run ids, one per line"
+    )
     args = ap.parse_args(argv)
 
     try:
@@ -324,7 +354,9 @@ def _run_ui(argv) -> int:
         prog="dprovenancekit ui", description="Start local trace visualization UI."
     )
     ap.add_argument("--db", required=True, help="path to the SQLite trace database")
-    ap.add_argument("--port", type=int, default=8080, help="port to listen on (default: 8080)")
+    ap.add_argument(
+        "--port", type=int, default=8080, help="port to listen on (default: 8080)"
+    )
     args = ap.parse_args(argv)
 
     run_ui_server(args.db, args.port)
@@ -347,7 +379,7 @@ def _run_sync(argv) -> int:
     ap.add_argument("--run", required=True, help="run ID to sync")
     ap.add_argument("--db", required=True, help="path to local SQLite trace database")
     args = ap.parse_args(argv)
-    
+
     try:
         run_id = uuid.UUID(args.run)
     except ValueError:
@@ -356,7 +388,7 @@ def _run_sync(argv) -> int:
 
     store = SQLiteTraceStore(AnyTraceableEvent, args.db, start_writer=False)
     client = CloudSyncClient()
-    
+
     try:
         if args.action == "push":
             print(f"Pushing run {run_id} to cloud...")
@@ -371,7 +403,7 @@ def _run_sync(argv) -> int:
         return 1
     finally:
         store.close()
-        
+
     return 0
 
 
@@ -395,7 +427,9 @@ def main(argv=None) -> int:
 
     mode = argv[0] if argv else "evaluate"
     if mode not in ("evaluate", "diagnose", "stability"):
-        print("Usage: dprovenancekit <gate|anomalies|runs|ui|sync|evaluate|diagnose|stability>")
+        print(
+            "Usage: dprovenancekit <gate|anomalies|runs|ui|sync|evaluate|diagnose|stability>"
+        )
         return 0
 
     runner = BenchmarkRunner()
@@ -418,7 +452,9 @@ def main(argv=None) -> int:
         )
         print(
             "Avg fidelity: {:.3f}  Avg runtime: {:.2f}ms  p95: {:.2f}ms".format(
-                report.average_fidelity_score, report.average_run_time_ms, report.p95_run_time_ms
+                report.average_fidelity_score,
+                report.average_run_time_ms,
+                report.p95_run_time_ms,
             )
         )
         for c in report.case_results:
@@ -441,10 +477,13 @@ def main(argv=None) -> int:
                 alignment_mode=AlignmentMode.SPAN_AWARE,
             )
             config = AlignmentConfiguration(
-                profile=adv_profile, equivalence_evaluator=DProvenanceCorpus.standard_evaluator()
+                profile=adv_profile,
+                equivalence_evaluator=DProvenanceCorpus.standard_evaluator(),
             )
             return TraceAlignmentEngine(
-                config, capture_mode=VerificationCaptureMode.EVIDENCE_ONLY, meta_trace_callback=cb
+                config,
+                capture_mode=VerificationCaptureMode.EVIDENCE_ONLY,
+                meta_trace_callback=cb,
             )
 
         adv_report = runner.run(adv_dataset, adv_engine)
@@ -474,7 +513,11 @@ def main(argv=None) -> int:
         total_cases = report.total_cases + adv_report.total_cases
         total_passed = report.passed_cases + adv_report.passed_cases
         print(f"Total Cases: {total_cases}")
-        print("Total Passed: {} ({:.1f}%)".format(total_passed, total_passed / total_cases * 100))
+        print(
+            "Total Passed: {} ({:.1f}%)".format(
+                total_passed, total_passed / total_cases * 100
+            )
+        )
 
     elif mode == "diagnose":
         report = runner.run(dataset, lambda cb: _make_engine(cb))
@@ -496,7 +539,10 @@ def main(argv=None) -> int:
     elif mode == "stability":
         isolated = DeterministicBoundary(cache_isolated=True, seed_control="cli_seed")
         stable = runner.run_repeated_evaluation(
-            dataset, iterations=3, engine_factory=lambda _ctx, cb: _make_engine(cb), boundary=isolated
+            dataset,
+            iterations=3,
+            engine_factory=lambda _ctx, cb: _make_engine(cb),
+            boundary=isolated,
         )
         print(
             "Isolated   (cacheIsolated: True ): mean F1 {:.3f}  variance {:.5f}  — {}".format(
@@ -511,14 +557,21 @@ def main(argv=None) -> int:
                 evaluator=lambda b, c: (
                     1.0
                     if b == c
-                    else (0.0 if b.type_identifier != c.type_identifier else (tool_score if b.type_identifier == "tool" else 0.8))
+                    else (
+                        0.0
+                        if b.type_identifier != c.type_identifier
+                        else (tool_score if b.type_identifier == "tool" else 0.8)
+                    )
                 ),
             )
             config = AlignmentConfiguration(
-                profile=AlignmentProfile.developer_debug_v1, equivalence_evaluator=evaluator
+                profile=AlignmentProfile.developer_debug_v1,
+                equivalence_evaluator=evaluator,
             )
             return TraceAlignmentEngine(
-                config, capture_mode=VerificationCaptureMode.EVIDENCE_ONLY, meta_trace_callback=cb
+                config,
+                capture_mode=VerificationCaptureMode.EVIDENCE_ONLY,
+                meta_trace_callback=cb,
             )
 
         unstable = runner.run_repeated_evaluation(
@@ -538,4 +591,3 @@ def main(argv=None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

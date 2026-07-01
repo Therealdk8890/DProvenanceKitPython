@@ -32,7 +32,9 @@ class AnomalyRule(ABC):
     def describe(self, run: TraceRun) -> str: ...
 
     def make_anomaly(self, run: TraceRun) -> Anomaly:
-        return Anomaly(run_id=run.run_id, rule_name=self.name, description=self.describe(run))
+        return Anomaly(
+            run_id=run.run_id, rule_name=self.name, description=self.describe(run)
+        )
 
 
 class AnomalyDetector:
@@ -70,4 +72,3 @@ class LiveAnomalySubscription(TraceQuerySubscription):
 
     def on_update(self, run: TraceRun) -> None:
         pass
-

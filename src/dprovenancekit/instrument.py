@@ -64,7 +64,9 @@ from .kit import ActiveTraceRun, DProvenanceKit
 from .priority import TracePriority
 
 # The enclosing decorated step's *start* event id, so a nested step can be INFORMED by it.
-_enclosing_step: ContextVar[Optional[uuid.UUID]] = ContextVar("dprov_enclosing_step", default=None)
+_enclosing_step: ContextVar[Optional[uuid.UUID]] = ContextVar(
+    "dprov_enclosing_step", default=None
+)
 
 
 def _jsonable(obj: Any) -> Any:
@@ -122,7 +124,9 @@ class TracedEvent(TraceableEvent):
         attrs = {k: v for k, v in data.items() if k not in ("type", "priority")}
         return cls.make(
             type_name=data["type"],
-            priority=TracePriority(int(data.get("priority", int(TracePriority.STRUCTURAL)))),
+            priority=TracePriority(
+                int(data.get("priority", int(TracePriority.STRUCTURAL)))
+            ),
             attributes=attrs,
         )
 
@@ -161,9 +165,13 @@ def _summarize_call(args: tuple, kwargs: dict) -> Dict[str, Any]:
 
 
 @contextmanager
-def traced_run(store: Any, context_id: str, *, schema_version: int = 1) -> Iterator[ActiveTraceRun]:
+def traced_run(
+    store: Any, context_id: str, *, schema_version: int = 1
+) -> Iterator[ActiveTraceRun]:
     """Open a recording run for instrumented code. Yields the active run; flushes on exit."""
-    with _KIT.run(context_id=context_id, store=store, schema_version=schema_version) as run:
+    with _KIT.run(
+        context_id=context_id, store=store, schema_version=schema_version
+    ) as run:
         try:
             yield run
         finally:
@@ -184,7 +192,9 @@ def record_event(
     return _KIT.record(TracedEvent.make(type_identifier, priority, attributes))
 
 
-def _record(type_name: str, priority: TracePriority, attributes: Mapping[str, Any]) -> Optional[uuid.UUID]:
+def _record(
+    type_name: str, priority: TracePriority, attributes: Mapping[str, Any]
+) -> Optional[uuid.UUID]:
     return _KIT.record(TracedEvent.make(type_name, priority, attributes))
 
 
@@ -198,10 +208,13 @@ def _record_in_span(
     parent_span_id: Optional[str],
 ) -> Optional[uuid.UUID]:
     """Record a single event under an explicit span/engine, set transiently and reset
-    immediately. Used for generator start/end/error so no context is held across a yield."""
+    immediately. Used for generator start/end/error so no context is held across a yield.
+    """
     span_token = TraceContext.current_span_id.set(span_id)
     parent_token = TraceContext.parent_span_id.set(parent_span_id)
-    engine_token = TraceContext.engine_stack.set(list(TraceContext.engine_stack.get()) + [engine])
+    engine_token = TraceContext.engine_stack.set(
+        list(TraceContext.engine_stack.get()) + [engine]
+    )
     try:
         return _record(type_name, priority, attributes)
     finally:
@@ -210,7 +223,9 @@ def _record_in_span(
         TraceContext.current_span_id.reset(span_token)
 
 
-def _link(source: Optional[uuid.UUID], target: Optional[uuid.UUID], edge: TraceEdgeType) -> None:
+def _link(
+    source: Optional[uuid.UUID], target: Optional[uuid.UUID], edge: TraceEdgeType
+) -> None:
     if source is not None and target is not None:
         _KIT.link(source, target, edge)
 
@@ -249,7 +264,11 @@ def traced(
             return attrs
 
         def _err_attrs(error) -> Dict[str, Any]:
-            return {"name": step_name, "error_type": type(error).__name__, "message": _safe_str(error)}
+            return {
+                "name": step_name,
+                "error_type": type(error).__name__,
+                "message": _safe_str(error),
+            }
 
         # ── async generator: bracket the whole async iteration ──────────────────
         if inspect.isasyncgenfunction(func):
@@ -263,8 +282,12 @@ def traced(
                 span_id = str(uuid.uuid4())
                 parent = TraceContext.current_span_id.get()
                 start_id = _record_in_span(
-                    f"{step_name}.start", priority, _start_attrs(args, kwargs),
-                    engine=step_name, span_id=span_id, parent_span_id=parent,
+                    f"{step_name}.start",
+                    priority,
+                    _start_attrs(args, kwargs),
+                    engine=step_name,
+                    span_id=span_id,
+                    parent_span_id=parent,
                 )
                 if link_lifecycle:
                     _link(_enclosing_step.get(), start_id, TraceEdgeType.INFORMED)
@@ -273,15 +296,23 @@ def traced(
                         yield item
                 except BaseException as error:  # noqa: BLE001 - record then re-raise
                     err_id = _record_in_span(
-                        f"{step_name}.error", TracePriority.CRITICAL, _err_attrs(error),
-                        engine=step_name, span_id=span_id, parent_span_id=parent,
+                        f"{step_name}.error",
+                        TracePriority.CRITICAL,
+                        _err_attrs(error),
+                        engine=step_name,
+                        span_id=span_id,
+                        parent_span_id=parent,
                     )
                     if link_lifecycle:
                         _link(start_id, err_id, TraceEdgeType.DERIVED_FROM)
                     raise
                 end_id = _record_in_span(
-                    f"{step_name}.end", priority, {"name": step_name},
-                    engine=step_name, span_id=span_id, parent_span_id=parent,
+                    f"{step_name}.end",
+                    priority,
+                    {"name": step_name},
+                    engine=step_name,
+                    span_id=span_id,
+                    parent_span_id=parent,
                 )
                 if link_lifecycle:
                     _link(start_id, end_id, TraceEdgeType.DERIVED_FROM)
@@ -299,8 +330,12 @@ def traced(
                 span_id = str(uuid.uuid4())
                 parent = TraceContext.current_span_id.get()
                 start_id = _record_in_span(
-                    f"{step_name}.start", priority, _start_attrs(args, kwargs),
-                    engine=step_name, span_id=span_id, parent_span_id=parent,
+                    f"{step_name}.start",
+                    priority,
+                    _start_attrs(args, kwargs),
+                    engine=step_name,
+                    span_id=span_id,
+                    parent_span_id=parent,
                 )
                 if link_lifecycle:
                     _link(_enclosing_step.get(), start_id, TraceEdgeType.INFORMED)
@@ -308,15 +343,23 @@ def traced(
                     result = yield from func(*args, **kwargs)
                 except BaseException as error:  # noqa: BLE001 - record then re-raise
                     err_id = _record_in_span(
-                        f"{step_name}.error", TracePriority.CRITICAL, _err_attrs(error),
-                        engine=step_name, span_id=span_id, parent_span_id=parent,
+                        f"{step_name}.error",
+                        TracePriority.CRITICAL,
+                        _err_attrs(error),
+                        engine=step_name,
+                        span_id=span_id,
+                        parent_span_id=parent,
                     )
                     if link_lifecycle:
                         _link(start_id, err_id, TraceEdgeType.DERIVED_FROM)
                     raise
                 end_id = _record_in_span(
-                    f"{step_name}.end", priority, _end_attrs(result),
-                    engine=step_name, span_id=span_id, parent_span_id=parent,
+                    f"{step_name}.end",
+                    priority,
+                    _end_attrs(result),
+                    engine=step_name,
+                    span_id=span_id,
+                    parent_span_id=parent,
                 )
                 if link_lifecycle:
                     _link(start_id, end_id, TraceEdgeType.DERIVED_FROM)
@@ -332,14 +375,22 @@ def traced(
                 if TraceContext.current_run.get() is None:
                     return await func(*args, **kwargs)
                 with _KIT.with_span(), _KIT.with_engine(step_name):
-                    start_id = _record(f"{step_name}.start", priority, _start_attrs(args, kwargs))
+                    start_id = _record(
+                        f"{step_name}.start", priority, _start_attrs(args, kwargs)
+                    )
                     if link_lifecycle:
                         _link(_enclosing_step.get(), start_id, TraceEdgeType.INFORMED)
                     token = _enclosing_step.set(start_id)
                     try:
                         result = await func(*args, **kwargs)
-                    except BaseException as error:  # noqa: BLE001 - record then re-raise
-                        err_id = _record(f"{step_name}.error", TracePriority.CRITICAL, _err_attrs(error))
+                    except (
+                        BaseException
+                    ) as error:  # noqa: BLE001 - record then re-raise
+                        err_id = _record(
+                            f"{step_name}.error",
+                            TracePriority.CRITICAL,
+                            _err_attrs(error),
+                        )
                         if link_lifecycle:
                             _link(start_id, err_id, TraceEdgeType.DERIVED_FROM)
                         raise
@@ -358,14 +409,18 @@ def traced(
             if TraceContext.current_run.get() is None:
                 return func(*args, **kwargs)
             with _KIT.with_span(), _KIT.with_engine(step_name):
-                start_id = _record(f"{step_name}.start", priority, _start_attrs(args, kwargs))
+                start_id = _record(
+                    f"{step_name}.start", priority, _start_attrs(args, kwargs)
+                )
                 if link_lifecycle:
                     _link(_enclosing_step.get(), start_id, TraceEdgeType.INFORMED)
                 token = _enclosing_step.set(start_id)
                 try:
                     result = func(*args, **kwargs)
                 except BaseException as error:  # noqa: BLE001 - record then re-raise
-                    err_id = _record(f"{step_name}.error", TracePriority.CRITICAL, _err_attrs(error))
+                    err_id = _record(
+                        f"{step_name}.error", TracePriority.CRITICAL, _err_attrs(error)
+                    )
                     if link_lifecycle:
                         _link(start_id, err_id, TraceEdgeType.DERIVED_FROM)
                     raise
@@ -387,4 +442,3 @@ __all__ = [
     "traced_run",
     "record_event",
 ]
-

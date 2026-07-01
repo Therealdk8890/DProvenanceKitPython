@@ -20,7 +20,9 @@ _ACTION_DIR = Path(__file__).resolve().parents[1] / "action"
 
 
 def _load(name):
-    spec = importlib.util.spec_from_file_location(f"action_{name}", _ACTION_DIR / f"{name}.py")
+    spec = importlib.util.spec_from_file_location(
+        f"action_{name}", _ACTION_DIR / f"{name}.py"
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -35,7 +37,9 @@ run_anomalies = _load("run_anomalies")
 
 
 def _event(kind, priority, raw="{}"):
-    return AnyTraceableEvent(type_identifier_value=kind, priority_value=int(priority), raw_json=raw)
+    return AnyTraceableEvent(
+        type_identifier_value=kind, priority_value=int(priority), raw_json=raw
+    )
 
 
 def _record(store, context_id, steps):
@@ -59,7 +63,9 @@ def trace_db(tmp_path):
     ids = {
         "golden": _record(store, "g", _GOLDEN),
         "pass": _record(store, "ok", _GOLDEN),
-        "regressed": _record(store, "b", [_GOLDEN[0]]),  # dropped the CRITICAL verify step
+        "regressed": _record(
+            store, "b", [_GOLDEN[0]]
+        ),  # dropped the CRITICAL verify step
     }
     store.flush()
     store._db.close()
@@ -124,14 +130,21 @@ def test_run_gate_publishes_regression_without_failing_wrapper(trace_db, tmp_pat
 
 def test_build_gate_argv_passes_separate_dbs():
     # When golden/candidate dbs are unset, both default to DPROV_DB.
-    argv = run_gate.build_gate_argv({"DPROV_DB": "b.sqlite", "DPROV_GOLDEN": "g", "DPROV_CANDIDATE": "c"})
+    argv = run_gate.build_gate_argv(
+        {"DPROV_DB": "b.sqlite", "DPROV_GOLDEN": "g", "DPROV_CANDIDATE": "c"}
+    )
     assert argv[argv.index("--golden-db") + 1] == "b.sqlite"
     assert argv[argv.index("--candidate-db") + 1] == "b.sqlite"
 
     # Separate dbs override the shared default.
     argv2 = run_gate.build_gate_argv(
-        {"DPROV_DB": "b.sqlite", "DPROV_GOLDEN_DB": "base.sqlite", "DPROV_CANDIDATE_DB": "pr.sqlite",
-         "DPROV_GOLDEN": "g", "DPROV_CANDIDATE": "c"}
+        {
+            "DPROV_DB": "b.sqlite",
+            "DPROV_GOLDEN_DB": "base.sqlite",
+            "DPROV_CANDIDATE_DB": "pr.sqlite",
+            "DPROV_GOLDEN": "g",
+            "DPROV_CANDIDATE": "c",
+        }
     )
     assert argv2[argv2.index("--golden-db") + 1] == "base.sqlite"
     assert argv2[argv2.index("--candidate-db") + 1] == "pr.sqlite"
@@ -192,7 +205,9 @@ def test_render_comment_fail_lists_changes():
 
 def _event_file(tmp_path, pr_number):
     path = tmp_path / "event.json"
-    path.write_text(json.dumps({"pull_request": {"number": pr_number}}), encoding="utf-8")
+    path.write_text(
+        json.dumps({"pull_request": {"number": pr_number}}), encoding="utf-8"
+    )
     return str(path)
 
 
@@ -206,7 +221,11 @@ def test_post_comment_updates_existing_sticky(tmp_path):
         return 200, {}
 
     pr = pr_comment.post_comment(
-        {"passed": False, "regression_level": "high", "steps_by_change": {"removed": ["verify"]}},
+        {
+            "passed": False,
+            "regression_level": "high",
+            "steps_by_change": {"removed": ["verify"]},
+        },
         {
             "GITHUB_TOKEN": "x",
             "GITHUB_EVENT_PATH": _event_file(tmp_path, 42),
@@ -251,7 +270,11 @@ def test_run_anomalies_render_annotations_and_summary():
     report = {
         "count": 1,
         "anomalies": [
-            {"rule": "looping:web_search", "run_id": "r", "description": "repeated 6 times"}
+            {
+                "rule": "looping:web_search",
+                "run_id": "r",
+                "description": "repeated 6 times",
+            }
         ],
     }
     anns = run_anomalies.render_annotations(report)
@@ -269,7 +292,11 @@ def test_run_anomalies_sanitizes_log_injection():
     report = {
         "count": 1,
         "anomalies": [
-            {"rule": "tool_drop:x", "run_id": "r", "description": "ctx\n::error::pwned | x"}
+            {
+                "rule": "tool_drop:x",
+                "run_id": "r",
+                "description": "ctx\n::error::pwned | x",
+            }
         ],
     }
     ann = run_anomalies.render_annotations(report)[0]
@@ -280,19 +307,25 @@ def test_run_anomalies_sanitizes_log_injection():
     # The injected newline did not split the description across rows.
     data_rows = [r for r in summary.splitlines() if r.startswith("| `tool_drop:x`")]
     assert len(data_rows) == 1
-    assert "::error::pwned" in data_rows[0]  # present but inert (single line, escaped pipe)
+    assert (
+        "::error::pwned" in data_rows[0]
+    )  # present but inert (single line, escaped pipe)
 
 
 def test_run_anomalies_publishes_outputs(tmp_path, capsys):
     db = str(tmp_path / "a.sqlite")
     store = SQLiteTraceStore(AnyTraceableEvent, db, start_writer=False)
-    candidate = _record(store, "cand", [("web_search", TracePriority.STRUCTURAL, "{}")] * 6)
+    candidate = _record(
+        store, "cand", [("web_search", TracePriority.STRUCTURAL, "{}")] * 6
+    )
     store.flush()
     store._db.close()
 
     rules = tmp_path / "rules.json"
     rules.write_text(
-        json.dumps({"rules": [{"type": "looping", "step": "web_search", "max_repeats": 5}]}),
+        json.dumps(
+            {"rules": [{"type": "looping", "step": "web_search", "max_repeats": 5}]}
+        ),
         encoding="utf-8",
     )
     out = tmp_path / "out.txt"
@@ -310,4 +343,3 @@ def test_run_anomalies_publishes_outputs(tmp_path, capsys):
     assert json.loads(parsed["anomalies-json"])["count"] == 1
     # The warning annotation is emitted to the log.
     assert "::warning" in capsys.readouterr().out
-

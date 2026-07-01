@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Callable, Dict, List, Optional
 
-from .alignment_engine import TraceAlignmentEngine, VerificationCaptureMode
+from .alignment_engine import TraceAlignmentEngine
 from .alignment_findings import AlignmentFindingsExtractor
 from .alignment_meta import AlignmentMetaEvent, MetaEventKind
 from .alignment_models import (
@@ -32,7 +32,6 @@ from .verification import (
     ExplainabilityAuditor,
     FidelityVector,
 )
-
 
 # MARK: - Determinism boundary ---------------------------------------------------
 
@@ -84,8 +83,10 @@ class FailureSeverityProfile:
     @property
     def score(self) -> float:
         w1, w2, w3 = 0.4, 0.4, 0.2
-        return (w1 * self.structural_impact) + (w2 * self.propagation_potential) + (
-            w3 * (1.0 - self.recoverability)
+        return (
+            (w1 * self.structural_impact)
+            + (w2 * self.propagation_potential)
+            + (w3 * (1.0 - self.recoverability))
         )
 
 
@@ -165,13 +166,21 @@ class DiagnosedFailure:
     reason: str
     evidence_ids: List[uuid.UUID]
 
-    def resolved_evidence(self, timeline: List[DecisionTimelineEntry]) -> List[DecisionTimelineEntry]:
+    def resolved_evidence(
+        self, timeline: List[DecisionTimelineEntry]
+    ) -> List[DecisionTimelineEntry]:
         ids = set(self.evidence_ids)
         return [e for e in timeline if e.id in ids]
 
 
 def make_diagnosed_failure(
-    finding, is_false_positive, is_engine_error, hypothesized_cause, diagnosis_confidence, reason, evidence_ids
+    finding,
+    is_false_positive,
+    is_engine_error,
+    hypothesized_cause,
+    diagnosis_confidence,
+    reason,
+    evidence_ids,
 ) -> DiagnosedFailure:
     # EVIDENCE RESTRICTION: No evidence, no claim.
     if not evidence_ids and hypothesized_cause != FailureCause.undiagnosed():
@@ -348,12 +357,18 @@ class BenchmarkStabilityReport:
     @property
     def precision_variance(self) -> float:
         mean = self.mean_precision
-        return sum((r.global_metrics.precision - mean) ** 2 for r in self.reports) / self.iterations
+        return (
+            sum((r.global_metrics.precision - mean) ** 2 for r in self.reports)
+            / self.iterations
+        )
 
     @property
     def f1_variance(self) -> float:
         mean = self.mean_f1
-        return sum((r.global_metrics.f1_score - mean) ** 2 for r in self.reports) / self.iterations
+        return (
+            sum((r.global_metrics.f1_score - mean) ** 2 for r in self.reports)
+            / self.iterations
+        )
 
     @property
     def drift_fingerprint(self) -> str:
@@ -371,7 +386,9 @@ class CategoryDeltaMetrics:
     f1_delta: float
 
     @staticmethod
-    def of(current: CategoryMetrics, baseline: CategoryMetrics) -> "CategoryDeltaMetrics":
+    def of(
+        current: CategoryMetrics, baseline: CategoryMetrics
+    ) -> "CategoryDeltaMetrics":
         return CategoryDeltaMetrics(
             precision_delta=current.precision - baseline.precision,
             recall_delta=current.recall - baseline.recall,
@@ -391,7 +408,9 @@ class BenchmarkDeltaReport:
         object.__setattr__(self, "current_report", current)
         object.__setattr__(self, "baseline_report", baseline)
         object.__setattr__(
-            self, "global_delta", CategoryDeltaMetrics.of(current.global_metrics, baseline.global_metrics)
+            self,
+            "global_delta",
+            CategoryDeltaMetrics.of(current.global_metrics, baseline.global_metrics),
         )
         empty = CategoryMetrics(0, 0, 0)
         strats: Dict[str, CategoryDeltaMetrics] = {}
@@ -401,7 +420,9 @@ class BenchmarkDeltaReport:
             strats[cat] = CategoryDeltaMetrics.of(curr, base)
         object.__setattr__(self, "stratified_deltas", strats)
         object.__setattr__(
-            self, "runtime_delta_ms", current.average_run_time_ms - baseline.average_run_time_ms
+            self,
+            "runtime_delta_ms",
+            current.average_run_time_ms - baseline.average_run_time_ms,
         )
 
 
@@ -441,7 +462,10 @@ class BenchmarkFailureDiagnoser:
 
                 rejections = []
                 for e in timeline:
-                    if e.strength_category != AlignmentStrengthCategory.REJECTED or e.meta_event is None:
+                    if (
+                        e.strength_category != AlignmentStrengthCategory.REJECTED
+                        or e.meta_event is None
+                    ):
                         continue
                     meta = e.meta_event
                     if meta.kind in (
@@ -453,7 +477,9 @@ class BenchmarkFailureDiagnoser:
                             rejections.append(e)
 
                 if rejections:
-                    best_cause = FailureCause.signal(SignalFailure.THRESHOLD_MISCALIBRATION)
+                    best_cause = FailureCause.signal(
+                        SignalFailure.THRESHOLD_MISCALIBRATION
+                    )
                     confidence = 0.85
                     reason = (
                         "A semantic candidate was found but evicted, suggesting the "
@@ -465,17 +491,24 @@ class BenchmarkFailureDiagnoser:
                     for e in timeline:
                         if e.meta_event is None:
                             continue
-                        if e.meta_event.kind == MetaEventKind.EVALUATED_PAIR and e.meta_event.comp_sequence in comp_seqs:
+                        if (
+                            e.meta_event.kind == MetaEventKind.EVALUATED_PAIR
+                            and e.meta_event.comp_sequence in comp_seqs
+                        ):
                             evaluations.append(e)
                     if not evaluations:
-                        best_cause = FailureCause.search(SearchFailure.INSUFFICIENT_CANDIDATES)
+                        best_cause = FailureCause.search(
+                            SearchFailure.INSUFFICIENT_CANDIDATES
+                        )
                         confidence = 0.7
                         reason = (
                             f"No candidates were even evaluated for {comp_id}. "
                             "Search space failed to generate pairs."
                         )
                     else:
-                        best_cause = FailureCause.representation(ModelFailure.MISSING_EQUIVALENCE_RULE)
+                        best_cause = FailureCause.representation(
+                            ModelFailure.MISSING_EQUIVALENCE_RULE
+                        )
                         confidence = 0.6
                         reason = (
                             f"Evaluated candidates for {comp_id} scored zero, meaning the "
@@ -486,18 +519,27 @@ class BenchmarkFailureDiagnoser:
             elif f.kind == AlignmentFindingKind.CRITICAL_STEP_REMOVED:
                 base_id = f.base_identifier
                 matches = [
-                    a for a in alignment_result.alignments
+                    a
+                    for a in alignment_result.alignments
                     if a.state.is_semantic_match or a.state.is_exact_match
                 ]
-                if any(m.base_event is not None and m.base_event.payload.type_identifier == base_id for m in matches):
-                    best_cause = FailureCause.signal(SignalFailure.OVERSENSITIVE_MATCHER)
+                if any(
+                    m.base_event is not None
+                    and m.base_event.payload.type_identifier == base_id
+                    for m in matches
+                ):
+                    best_cause = FailureCause.signal(
+                        SignalFailure.OVERSENSITIVE_MATCHER
+                    )
                     confidence = 0.9
                     reason = (
                         f"Engine aggressively aligned {base_id} when it should have been "
                         "considered removed."
                     )
                 else:
-                    best_cause = FailureCause.representation(ModelFailure.CANONICALIZATION_MISMATCH)
+                    best_cause = FailureCause.representation(
+                        ModelFailure.CANONICALIZATION_MISMATCH
+                    )
                     confidence = 0.5
                     reason = (
                         "Step was removed, but it was not flagged as critical. Priority "
@@ -528,14 +570,22 @@ class BenchmarkFailureDiagnoser:
                 comp_seqs = comparison_sequences(comp_id)
                 evals = []
                 for e in timeline:
-                    if e.strength_category == AlignmentStrengthCategory.REJECTED or e.meta_event is None:
+                    if (
+                        e.strength_category == AlignmentStrengthCategory.REJECTED
+                        or e.meta_event is None
+                    ):
                         continue
                     meta = e.meta_event
-                    if meta.kind in (MetaEventKind.EVALUATED_PAIR, MetaEventKind.AMBIGUITY_THRESHOLD_MET):
+                    if meta.kind in (
+                        MetaEventKind.EVALUATED_PAIR,
+                        MetaEventKind.AMBIGUITY_THRESHOLD_MET,
+                    ):
                         if meta.comp_sequence in comp_seqs:
                             evals.append(e)
                 if evals:
-                    best_cause = FailureCause.signal(SignalFailure.OVERSENSITIVE_MATCHER)
+                    best_cause = FailureCause.signal(
+                        SignalFailure.OVERSENSITIVE_MATCHER
+                    )
                     confidence = 0.8
                     reason = "Semantic match passed threshold, but ground truth didn't expect it."
                     evidence.extend(e.id for e in evals)
@@ -550,7 +600,10 @@ class BenchmarkFailureDiagnoser:
                 for e in timeline:
                     if e.meta_event is None:
                         continue
-                    if e.meta_event.kind == MetaEventKind.EVALUATED_PAIR and e.meta_event.comp_sequence == new_seq:
+                    if (
+                        e.meta_event.kind == MetaEventKind.EVALUATED_PAIR
+                        and e.meta_event.comp_sequence == new_seq
+                    ):
                         evals.append(e)
                 best_cause = FailureCause.signal(SignalFailure.SCORING_INSTABILITY)
                 confidence = 0.5 if not evals else 0.7
@@ -562,8 +615,10 @@ class BenchmarkFailureDiagnoser:
 
             elif actual.kind == AlignmentFindingKind.AMBIGUITY_DETECTED:
                 ambiguities = [
-                    e for e in timeline
-                    if e.meta_event is not None and e.meta_event.kind == MetaEventKind.AMBIGUITY_THRESHOLD_MET
+                    e
+                    for e in timeline
+                    if e.meta_event is not None
+                    and e.meta_event.kind == MetaEventKind.AMBIGUITY_THRESHOLD_MET
                 ]
                 best_cause = FailureCause.signal(SignalFailure.OVERSENSITIVE_MATCHER)
                 confidence = 0.5 if not ambiguities else 0.65
@@ -607,8 +662,13 @@ def _match_key(finding: AlignmentFinding) -> AlignmentFinding:
     would otherwise turn a correct detection into a simultaneous false positive + false
     negative. Level and strength remain significant; only the free-text reasoning is erased.
     """
-    if finding.kind == AlignmentFindingKind.REGRESSION_RISK and finding.regression_risk is not None:
-        return replace(finding, regression_risk=replace(finding.regression_risk, reasoning=""))
+    if (
+        finding.kind == AlignmentFindingKind.REGRESSION_RISK
+        and finding.regression_risk is not None
+    ):
+        return replace(
+            finding, regression_risk=replace(finding.regression_risk, reasoning="")
+        )
     return finding
 
 
@@ -625,9 +685,13 @@ class BenchmarkRunner:
             context = EnvironmentContext(boundary=boundary, iteration=i)
             report = self.run(dataset, lambda cb, ctx=context: engine_factory(ctx, cb))
             reports.append(report)
-        return BenchmarkStabilityReport(iterations=iterations, reports=reports, boundary=boundary)
+        return BenchmarkStabilityReport(
+            iterations=iterations, reports=reports, boundary=boundary
+        )
 
-    def run(self, dataset: BenchmarkDataset, engine_factory: EngineFactory) -> BenchmarkReport:
+    def run(
+        self, dataset: BenchmarkDataset, engine_factory: EngineFactory
+    ) -> BenchmarkReport:
         case_results: List[BenchmarkCaseResult] = []
         run_times: List[float] = []
 
@@ -670,16 +734,22 @@ class BenchmarkRunner:
                 if match is not None:
                     available_actual.remove(match)
                     true_positives.append(expected.finding)
-                    category_tp[expected.finding.category_name] = category_tp.get(expected.finding.category_name, 0) + 1
+                    category_tp[expected.finding.category_name] = (
+                        category_tp.get(expected.finding.category_name, 0) + 1
+                    )
                     global_tp += 1
                 else:
                     false_negatives.append(expected)
-                    category_fn[expected.finding.category_name] = category_fn.get(expected.finding.category_name, 0) + 1
+                    category_fn[expected.finding.category_name] = (
+                        category_fn.get(expected.finding.category_name, 0) + 1
+                    )
                     global_fn += 1
 
             for actual in available_actual:
                 false_positives.append(actual)
-                category_fp[actual.category_name] = category_fp.get(actual.category_name, 0) + 1
+                category_fp[actual.category_name] = (
+                    category_fp.get(actual.category_name, 0) + 1
+                )
                 global_fp += 1
 
             diagnoses = BenchmarkFailureDiagnoser().diagnose(
@@ -698,7 +768,9 @@ class BenchmarkRunner:
                 )
             elif alignment_result.verification_artifacts is not None:
                 builder = DefaultFormalizationMapBuilder()
-                fidelity = auditor.audit(builder.build(alignment_result.verification_artifacts.evidence))
+                fidelity = auditor.audit(
+                    builder.build(alignment_result.verification_artifacts.evidence)
+                )
             else:
                 fidelity = FidelityVector(0, 0, 0, 0)
 
@@ -718,7 +790,9 @@ class BenchmarkRunner:
             )
 
         sorted_runtimes = sorted(run_times)
-        avg_runtime = sum(sorted_runtimes) / len(sorted_runtimes) if sorted_runtimes else 0.0
+        avg_runtime = (
+            sum(sorted_runtimes) / len(sorted_runtimes) if sorted_runtimes else 0.0
+        )
         if sorted_runtimes:
             p95_index = max(0, math.ceil(len(sorted_runtimes) * 0.95) - 1)
             p95_runtime = sorted_runtimes[min(p95_index, len(sorted_runtimes) - 1)]
@@ -726,7 +800,8 @@ class BenchmarkRunner:
             p95_runtime = 0.0
 
         avg_fidelity = (
-            sum(c.fidelity_score.overall_score for c in case_results) / len(case_results)
+            sum(c.fidelity_score.overall_score for c in case_results)
+            / len(case_results)
             if case_results
             else 1.0
         )
@@ -736,7 +811,9 @@ class BenchmarkRunner:
         stratified: Dict[str, CategoryMetrics] = {}
         for cat in set(category_tp) | set(category_fp) | set(category_fn):
             stratified[cat] = CategoryMetrics(
-                category_tp.get(cat, 0), category_fp.get(cat, 0), category_fn.get(cat, 0)
+                category_tp.get(cat, 0),
+                category_fp.get(cat, 0),
+                category_fn.get(cat, 0),
             )
 
         passed_cases = sum(1 for c in case_results if c.passed)
@@ -781,4 +858,3 @@ class BenchmarkRunner:
             strength_category=category,
             meta_event=meta,
         )
-

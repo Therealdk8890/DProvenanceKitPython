@@ -67,4 +67,3 @@ class CircuitBreaker:
                     self._state = CircuitState.OPEN
             elif self._state == CircuitState.HALF_OPEN:
                 self._state = CircuitState.OPEN
-

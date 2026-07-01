@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import time
-import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Optional
 
@@ -95,7 +94,9 @@ class _NodeBuilder:
 
     def build(self) -> SpanNode:
         built_children = [c.build() for c in self.children]
-        any_child_quarantined = any(c.contains_quarantined_events for c in built_children)
+        any_child_quarantined = any(
+            c.contains_quarantined_events for c in built_children
+        )
         built_children.sort(key=lambda n: n.start_sequence)
         return SpanNode(
             span_id=self.span_id,
@@ -103,12 +104,17 @@ class _NodeBuilder:
             end_sequence=self.end_sequence,
             events=self.events,
             children=built_children,
-            contains_quarantined_events=self.contains_quarantined_events or any_child_quarantined,
+            contains_quarantined_events=self.contains_quarantined_events
+            or any_child_quarantined,
         )
 
 
 class TraceReplayEngine:
-    def __init__(self, committed: List[TraceEvent], quarantined: Optional[List[TraceEvent]] = None):
+    def __init__(
+        self,
+        committed: List[TraceEvent],
+        quarantined: Optional[List[TraceEvent]] = None,
+    ):
         self.committed = committed
         self.quarantined = quarantined if quarantined is not None else []
 
@@ -242,4 +248,3 @@ class TraceReplayEngine:
             manifest=manifest,
             metadata=metadata,
         )
-

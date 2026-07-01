@@ -92,7 +92,10 @@ def test_replay_determinism():
         assert len(snapshot.orphaned_events) == len(baseline.orphaned_events)
         assert snapshot.manifest.total_events == baseline.manifest.total_events
         assert snapshot.manifest.sequence_gaps == baseline.manifest.sequence_gaps
-        assert snapshot.manifest.reconstructed_spans == baseline.manifest.reconstructed_spans
+        assert (
+            snapshot.manifest.reconstructed_spans
+            == baseline.manifest.reconstructed_spans
+        )
 
 
 def test_sequence_gaps():
@@ -110,4 +113,3 @@ def test_sequence_gaps():
     assert (gaps[0].lower_bound, gaps[0].upper_bound) == (0, 0)
     assert (gaps[1].lower_bound, gaps[1].upper_bound) == (3, 4)
     assert (gaps[2].lower_bound, gaps[2].upper_bound) == (7, 9)
-

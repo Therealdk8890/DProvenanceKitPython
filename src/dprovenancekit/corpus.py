@@ -129,14 +129,32 @@ class DProvenanceCorpus:
     def coding_agent_regression() -> Tuple[TraceRun, TraceRun]:
         run_a, run_b = uuid.uuid4(), uuid.uuid4()
         base = [
-            _ev(run_a, "demo_1", 0, "s1", None, AgentEvent.file_io("read", "App.swift")),
-            _ev(run_a, "demo_1", 1, "s1", None, AgentEvent.tool_execution("SearchDocs", "SwiftUI")),
+            _ev(
+                run_a, "demo_1", 0, "s1", None, AgentEvent.file_io("read", "App.swift")
+            ),
+            _ev(
+                run_a,
+                "demo_1",
+                1,
+                "s1",
+                None,
+                AgentEvent.tool_execution("SearchDocs", "SwiftUI"),
+            ),
             _ev(run_a, "demo_1", 2, "s1", None, AgentEvent.decision("ValidateAPI")),
             _ev(run_a, "demo_1", 3, "s1", None, AgentEvent.decision("GenerateFix")),
-            _ev(run_a, "demo_1", 4, "s1", None, AgentEvent.tool_execution("VerifyFix", "build")),
+            _ev(
+                run_a,
+                "demo_1",
+                4,
+                "s1",
+                None,
+                AgentEvent.tool_execution("VerifyFix", "build"),
+            ),
         ]
         comp = [
-            _ev(run_b, "demo_1", 0, "s2", None, AgentEvent.file_io("read", "App.swift")),
+            _ev(
+                run_b, "demo_1", 0, "s2", None, AgentEvent.file_io("read", "App.swift")
+            ),
             _ev(run_b, "demo_1", 1, "s2", None, AgentEvent.decision("GenerateFix")),
         ]
         return (
@@ -149,8 +167,26 @@ class DProvenanceCorpus:
     @staticmethod
     def semantic_evolution() -> Tuple[TraceRun, TraceRun]:
         run_a, run_b = uuid.uuid4(), uuid.uuid4()
-        base = [_ev(run_a, "demo_2", 0, "s1", None, AgentEvent.tool_execution("SearchDocumentation", "REST"))]
-        comp = [_ev(run_b, "demo_2", 0, "s2", None, AgentEvent.tool_execution("LookupAPIDocs", "REST"))]
+        base = [
+            _ev(
+                run_a,
+                "demo_2",
+                0,
+                "s1",
+                None,
+                AgentEvent.tool_execution("SearchDocumentation", "REST"),
+            )
+        ]
+        comp = [
+            _ev(
+                run_b,
+                "demo_2",
+                0,
+                "s2",
+                None,
+                AgentEvent.tool_execution("LookupAPIDocs", "REST"),
+            )
+        ]
         return (
             TraceRun(run_id=run_a, context_id="demo_2", events=base),
             TraceRun(run_id=run_b, context_id="demo_2", events=comp),
@@ -162,13 +198,41 @@ class DProvenanceCorpus:
     def reordering() -> Tuple[TraceRun, TraceRun]:
         run_a, run_b = uuid.uuid4(), uuid.uuid4()
         base = [
-            _ev(run_a, "demo_3", 0, "s1", None, AgentEvent.file_io("read", "Config.swift")),
-            _ev(run_a, "demo_3", 1, "s1", None, AgentEvent.tool_execution("SearchDocs", "Config API")),
+            _ev(
+                run_a,
+                "demo_3",
+                0,
+                "s1",
+                None,
+                AgentEvent.file_io("read", "Config.swift"),
+            ),
+            _ev(
+                run_a,
+                "demo_3",
+                1,
+                "s1",
+                None,
+                AgentEvent.tool_execution("SearchDocs", "Config API"),
+            ),
             _ev(run_a, "demo_3", 2, "s1", None, AgentEvent.decision("GenerateFix")),
         ]
         comp = [
-            _ev(run_b, "demo_3", 0, "s2", None, AgentEvent.tool_execution("SearchDocs", "Config API")),
-            _ev(run_b, "demo_3", 1, "s2", None, AgentEvent.file_io("read", "Config.swift")),
+            _ev(
+                run_b,
+                "demo_3",
+                0,
+                "s2",
+                None,
+                AgentEvent.tool_execution("SearchDocs", "Config API"),
+            ),
+            _ev(
+                run_b,
+                "demo_3",
+                1,
+                "s2",
+                None,
+                AgentEvent.file_io("read", "Config.swift"),
+            ),
             _ev(run_b, "demo_3", 2, "s2", None, AgentEvent.decision("GenerateFix")),
         ]
         return (
@@ -204,12 +268,26 @@ class DProvenanceCorpus:
         run_a, run_b = uuid.uuid4(), uuid.uuid4()
         base = [
             _ev(run_a, "demo_5", 0, "s1", None, AgentEvent.decision("UserLogin")),
-            _ev(run_a, "demo_5", 1, "s1", None, AgentEvent.tool_execution("FetchProfile", "user123")),
+            _ev(
+                run_a,
+                "demo_5",
+                1,
+                "s1",
+                None,
+                AgentEvent.tool_execution("FetchProfile", "user123"),
+            ),
             _ev(run_a, "demo_5", 2, "s1", None, AgentEvent.decision("RenderDashboard")),
         ]
         comp = [
             _ev(run_b, "demo_5", 0, "s2", None, AgentEvent.decision("UserLogin")),
-            _ev(run_b, "demo_5", 1, "s2", None, AgentEvent.tool_execution("FetchCachedProfile", "user123")),
+            _ev(
+                run_b,
+                "demo_5",
+                1,
+                "s2",
+                None,
+                AgentEvent.tool_execution("FetchCachedProfile", "user123"),
+            ),
             _ev(run_b, "demo_5", 2, "s2", None, AgentEvent.decision("RenderDashboard")),
         ]
         return BenchmarkCase(
@@ -218,7 +296,9 @@ class DProvenanceCorpus:
             base_run=TraceRun(run_id=run_a, context_id="demo_5", events=base),
             comparison_run=TraceRun(run_id=run_b, context_id="demo_5", events=comp),
             expected_findings=[
-                ExpectedFinding(AlignmentFinding.semantic_evolution("tool", "tool"), 1.0)
+                ExpectedFinding(
+                    AlignmentFinding.semantic_evolution("tool", "tool"), 1.0
+                )
             ],
         )
 
@@ -228,12 +308,33 @@ class DProvenanceCorpus:
     def noise_injection() -> BenchmarkCase:
         run_a, run_b = uuid.uuid4(), uuid.uuid4()
         base = [
-            _ev(run_a, "demo_6", 0, "s1", None, AgentEvent.tool_execution("FetchProfile", "")),
+            _ev(
+                run_a,
+                "demo_6",
+                0,
+                "s1",
+                None,
+                AgentEvent.tool_execution("FetchProfile", ""),
+            ),
             _ev(run_a, "demo_6", 1, "s1", None, AgentEvent.decision("RenderDashboard")),
         ]
         comp = [
-            _ev(run_b, "demo_6", 0, "s2", None, AgentEvent.tool_execution("FetchProfile", "")),
-            _ev(run_b, "demo_6", 1, "s2", None, AgentEvent.planning("Log.Debug cache miss")),
+            _ev(
+                run_b,
+                "demo_6",
+                0,
+                "s2",
+                None,
+                AgentEvent.tool_execution("FetchProfile", ""),
+            ),
+            _ev(
+                run_b,
+                "demo_6",
+                1,
+                "s2",
+                None,
+                AgentEvent.planning("Log.Debug cache miss"),
+            ),
             _ev(run_b, "demo_6", 2, "s2", None, AgentEvent.decision("RenderDashboard")),
         ]
         return BenchmarkCase(
@@ -249,15 +350,28 @@ class DProvenanceCorpus:
     @staticmethod
     def semantic_drift() -> BenchmarkCase:
         run_a, run_b = uuid.uuid4(), uuid.uuid4()
-        base = [_ev(run_a, "demo_7", 0, "s1", None, AgentEvent.decision("PaymentAuthorization"))]
-        comp = [_ev(run_b, "demo_7", 0, "s2", None, AgentEvent.decision("PaymentPrecheck"))]
+        base = [
+            _ev(
+                run_a,
+                "demo_7",
+                0,
+                "s1",
+                None,
+                AgentEvent.decision("PaymentAuthorization"),
+            )
+        ]
+        comp = [
+            _ev(run_b, "demo_7", 0, "s2", None, AgentEvent.decision("PaymentPrecheck"))
+        ]
         return BenchmarkCase(
             name="Semantic Drift",
             description="Substitution attack (Authorization vs Precheck)",
             base_run=TraceRun(run_id=run_a, context_id="demo_7", events=base),
             comparison_run=TraceRun(run_id=run_b, context_id="demo_7", events=comp),
             expected_findings=[
-                ExpectedFinding(AlignmentFinding.semantic_evolution("decision", "decision"), 0.8)
+                ExpectedFinding(
+                    AlignmentFinding.semantic_evolution("decision", "decision"), 0.8
+                )
             ],
         )
 
@@ -290,11 +404,15 @@ class DProvenanceCorpus:
                     base_run=coding_base,
                     comparison_run=coding_comp,
                     expected_findings=[
-                        ExpectedFinding(AlignmentFinding.critical_step_removed("decision")),
+                        ExpectedFinding(
+                            AlignmentFinding.critical_step_removed("decision")
+                        ),
                         ExpectedFinding(
                             AlignmentFinding.regression_risk_finding(
                                 RegressionRisk(
-                                    RegressionLevel.HIGH, 0.95, "Critical reasoning steps removed: decision"
+                                    RegressionLevel.HIGH,
+                                    0.95,
+                                    "Critical reasoning steps removed: decision",
                                 )
                             )
                         ),
@@ -306,7 +424,9 @@ class DProvenanceCorpus:
                     base_run=sem_base,
                     comparison_run=sem_comp,
                     expected_findings=[
-                        ExpectedFinding(AlignmentFinding.semantic_evolution("tool", "tool"))
+                        ExpectedFinding(
+                            AlignmentFinding.semantic_evolution("tool", "tool")
+                        )
                     ],
                 ),
                 BenchmarkCase(
@@ -315,8 +435,12 @@ class DProvenanceCorpus:
                     base_run=reord_base,
                     comparison_run=reord_comp,
                     expected_findings=[
-                        ExpectedFinding(AlignmentFinding.reordered_execution("fileIO", 0, 1)),
-                        ExpectedFinding(AlignmentFinding.reordered_execution("tool", 1, 0)),
+                        ExpectedFinding(
+                            AlignmentFinding.reordered_execution("fileIO", 0, 1)
+                        ),
+                        ExpectedFinding(
+                            AlignmentFinding.reordered_execution("tool", 1, 0)
+                        ),
                     ],
                 ),
                 BenchmarkCase(
@@ -337,7 +461,9 @@ class DProvenanceCorpus:
     def adversarial_dataset() -> BenchmarkDataset:
         def run(ctx, span, payloads):
             rid = uuid.uuid4()
-            events = [_ev(uuid.uuid4(), ctx, i, span, None, p) for i, p in enumerate(payloads)]
+            events = [
+                _ev(uuid.uuid4(), ctx, i, span, None, p) for i, p in enumerate(payloads)
+            ]
             return TraceRun(run_id=rid, context_id=ctx, events=events)
 
         return BenchmarkDataset(
@@ -347,11 +473,29 @@ class DProvenanceCorpus:
                 BenchmarkCase(
                     name="Dependency Inversion Trap",
                     description="Swaps order of two dependent critical events",
-                    base_run=run("adv_1", "s1", [AgentEvent.decision("CreateCustomer"), AgentEvent.decision("GenerateInvoice")]),
-                    comparison_run=run("adv_1", "s2", [AgentEvent.decision("GenerateInvoice"), AgentEvent.decision("CreateCustomer")]),
+                    base_run=run(
+                        "adv_1",
+                        "s1",
+                        [
+                            AgentEvent.decision("CreateCustomer"),
+                            AgentEvent.decision("GenerateInvoice"),
+                        ],
+                    ),
+                    comparison_run=run(
+                        "adv_1",
+                        "s2",
+                        [
+                            AgentEvent.decision("GenerateInvoice"),
+                            AgentEvent.decision("CreateCustomer"),
+                        ],
+                    ),
                     expected_findings=[
-                        ExpectedFinding(AlignmentFinding.reordered_execution("decision", 0, 1)),
-                        ExpectedFinding(AlignmentFinding.reordered_execution("decision", 1, 0)),
+                        ExpectedFinding(
+                            AlignmentFinding.reordered_execution("decision", 0, 1)
+                        ),
+                        ExpectedFinding(
+                            AlignmentFinding.reordered_execution("decision", 1, 0)
+                        ),
                         ExpectedFinding(
                             AlignmentFinding.regression_risk_finding(
                                 RegressionRisk(
@@ -366,21 +510,43 @@ class DProvenanceCorpus:
                 BenchmarkCase(
                     name="Causal Ambiguity Trap",
                     description="Multiple identical events to confuse bipartite matching",
-                    base_run=run("adv_2", "s1", [AgentEvent.tool_execution("Search", "A"), AgentEvent.tool_execution("Search", "A")]),
-                    comparison_run=run("adv_2", "s2", [AgentEvent.tool_execution("Search", "A"), AgentEvent.tool_execution("Search", "A")]),
+                    base_run=run(
+                        "adv_2",
+                        "s1",
+                        [
+                            AgentEvent.tool_execution("Search", "A"),
+                            AgentEvent.tool_execution("Search", "A"),
+                        ],
+                    ),
+                    comparison_run=run(
+                        "adv_2",
+                        "s2",
+                        [
+                            AgentEvent.tool_execution("Search", "A"),
+                            AgentEvent.tool_execution("Search", "A"),
+                        ],
+                    ),
                     expected_findings=[],
                 ),
                 BenchmarkCase(
                     name="Partial Trace Truncation",
                     description="Trace drops off before final critical decision",
-                    base_run=run("adv_3", "s1", [AgentEvent.decision("Auth"), AgentEvent.decision("Commit")]),
+                    base_run=run(
+                        "adv_3",
+                        "s1",
+                        [AgentEvent.decision("Auth"), AgentEvent.decision("Commit")],
+                    ),
                     comparison_run=run("adv_3", "s2", [AgentEvent.decision("Auth")]),
                     expected_findings=[
-                        ExpectedFinding(AlignmentFinding.critical_step_removed("decision")),
+                        ExpectedFinding(
+                            AlignmentFinding.critical_step_removed("decision")
+                        ),
                         ExpectedFinding(
                             AlignmentFinding.regression_risk_finding(
                                 RegressionRisk(
-                                    RegressionLevel.HIGH, 0.95, "Critical reasoning steps removed: decision"
+                                    RegressionLevel.HIGH,
+                                    0.95,
+                                    "Critical reasoning steps removed: decision",
                                 )
                             )
                         ),
@@ -389,21 +555,43 @@ class DProvenanceCorpus:
                 BenchmarkCase(
                     name="Semantic Substitution Trap",
                     description="False friend equivalence: Cached vs Recompute",
-                    base_run=run("adv_4", "s1", [AgentEvent.tool_execution("FetchUserProfile", "u1")]),
-                    comparison_run=run("adv_4", "s2", [AgentEvent.tool_execution("RecomputeProfileFromEvents", "u1")]),
+                    base_run=run(
+                        "adv_4",
+                        "s1",
+                        [AgentEvent.tool_execution("FetchUserProfile", "u1")],
+                    ),
+                    comparison_run=run(
+                        "adv_4",
+                        "s2",
+                        [AgentEvent.tool_execution("RecomputeProfileFromEvents", "u1")],
+                    ),
                     expected_findings=[
-                        ExpectedFinding(AlignmentFinding.semantic_evolution("tool", "tool"), 0.8)
+                        ExpectedFinding(
+                            AlignmentFinding.semantic_evolution("tool", "tool"), 0.8
+                        )
                     ],
                 ),
                 BenchmarkCase(
                     name="Multi-tool Semantic Collapse",
                     description="Two tools replaced by one overarching tool",
-                    base_run=run("adv_5", "s1", [AgentEvent.tool_execution("GetLocation", ""), AgentEvent.tool_execution("GetWeather", "")]),
-                    comparison_run=run("adv_5", "s2", [AgentEvent.tool_execution("GetLocationAndWeather", "")]),
+                    base_run=run(
+                        "adv_5",
+                        "s1",
+                        [
+                            AgentEvent.tool_execution("GetLocation", ""),
+                            AgentEvent.tool_execution("GetWeather", ""),
+                        ],
+                    ),
+                    comparison_run=run(
+                        "adv_5",
+                        "s2",
+                        [AgentEvent.tool_execution("GetLocationAndWeather", "")],
+                    ),
                     expected_findings=[
-                        ExpectedFinding(AlignmentFinding.semantic_evolution("tool", "tool"), 0.8)
+                        ExpectedFinding(
+                            AlignmentFinding.semantic_evolution("tool", "tool"), 0.8
+                        )
                     ],
                 ),
             ],
         )
-

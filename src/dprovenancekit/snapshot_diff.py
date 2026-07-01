@@ -12,10 +12,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from .replay import ReplayEvent, ReplaySnapshot, SpanNode
-
 
 # MARK: - Change records ---------------------------------------------------------
 
@@ -43,19 +42,26 @@ class SpanChange:
 
     @staticmethod
     def removed(span_id, parent_span_id):
-        return SpanChange(SpanChangeKind.REMOVED, span_id, parent_span_id=parent_span_id)
+        return SpanChange(
+            SpanChangeKind.REMOVED, span_id, parent_span_id=parent_span_id
+        )
 
     @staticmethod
     def reparented(span_id, from_parent, to_parent):
         return SpanChange(
-            SpanChangeKind.REPARENTED, span_id, from_parent=from_parent, to_parent=to_parent
+            SpanChangeKind.REPARENTED,
+            span_id,
+            from_parent=from_parent,
+            to_parent=to_parent,
         )
 
     @staticmethod
     def contamination_changed(span_id, from_, to):
         return SpanChange(
-            SpanChangeKind.CONTAMINATION_CHANGED, span_id,
-            from_contaminated=from_, to_contaminated=to,
+            SpanChangeKind.CONTAMINATION_CHANGED,
+            span_id,
+            from_contaminated=from_,
+            to_contaminated=to,
         )
 
 
@@ -83,7 +89,9 @@ class EventChange:
 
     @staticmethod
     def modified(before, after, span_id):
-        return EventChange(EventChangeKind.MODIFIED, span_id, before=before, after=after)
+        return EventChange(
+            EventChangeKind.MODIFIED, span_id, before=before, after=after
+        )
 
 
 @dataclass(frozen=True)
@@ -192,7 +200,9 @@ class SnapshotDiffEngine:
                 events.extend(root.events)
         return events
 
-    def diff(self, base: ReplaySnapshot, comparison: ReplaySnapshot) -> SnapshotDiffResult:
+    def diff(
+        self, base: ReplaySnapshot, comparison: ReplaySnapshot
+    ) -> SnapshotDiffResult:
         span_changes: List[SpanChange] = []
         event_changes: List[EventChange] = []
         divergences: List[DivergencePoint] = []
@@ -206,7 +216,9 @@ class SnapshotDiffEngine:
             while common_prefix < min_len:
                 b = base_events[common_prefix]
                 c = comp_events[common_prefix]
-                if self._identity(b) == self._identity(c) and self._signature(b) == self._signature(c):
+                if self._identity(b) == self._identity(c) and self._signature(
+                    b
+                ) == self._signature(c):
                     common_prefix += 1
                 else:
                     break
@@ -251,9 +263,14 @@ class SnapshotDiffEngine:
             if base_info is not None:
                 if base_info.parent_id != comp_info.parent_id:
                     span_changes.append(
-                        SpanChange.reparented(span_id, base_info.parent_id, comp_info.parent_id)
+                        SpanChange.reparented(
+                            span_id, base_info.parent_id, comp_info.parent_id
+                        )
                     )
-                if base_info.node.contains_quarantined_events != comp_info.node.contains_quarantined_events:
+                if (
+                    base_info.node.contains_quarantined_events
+                    != comp_info.node.contains_quarantined_events
+                ):
                     span_changes.append(
                         SpanChange.contamination_changed(
                             span_id,
@@ -277,4 +294,3 @@ class SnapshotDiffEngine:
             event_changes=event_changes,
             divergences=divergences,
         )
-

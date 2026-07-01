@@ -19,7 +19,9 @@ class AlignmentFindingsExtractor:
 
         # 1. Regression risk.
         if result.regression_risk.level != RegressionLevel.NONE:
-            findings.append(AlignmentFinding.regression_risk_finding(result.regression_risk))
+            findings.append(
+                AlignmentFinding.regression_risk_finding(result.regression_risk)
+            )
 
         # 2. Per-alignment findings, identified by the stable semantic type_identifier.
         for alignment in result.alignments:
@@ -28,13 +30,17 @@ class AlignmentFindingsExtractor:
                 base = alignment.base_event
                 if base is not None and base.payload.priority == TracePriority.CRITICAL:
                     findings.append(
-                        AlignmentFinding.critical_step_removed(base.payload.type_identifier)
+                        AlignmentFinding.critical_step_removed(
+                            base.payload.type_identifier
+                        )
                     )
             elif kind == AlignmentStateKind.ADDED:
                 comp = alignment.comparison_event
                 if comp is not None and comp.payload.priority == TracePriority.CRITICAL:
                     findings.append(
-                        AlignmentFinding.critical_step_added(comp.payload.type_identifier)
+                        AlignmentFinding.critical_step_added(
+                            comp.payload.type_identifier
+                        )
                     )
             elif kind == AlignmentStateKind.REORDERED:
                 base = alignment.base_event
@@ -67,4 +73,3 @@ class AlignmentFindingsExtractor:
                     )
 
         return findings
-

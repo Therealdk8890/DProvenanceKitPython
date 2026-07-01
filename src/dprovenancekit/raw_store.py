@@ -78,7 +78,17 @@ class RawTraceStore:
             run_id = uuid.uuid4()
 
         events: List[RawTraceEvent] = []
-        for context_id, priority, sequence, engine, span_id, parent_span_id, type_, payload, ts in rows:
+        for (
+            context_id,
+            priority,
+            sequence,
+            engine,
+            span_id,
+            parent_span_id,
+            type_,
+            payload,
+            ts,
+        ) in rows:
             try:
                 payload_json = bytes(payload).decode("utf-8")
             except Exception:
@@ -98,4 +108,3 @@ class RawTraceStore:
                 )
             )
         return events
-

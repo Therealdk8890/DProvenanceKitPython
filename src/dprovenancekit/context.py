@@ -37,4 +37,3 @@ class TraceContext:
     parent_span_id: ContextVar[Optional[str]] = ContextVar(
         "dprov_parent_span_id", default=None
     )
-

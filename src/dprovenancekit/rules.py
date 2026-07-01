@@ -79,10 +79,16 @@ class LoopingRule(AnomalyRule):
         name: optional rule-name override (default ``"looping:<step>"``).
     """
 
-    def __init__(self, step: str, max_repeats: int, *, name: Optional[str] = None) -> None:
+    def __init__(
+        self, step: str, max_repeats: int, *, name: Optional[str] = None
+    ) -> None:
         if not isinstance(step, str) or not step:
             raise ValueError("step must be a non-empty string")
-        if not isinstance(max_repeats, int) or isinstance(max_repeats, bool) or max_repeats < 1:
+        if (
+            not isinstance(max_repeats, int)
+            or isinstance(max_repeats, bool)
+            or max_repeats < 1
+        ):
             raise ValueError("LoopingRule.max_repeats must be an int >= 1")
         self._step = step
         self._max_repeats = max_repeats
@@ -102,7 +108,9 @@ class LoopingRule(AnomalyRule):
 
     @property
     def anomaly_query(self) -> TraceQueryDSL:
-        return TraceQueryDSL().requiring_repeated_step(self._step, self._max_repeats + 1)
+        return TraceQueryDSL().requiring_repeated_step(
+            self._step, self._max_repeats + 1
+        )
 
     def describe(self, run: TraceRun) -> str:
         seen = sum(1 for e in run.events if e.payload.type_identifier == self._step)
@@ -154,4 +162,3 @@ def build_rules(specs: Iterable[Dict[str, Any]]) -> List[AnomalyRule]:
 
 
 __all__ = ["ToolDropRule", "LoopingRule", "build_rule", "build_rules"]
-

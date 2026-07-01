@@ -32,7 +32,12 @@ class FidelityVector:
 
     @property
     def overall_score(self) -> float:
-        return (self.coverage + self.completeness + self.causal_ordering + self.no_hallucinations) / 4.0
+        return (
+            self.coverage
+            + self.completeness
+            + self.causal_ordering
+            + self.no_hallucinations
+        ) / 4.0
 
 
 @dataclass(frozen=True)
@@ -55,11 +60,17 @@ class CoverageInvariant:
     """Every reported match must be grounded in a recorded binding."""
 
     def evaluate(self, m: FormalizationMap) -> float:
-        matched = [s for s in m.interpretations if s.base_id is not None and s.comparison_id is not None]
+        matched = [
+            s
+            for s in m.interpretations
+            if s.base_id is not None and s.comparison_id is not None
+        ]
         if not matched:
             return 1.0
         bound_pairs = {f"{b.base_id}{_SEP}{b.comparison_id}" for b in m.bindings}
-        grounded = sum(1 for s in matched if f"{s.base_id}{_SEP}{s.comparison_id}" in bound_pairs)
+        grounded = sum(
+            1 for s in matched if f"{s.base_id}{_SEP}{s.comparison_id}" in bound_pairs
+        )
         return grounded / len(matched)
 
 
@@ -67,11 +78,19 @@ class CompletenessInvariant:
     """Every reported alignment must have been evaluated by the semantics layer."""
 
     def evaluate(self, m: FormalizationMap) -> float:
-        matched = [s for s in m.interpretations if s.base_id is not None and s.comparison_id is not None]
+        matched = [
+            s
+            for s in m.interpretations
+            if s.base_id is not None and s.comparison_id is not None
+        ]
         if not matched:
             return 1.0
         decision_pairs = {f"{d.lhs}{_SEP}{d.rhs}" for d in m.decisions}
-        evaluated = sum(1 for s in matched if f"{s.base_id}{_SEP}{s.comparison_id}" in decision_pairs)
+        evaluated = sum(
+            1
+            for s in matched
+            if f"{s.base_id}{_SEP}{s.comparison_id}" in decision_pairs
+        )
         return evaluated / len(matched)
 
 
@@ -97,7 +116,11 @@ class CausalOrderingInvariant:
                     out_of_order.add(i)
                     out_of_order.add(j)
 
-        unreported = sum(1 for idx in out_of_order if not matched[idx].output_state.startswith("reordered"))
+        unreported = sum(
+            1
+            for idx in out_of_order
+            if not matched[idx].output_state.startswith("reordered")
+        )
         return 1.0 - (unreported / len(matched))
 
 
@@ -106,7 +129,11 @@ class NoHallucinationInvariant:
     Ambiguous verdicts are exempt — ambiguity is an honest 'not confident' outcome."""
 
     def evaluate(self, m: FormalizationMap) -> float:
-        matched = [s for s in m.interpretations if s.base_id is not None and s.comparison_id is not None]
+        matched = [
+            s
+            for s in m.interpretations
+            if s.base_id is not None and s.comparison_id is not None
+        ]
         if not matched:
             return 1.0
         equivalent_by_pair: Dict[str, bool] = {}
@@ -116,13 +143,18 @@ class NoHallucinationInvariant:
         def supported(step) -> bool:
             if step.output_state.startswith("ambiguous"):
                 return True
-            return equivalent_by_pair.get(f"{step.base_id}{_SEP}{step.comparison_id}") is True
+            return (
+                equivalent_by_pair.get(f"{step.base_id}{_SEP}{step.comparison_id}")
+                is True
+            )
 
         return sum(1 for s in matched if supported(s)) / len(matched)
 
 
 class ExplainabilityAuditor:
-    def __init__(self, coverage=None, completeness=None, ordering=None, hallucination=None):
+    def __init__(
+        self, coverage=None, completeness=None, ordering=None, hallucination=None
+    ):
         self._coverage = coverage or CoverageInvariant()
         self._completeness = completeness or CompletenessInvariant()
         self._ordering = ordering or CausalOrderingInvariant()
@@ -146,7 +178,9 @@ class TraceGraphValidationError(Exception):
 
 class StructuralCycleDetected(TraceGraphValidationError):
     def __init__(self, path: List[uuid.UUID]):
-        super().__init__("Structural cycle detected in path: " + " -> ".join(str(p) for p in path))
+        super().__init__(
+            "Structural cycle detected in path: " + " -> ".join(str(p) for p in path)
+        )
         self.path = path
 
 
@@ -167,7 +201,8 @@ class TraceGraphValidator:
 
         # 2. Cycle detection on causal edges (derivedFrom, generatedFrom).
         causal = [
-            e for e in graph.edges
+            e
+            for e in graph.edges
             if e.type in (TraceEdgeType.DERIVED_FROM, TraceEdgeType.GENERATED_FROM)
         ]
         adjacency: Dict[uuid.UUID, List[uuid.UUID]] = {}
@@ -197,7 +232,9 @@ class TraceGraphValidator:
 
 
 class TraceGraphProvenanceValidator:
-    def __init__(self, generated_section_identifier: str, fact_extracted_identifier: str):
+    def __init__(
+        self, generated_section_identifier: str, fact_extracted_identifier: str
+    ):
         self.generated_section_identifier = generated_section_identifier
         self.fact_extracted_identifier = fact_extracted_identifier
 
@@ -205,7 +242,8 @@ class TraceGraphProvenanceValidator:
         anomalies: List[str] = []
 
         generated_sections = [
-            n for n in graph.nodes.values()
+            n
+            for n in graph.nodes.values()
             if n.payload.type_identifier == self.generated_section_identifier
         ]
         for section in generated_sections:
@@ -217,7 +255,8 @@ class TraceGraphProvenanceValidator:
                 )
 
         fact_nodes = [
-            n for n in graph.nodes.values()
+            n
+            for n in graph.nodes.values()
             if n.payload.type_identifier == self.fact_extracted_identifier
         ]
         for fact in fact_nodes:
@@ -229,4 +268,3 @@ class TraceGraphProvenanceValidator:
                 )
 
         return anomalies
-

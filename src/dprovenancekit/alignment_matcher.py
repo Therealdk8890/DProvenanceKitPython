@@ -11,7 +11,9 @@ class DefaultTraceMatcher:
     def __init__(self, configuration):
         self.configuration = configuration
 
-    def match(self, base, comparison, evidence_collector: EvidenceCollector) -> List[AlignmentBinding]:
+    def match(
+        self, base, comparison, evidence_collector: EvidenceCollector
+    ) -> List[AlignmentBinding]:
         config = self.configuration
 
         # Score every candidate pair that clears the (per-base) ambiguity threshold, then
@@ -19,7 +21,9 @@ class DefaultTraceMatcher:
         # binding over a weaker incidental one.
         candidates = []  # (base_idx, comp_idx, score)
         for i, b_event in enumerate(base):
-            threshold = config.equivalence_evaluator.ambiguity_threshold(b_event.payload)
+            threshold = config.equivalence_evaluator.ambiguity_threshold(
+                b_event.payload
+            )
             for j, c_event in enumerate(comparison):
                 score, _ = config.score_match(b_event, c_event)
                 if score >= threshold:
@@ -55,4 +59,3 @@ class DefaultTraceMatcher:
             )
 
         return bindings
-

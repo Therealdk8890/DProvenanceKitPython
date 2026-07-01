@@ -63,6 +63,7 @@ def _cases(name: str):
 
 # ── 1. Canonical payload encoding ──────────────────────────────────────────────
 
+
 @pytest.mark.parametrize("desc, case", _cases("payload_encoding.json"))
 def test_payload_encoding(desc, case):
     event = ConformanceEvent.from_spec(case["event"])
@@ -72,6 +73,7 @@ def test_payload_encoding(desc, case):
 
 
 # ── 2. Run fingerprint ─────────────────────────────────────────────────────────
+
 
 @pytest.mark.parametrize("desc, case", _cases("run_fingerprint.json"))
 def test_run_fingerprint(desc, case):
@@ -92,6 +94,7 @@ def test_run_fingerprint(desc, case):
 
 
 # ── 3. Query semantics (both backends must agree with the vector) ──────────────
+
 
 def _seed_in_memory(corpus):
     store = InMemoryTraceStore()
@@ -132,6 +135,7 @@ def test_query_semantics(backend, desc, case):
 
 
 # ── 4. Profile hash ────────────────────────────────────────────────────────────
+
 
 def _profile_from_wire(d: dict) -> AlignmentProfile:
     return AlignmentProfile(
@@ -185,4 +189,3 @@ def test_alignment_verdict(desc, case):
     assert result.regression_risk.level.value == expected["regression_level"]
     assert round(result.regression_risk.strength, 6) == expected["regression_strength"]
     assert [a.state.kind.value for a in ordered] == expected["alignment_state_kinds"]
-

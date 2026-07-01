@@ -25,7 +25,11 @@ class FCEvent(TraceableEvent):
 
     @property
     def priority(self) -> TracePriority:
-        return TracePriority.CRITICAL if self.kind in ("verified", "decided") else TracePriority.STRUCTURAL
+        return (
+            TracePriority.CRITICAL
+            if self.kind in ("verified", "decided")
+            else TracePriority.STRUCTURAL
+        )
 
     def to_dict(self) -> dict:
         return {"kind": self.kind, "detail": self.detail}
@@ -43,7 +47,9 @@ def test_report_pass_renders_standalone_html():
     store = InMemoryTraceStore()
     g = _build(store, "golden", ["retrieved", "verified", "decided"])
     c = _build(store, "candidate", ["retrieved", "verified", "decided"])
-    html = render_report_html(RegressionGate().check(g, c), golden_label="main@abc", candidate_label="PR #42")
+    html = render_report_html(
+        RegressionGate().check(g, c), golden_label="main@abc", candidate_label="PR #42"
+    )
 
     assert html.startswith("<!doctype html>")
     assert html.rstrip().endswith("</html>")
@@ -55,7 +61,9 @@ def test_report_pass_renders_standalone_html():
 def test_report_fail_lists_removed_step():
     store = InMemoryTraceStore()
     g = _build(store, "golden", ["retrieved", "verified", "decided"])
-    c = _build(store, "regressed", ["retrieved", "decided"])  # dropped the CRITICAL verify
+    c = _build(
+        store, "regressed", ["retrieved", "decided"]
+    )  # dropped the CRITICAL verify
     html = render_report_html(RegressionGate().check(g, c))
 
     assert "REGRESSION" in html
@@ -71,4 +79,3 @@ def test_report_escapes_step_names():
 
     assert "<script>x</script>" not in html
     assert "&lt;script&gt;x&lt;/script&gt;" in html
-

@@ -32,9 +32,14 @@ def _get_run(store, run):
 
 
 def test_event_roundtrip_and_canonical_encoding():
-    ev = TracedEvent.make("search.end", TracePriority.STRUCTURAL, {"name": "search", "result": "3"})
+    ev = TracedEvent.make(
+        "search.end", TracePriority.STRUCTURAL, {"name": "search", "result": "3"}
+    )
     assert ev.type_identifier == "search.end"
-    assert ev.encode().decode() == '{"name": "search", "priority": 2, "result": "3", "type": "search.end"}'
+    assert (
+        ev.encode().decode()
+        == '{"name": "search", "priority": 2, "result": "3", "type": "search.end"}'
+    )
     assert TracedEvent.decode(ev.encode()) == ev
 
 
@@ -298,7 +303,10 @@ def test_decorator_is_transparent_outside_a_run():
     store = InMemoryTraceStore()
     with traced_run(store, context_id="c") as run:
         f(1)
-    assert [e.payload.type_identifier for e in _get_run(store, run).events] == ["f.start", "f.end"]
+    assert [e.payload.type_identifier for e in _get_run(store, run).events] == [
+        "f.start",
+        "f.end",
+    ]
 
 
 def test_record_event_outside_run_is_noop():
@@ -334,7 +342,9 @@ def test_async_function_is_traced():
 
 def _fingerprint_after(store: SQLiteTraceStore, run_id: uuid.UUID) -> str:
     store.flush()
-    rows = store._db.query("SELECT fingerprint FROM runs WHERE run_id = ?", (str(run_id),))
+    rows = store._db.query(
+        "SELECT fingerprint FROM runs WHERE run_id = ?", (str(run_id),)
+    )
     return rows[0][0]
 
 
@@ -350,11 +360,14 @@ def test_same_path_shares_fingerprint_different_path_differs():
     with tempfile.TemporaryDirectory() as tmp:
         store = SQLiteTraceStore(TracedEvent, f"{tmp}/t.sqlite", start_writer=False)
         with traced_run(store, context_id="r1") as r1:
-            a(); b()
+            a()
+            b()
         with traced_run(store, context_id="r2") as r2:
-            a(); b()
+            a()
+            b()
         with traced_run(store, context_id="r3") as r3:
-            b(); a()  # reordered
+            b()
+            a()  # reordered
 
         store.flush()
         fp1 = _fingerprint_after(store, r1.run_id)
@@ -363,4 +376,3 @@ def test_same_path_shares_fingerprint_different_path_differs():
 
     assert fp1 == fp2
     assert fp1 != fp3
-

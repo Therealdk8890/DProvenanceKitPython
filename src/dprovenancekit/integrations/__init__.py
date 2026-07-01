@@ -14,4 +14,3 @@ The LangChain adapter requires ``langchain-core`` (``pip install dprovenancekit[
 """
 
 from __future__ import annotations
-

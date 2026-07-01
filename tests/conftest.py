@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 import sys
-import tempfile
 import uuid
 from dataclasses import dataclass
 
@@ -68,4 +67,3 @@ class TestEvent(TraceableEvent):
 def temp_db_path(tmp_path):
     """An absolute path to a unique, not-yet-created SQLite file under pytest's tmp dir."""
     return str(tmp_path / (uuid.uuid4().hex + ".sqlite"))
-

@@ -25,15 +25,26 @@ from conftest import TestEvent
 
 def _node(payload, id):
     return TraceEvent(
-        id=id, run_id=uuid.uuid4(), context_id="test", engine_name="test",
-        schema_version=1, sequence=0, span_id=None, parent_span_id=None, payload=payload,
+        id=id,
+        run_id=uuid.uuid4(),
+        context_id="test",
+        engine_name="test",
+        schema_version=1,
+        sequence=0,
+        span_id=None,
+        parent_span_id=None,
+        payload=payload,
     )
 
 
 def test_structural_validator_acyclic_graph_passes():
     a, b, c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     graph = TraceGraph(
-        nodes={a: _node(TestEvent.process_started(), a), b: _node(TestEvent.step_completed(1), b), c: _node(TestEvent.process_finished(), c)},
+        nodes={
+            a: _node(TestEvent.process_started(), a),
+            b: _node(TestEvent.step_completed(1), b),
+            c: _node(TestEvent.process_finished(), c),
+        },
         edges=[
             TraceEdge(a, b, TraceEdgeType.DERIVED_FROM),
             TraceEdge(b, c, TraceEdgeType.GENERATED_FROM),
@@ -44,7 +55,10 @@ def test_structural_validator_acyclic_graph_passes():
 
 def test_structural_validator_self_edge_throws():
     a = uuid.uuid4()
-    graph = TraceGraph(nodes={a: _node(TestEvent.process_started(), a)}, edges=[TraceEdge(a, a, TraceEdgeType.DERIVED_FROM)])
+    graph = TraceGraph(
+        nodes={a: _node(TestEvent.process_started(), a)},
+        edges=[TraceEdge(a, a, TraceEdgeType.DERIVED_FROM)],
+    )
     with pytest.raises(SelfReferentialEdge):
         TraceGraphValidator().validate_structural_integrity(graph)
 
@@ -52,8 +66,14 @@ def test_structural_validator_self_edge_throws():
 def test_structural_validator_cycle_throws():
     a, b = uuid.uuid4(), uuid.uuid4()
     graph = TraceGraph(
-        nodes={a: _node(TestEvent.process_started(), a), b: _node(TestEvent.process_finished(), b)},
-        edges=[TraceEdge(a, b, TraceEdgeType.DERIVED_FROM), TraceEdge(b, a, TraceEdgeType.DERIVED_FROM)],
+        nodes={
+            a: _node(TestEvent.process_started(), a),
+            b: _node(TestEvent.process_finished(), b),
+        },
+        edges=[
+            TraceEdge(a, b, TraceEdgeType.DERIVED_FROM),
+            TraceEdge(b, a, TraceEdgeType.DERIVED_FROM),
+        ],
     )
     with pytest.raises(StructuralCycleDetected):
         TraceGraphValidator().validate_structural_integrity(graph)
@@ -62,11 +82,15 @@ def test_structural_validator_cycle_throws():
 def test_provenance_validator_flags_orphan_section_and_unused_fact():
     fact, section = uuid.uuid4(), uuid.uuid4()
     graph = TraceGraph(
-        nodes={fact: _node(TestEvent.process_started(), fact), section: _node(TestEvent.process_finished(), section)},
+        nodes={
+            fact: _node(TestEvent.process_started(), fact),
+            section: _node(TestEvent.process_finished(), section),
+        },
         edges=[],
     )
     validator = TraceGraphProvenanceValidator(
-        generated_section_identifier="processFinished", fact_extracted_identifier="processStarted"
+        generated_section_identifier="processFinished",
+        fact_extracted_identifier="processStarted",
     )
     anomalies = validator.detect_anomalies(graph)
     assert len(anomalies) == 2
@@ -77,11 +101,15 @@ def test_provenance_validator_flags_orphan_section_and_unused_fact():
 def test_provenance_validator_clean_graph_no_anomalies():
     fact, section = uuid.uuid4(), uuid.uuid4()
     graph = TraceGraph(
-        nodes={fact: _node(TestEvent.process_started(), fact), section: _node(TestEvent.process_finished(), section)},
+        nodes={
+            fact: _node(TestEvent.process_started(), fact),
+            section: _node(TestEvent.process_finished(), section),
+        },
         edges=[TraceEdge(fact, section, TraceEdgeType.INFORMED)],
     )
     validator = TraceGraphProvenanceValidator(
-        generated_section_identifier="processFinished", fact_extracted_identifier="processStarted"
+        generated_section_identifier="processFinished",
+        fact_extracted_identifier="processStarted",
     )
     assert validator.detect_anomalies(graph) == []
 
@@ -163,4 +191,3 @@ def test_trace_explanation_formatting():
     assert "fact: amount owed" in text
     assert "Derived From:" in text
     assert "evidence: invoice" in text
-

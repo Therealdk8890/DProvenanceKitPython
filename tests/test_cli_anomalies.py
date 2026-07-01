@@ -14,7 +14,9 @@ from dprovenancekit.event import AnyTraceableEvent
 
 def _event(kind):
     return AnyTraceableEvent(
-        type_identifier_value=kind, priority_value=int(TracePriority.STRUCTURAL), raw_json="{}"
+        type_identifier_value=kind,
+        priority_value=int(TracePriority.STRUCTURAL),
+        raw_json="{}",
     )
 
 
@@ -55,7 +57,9 @@ def db_and_rules(tmp_path):
 
 def test_anomalies_found_for_single_run(db_and_rules, capsys):
     db, rules, ids = db_and_rules
-    code = main(["anomalies", "--db", db, "--rules", rules, "--run", str(ids["bad"]), "--json"])
+    code = main(
+        ["anomalies", "--db", db, "--rules", rules, "--run", str(ids["bad"]), "--json"]
+    )
     payload = json.loads(capsys.readouterr().out)
     assert code == 1
     assert payload["count"] == 2
@@ -65,7 +69,18 @@ def test_anomalies_found_for_single_run(db_and_rules, capsys):
 
 def test_anomalies_none_for_clean_run(db_and_rules, capsys):
     db, rules, ids = db_and_rules
-    code = main(["anomalies", "--db", db, "--rules", rules, "--run", str(ids["clean"]), "--json"])
+    code = main(
+        [
+            "anomalies",
+            "--db",
+            db,
+            "--rules",
+            rules,
+            "--run",
+            str(ids["clean"]),
+            "--json",
+        ]
+    )
     payload = json.loads(capsys.readouterr().out)
     assert code == 0
     assert payload["count"] == 0
@@ -90,7 +105,9 @@ def test_anomalies_clean_run_text_output(db_and_rules, capsys):
 def test_anomalies_bad_config_is_usage_error(db_and_rules, tmp_path, capsys):
     db, _, _ = db_and_rules
     bad = tmp_path / "bad.json"
-    bad.write_text(json.dumps({"rules": [{"type": "does_not_exist"}]}), encoding="utf-8")
+    bad.write_text(
+        json.dumps({"rules": [{"type": "does_not_exist"}]}), encoding="utf-8"
+    )
     code = main(["anomalies", "--db", db, "--rules", str(bad)])
     assert code == 2
     assert "unknown rule type" in capsys.readouterr().err
@@ -121,8 +138,9 @@ def test_anomalies_unopenable_db_exits_2(tmp_path, db_and_rules, capsys):
 def test_anomalies_bad_run_uuid_does_not_create_db_file(tmp_path, db_and_rules):
     db, rules, _ = db_and_rules
     fresh = tmp_path / "should-not-exist.sqlite"
-    code = main(["anomalies", "--db", str(fresh), "--rules", rules, "--run", "not-a-uuid"])
+    code = main(
+        ["anomalies", "--db", str(fresh), "--rules", rules, "--run", "not-a-uuid"]
+    )
     assert code == 2
     # The bad-UUID error is reported before the store is opened, so no DB file is created.
     assert not fresh.exists()
-

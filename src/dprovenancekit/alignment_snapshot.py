@@ -44,7 +44,9 @@ class AlignmentSnapshotValidator:
         return AlignmentSnapshot(
             profile_hash=result.profile_hash,
             engine_version=result.engine_version,
-            output_alignments_hash=AlignmentSnapshotValidator.compute_alignments_hash(nodes),
+            output_alignments_hash=AlignmentSnapshotValidator.compute_alignments_hash(
+                nodes
+            ),
         )
 
     def validate(self, result, snapshot: AlignmentSnapshot) -> bool:
@@ -52,11 +54,12 @@ class AlignmentSnapshotValidator:
         actual_hash = AlignmentSnapshotValidator.compute_alignments_hash(nodes)
         if actual_hash != snapshot.output_alignments_hash:
             if self.tolerance_mode == DriftToleranceMode.STRICT:
-                raise SnapshotValidationError(snapshot.output_alignments_hash, actual_hash)
+                raise SnapshotValidationError(
+                    snapshot.output_alignments_hash, actual_hash
+                )
             print(
                 f"⚠️ [AlignmentSnapshotValidator] Drift detected. "
                 f"Expected {snapshot.output_alignments_hash}, got {actual_hash}"
             )
             return False
         return True
-

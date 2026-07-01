@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass
 
 import pytest
@@ -99,7 +98,11 @@ def test_identical_runs_pass():
     assert report.candidate_fingerprint == run_fingerprint(candidate)
     # The PASS-side rendering of summary().
     summary = report.summary()
-    assert "PASS" in summary and "match" in summary and "none (all exact matches)" in summary
+    assert (
+        "PASS" in summary
+        and "match" in summary
+        and "none (all exact matches)" in summary
+    )
     # The instance method returns the (passing) report; the module-level fn does too.
     assert RegressionGate().assert_no_regression(golden, candidate).passed
     assert assert_no_regression(golden, candidate).passed
@@ -173,7 +176,9 @@ def test_lenient_still_catches_critical_removal_unless_level_raised():
     regressed = build_run(store, "regressed", skip_verify=True)
 
     # Tolerating divergent steps does NOT excuse a HIGH-severity critical removal.
-    gate = RegressionGate(allow_divergent_steps=True, max_regression_level=RegressionLevel.NONE)
+    gate = RegressionGate(
+        allow_divergent_steps=True, max_regression_level=RegressionLevel.NONE
+    )
     assert not gate.check(golden, regressed).passed
 
     # Explicitly raising the severity ceiling to HIGH lets it pass.
@@ -222,7 +227,9 @@ def test_custom_minimum_priority_is_honored():
     # Default floor (STRUCTURAL) sees the structural change → fail.
     assert not RegressionGate().check(golden, candidate).passed
     # Raising the floor to CRITICAL filters that step out → pass.
-    lifted = RegressionGate(minimum_priority=TracePriority.CRITICAL).check(golden, candidate)
+    lifted = RegressionGate(minimum_priority=TracePriority.CRITICAL).check(
+        golden, candidate
+    )
     assert lifted.passed
 
 
@@ -281,4 +288,3 @@ def test_run_fingerprint_tracks_structural_path():
 
     assert run_fingerprint(golden) == run_fingerprint(same)
     assert run_fingerprint(golden) != run_fingerprint(skipped)
-

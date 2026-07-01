@@ -13,8 +13,9 @@ import runpy
 
 
 def test_regression_example_runs_and_self_asserts(capsys):
-    path = os.path.join(os.path.dirname(__file__), "..", "examples", "regression_testing.py")
+    path = os.path.join(
+        os.path.dirname(__file__), "..", "examples", "regression_testing.py"
+    )
     runpy.run_path(path, run_name="__main__")
     out = capsys.readouterr().out
     assert "HIGH regression" in out
-

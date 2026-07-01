@@ -49,9 +49,7 @@ class HeuristicEvidence:
 
 def sort_evidence(evidence: List[HeuristicEvidence]) -> List[HeuristicEvidence]:
     """Canonical ordering: by score contribution desc, then category value."""
-    return sorted(
-        evidence, key=lambda e: (-e.score_contribution, e.category.value)
-    )
+    return sorted(evidence, key=lambda e: (-e.score_contribution, e.category.value))
 
 
 @dataclass(frozen=True)
@@ -62,11 +60,15 @@ class AlignmentExplanation:
 
     def __post_init__(self):
         # Enforce deterministic sorting by contract.
-        object.__setattr__(self, "ranked_evidence", sort_evidence(list(self.ranked_evidence)))
+        object.__setattr__(
+            self, "ranked_evidence", sort_evidence(list(self.ranked_evidence))
+        )
 
     @staticmethod
     def none() -> "AlignmentExplanation":
-        return AlignmentExplanation(primary_reason="No match", final_score=0.0, ranked_evidence=[])
+        return AlignmentExplanation(
+            primary_reason="No match", final_score=0.0, ranked_evidence=[]
+        )
 
 
 class RegressionLevel(Enum):
@@ -194,13 +196,15 @@ class AlignmentFinding:
     @staticmethod
     def critical_step_removed(base_event_identifier):
         return AlignmentFinding(
-            AlignmentFindingKind.CRITICAL_STEP_REMOVED, base_identifier=base_event_identifier
+            AlignmentFindingKind.CRITICAL_STEP_REMOVED,
+            base_identifier=base_event_identifier,
         )
 
     @staticmethod
     def critical_step_added(comp_event_identifier):
         return AlignmentFinding(
-            AlignmentFindingKind.CRITICAL_STEP_ADDED, comp_identifier=comp_event_identifier
+            AlignmentFindingKind.CRITICAL_STEP_ADDED,
+            comp_identifier=comp_event_identifier,
         )
 
     @staticmethod
@@ -230,7 +234,9 @@ class AlignmentFinding:
 
     @staticmethod
     def regression_risk_finding(risk: RegressionRisk):
-        return AlignmentFinding(AlignmentFindingKind.REGRESSION_RISK, regression_risk=risk)
+        return AlignmentFinding(
+            AlignmentFindingKind.REGRESSION_RISK, regression_risk=risk
+        )
 
     @property
     def category_name(self) -> str:
@@ -268,4 +274,3 @@ class TraceAlignmentResult:
         from .alignment_render import render_models as _render
 
         return _render(self)
-

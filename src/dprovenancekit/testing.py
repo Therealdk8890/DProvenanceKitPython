@@ -78,7 +78,11 @@ def run_fingerprint(run: TraceRun) -> str:
     """
     digest = hashlib.sha1()
     for event in sorted(run.events, key=lambda e: e.sequence):
-        digest.update(f"{event.payload.type_identifier}:{event.engine_name or ''}|".encode("utf-8"))
+        digest.update(
+            f"{event.payload.type_identifier}:{event.engine_name or ''}|".encode(
+                "utf-8"
+            )
+        )
     return digest.hexdigest()
 
 
@@ -145,7 +149,9 @@ class RegressionReport:
             lines.append("  per-step changes: none (all exact matches)")
         if accepted:
             # semanticMatch is an evaluator-accepted equivalence, not a divergence.
-            lines.append(f"  accepted as equivalent (semanticMatch): {', '.join(accepted)}")
+            lines.append(
+                f"  accepted as equivalent (semanticMatch): {', '.join(accepted)}"
+            )
         if self.reasoning:
             lines.append(f"  engine: {self.reasoning}")
         return "\n".join(lines)
@@ -195,7 +201,9 @@ class RegressionGate:
         self._max_regression_level = max_regression_level
         self._allow_divergent_steps = allow_divergent_steps
         self._engine = TraceAlignmentEngine(
-            AlignmentConfiguration(profile=self._profile, equivalence_evaluator=self._evaluator)
+            AlignmentConfiguration(
+                profile=self._profile, equivalence_evaluator=self._evaluator
+            )
         )
 
     def check(self, golden: TraceRun, candidate: TraceRun) -> RegressionReport:
@@ -215,9 +223,7 @@ class RegressionGate:
 
         risk = result.regression_risk
         level_ok = _LEVEL_ORDER[risk.level] <= _LEVEL_ORDER[self._max_regression_level]
-        has_divergent = any(
-            kind.value in steps_by_change for kind in _DIVERGENT_KINDS
-        )
+        has_divergent = any(kind.value in steps_by_change for kind in _DIVERGENT_KINDS)
         steps_ok = self._allow_divergent_steps or not has_divergent
         passed = level_ok and steps_ok
 
@@ -236,7 +242,9 @@ class RegressionGate:
             allow_divergent_steps=self._allow_divergent_steps,
         )
 
-    def assert_no_regression(self, golden: TraceRun, candidate: TraceRun) -> RegressionReport:
+    def assert_no_regression(
+        self, golden: TraceRun, candidate: TraceRun
+    ) -> RegressionReport:
         """Check and raise :class:`RegressionError` if the candidate regressed.
 
         Returns the (passing) report so callers can make further assertions on it.
@@ -275,4 +283,3 @@ __all__ = [
     "exact_equality_evaluator",
     "run_fingerprint",
 ]
-

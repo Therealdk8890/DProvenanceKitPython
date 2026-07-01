@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import tempfile
 import uuid
-from typing import List, Optional
 
 import pytest
 
@@ -29,7 +28,6 @@ from dprovenancekit.integrations.langchain import (
     LCEventType,
 )
 
-
 # ── Minimal stand-ins for the LangChain objects the callbacks receive ───────────
 
 
@@ -45,7 +43,11 @@ class _FakeLLMResult:
         self.generations = [[_FakeGeneration(text)]]
         self.llm_output = {
             "model_name": model_name,
-            "token_usage": {"prompt_tokens": 5, "completion_tokens": 7, "total_tokens": 12},
+            "token_usage": {
+                "prompt_tokens": 5,
+                "completion_tokens": 7,
+                "total_tokens": 12,
+            },
         }
 
 
@@ -75,18 +77,27 @@ def _drive_rag_run(handler: DProvenanceCallbackHandler):
     Returns the (root, retriever, llm) LangChain run_ids used.
     """
     root, retr, llm = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-    handler.on_chain_start({"name": "RagChain"}, {"question": "q"}, run_id=root, parent_run_id=None)
-    handler.on_retriever_start(
-        {"id": ["langchain", "retrievers", "MyRetriever"]}, "q", run_id=retr, parent_run_id=root
+    handler.on_chain_start(
+        {"name": "RagChain"}, {"question": "q"}, run_id=root, parent_run_id=None
     )
-    handler.on_retriever_end([object(), object(), object()], run_id=retr, parent_run_id=root)
+    handler.on_retriever_start(
+        {"id": ["langchain", "retrievers", "MyRetriever"]},
+        "q",
+        run_id=retr,
+        parent_run_id=root,
+    )
+    handler.on_retriever_end(
+        [object(), object(), object()], run_id=retr, parent_run_id=root
+    )
     handler.on_llm_start(
         {"id": ["langchain", "chat_models", "openai", "ChatOpenAI"]},
         ["Context: ...\nQ: q"],
         run_id=llm,
         parent_run_id=root,
     )
-    handler.on_llm_end(_FakeLLMResult(text="the answer"), run_id=llm, parent_run_id=root)
+    handler.on_llm_end(
+        _FakeLLMResult(text="the answer"), run_id=llm, parent_run_id=root
+    )
     handler.on_chain_end({"answer": "the answer"}, run_id=root, parent_run_id=None)
     return root, retr, llm
 
@@ -96,20 +107,29 @@ def _drive_rag_run(handler: DProvenanceCallbackHandler):
 
 def test_event_roundtrip_and_canonical_encoding():
     ev = LangChainTraceEvent.make(
-        LCEventType.TOOL_STARTED, TracePriority.STRUCTURAL, {"tool": "search", "input": "x"}
+        LCEventType.TOOL_STARTED,
+        TracePriority.STRUCTURAL,
+        {"tool": "search", "input": "x"},
     )
     assert ev.type_identifier == "toolStarted"
     assert ev.priority is TracePriority.STRUCTURAL
     assert ev.attributes == {"tool": "search", "input": "x"}
     # Canonical (sorted-key) encoding, per Trace Spec v1 section 2.
-    assert ev.encode().decode() == '{"input": "x", "priority": 2, "tool": "search", "type": "toolStarted"}'
+    assert (
+        ev.encode().decode()
+        == '{"input": "x", "priority": 2, "tool": "search", "type": "toolStarted"}'
+    )
     # Round-trips back to an equal event.
     assert LangChainTraceEvent.decode(ev.encode()) == ev
 
 
 def test_event_equality_is_attribute_order_independent():
-    a = LangChainTraceEvent.make(LCEventType.LLM_STARTED, TracePriority.STRUCTURAL, {"a": 1, "b": 2})
-    b = LangChainTraceEvent.make(LCEventType.LLM_STARTED, TracePriority.STRUCTURAL, {"b": 2, "a": 1})
+    a = LangChainTraceEvent.make(
+        LCEventType.LLM_STARTED, TracePriority.STRUCTURAL, {"a": 1, "b": 2}
+    )
+    b = LangChainTraceEvent.make(
+        LCEventType.LLM_STARTED, TracePriority.STRUCTURAL, {"b": 2, "a": 1}
+    )
     assert a == b
     assert hash(a) == hash(b)
 
@@ -129,8 +149,12 @@ def test_single_llm_call_records_two_events():
     tracer = DProvenanceTracer(store)
     with tracer.trace(context_id="case-1") as cb:
         rid = uuid.uuid4()
-        cb.on_llm_start({"id": ["x", "ChatOpenAI"]}, ["hi"], run_id=rid, parent_run_id=None)
-        cb.on_llm_end(_FakeLLMResult(model_name="gpt-test"), run_id=rid, parent_run_id=None)
+        cb.on_llm_start(
+            {"id": ["x", "ChatOpenAI"]}, ["hi"], run_id=rid, parent_run_id=None
+        )
+        cb.on_llm_end(
+            _FakeLLMResult(model_name="gpt-test"), run_id=rid, parent_run_id=None
+        )
         run_id = cb.run_id
 
     run = store.get_run(run_id)
@@ -176,7 +200,9 @@ def test_span_tree_mirrors_langchain_run_tree():
         LCEventType.LLM_ENDED,
         LCEventType.CHAIN_ENDED,
     ]
-    assert by_type[LCEventType.RETRIEVER_ENDED].payload.attributes["document_count"] == 3
+    assert (
+        by_type[LCEventType.RETRIEVER_ENDED].payload.attributes["document_count"] == 3
+    )
 
 
 # ── Lineage edges ─────────────────────────────────────────────────────────────
@@ -221,8 +247,12 @@ def test_capture_payloads_off_omits_content():
     tracer = DProvenanceTracer(store)
     with tracer.trace(context_id="c", capture_payloads=False) as cb:
         rid = uuid.uuid4()
-        cb.on_llm_start({"id": ["ChatOpenAI"]}, ["secret prompt"], run_id=rid, parent_run_id=None)
-        cb.on_llm_end(_FakeLLMResult(text="secret answer"), run_id=rid, parent_run_id=None)
+        cb.on_llm_start(
+            {"id": ["ChatOpenAI"]}, ["secret prompt"], run_id=rid, parent_run_id=None
+        )
+        cb.on_llm_end(
+            _FakeLLMResult(text="secret answer"), run_id=rid, parent_run_id=None
+        )
         run_id = cb.run_id
 
     run = store.get_run(run_id)
@@ -272,8 +302,12 @@ def test_agent_finish_is_critical():
     tracer = DProvenanceTracer(store)
     with tracer.trace(context_id="c") as cb:
         rid = uuid.uuid4()
-        cb.on_agent_action(_FakeAgentAction("search", "kittens"), run_id=rid, parent_run_id=None)
-        cb.on_agent_finish(_FakeAgentFinish("final answer"), run_id=rid, parent_run_id=None)
+        cb.on_agent_action(
+            _FakeAgentAction("search", "kittens"), run_id=rid, parent_run_id=None
+        )
+        cb.on_agent_finish(
+            _FakeAgentFinish("final answer"), run_id=rid, parent_run_id=None
+        )
         run_id = cb.run_id
 
     run = store.get_run(run_id)
@@ -303,7 +337,9 @@ def test_recorded_run_is_queryable():
     assert [r.context_id for r in matches] == ["rag"]
 
     # A run that errored on a tool — there are none here.
-    assert store.query_runs(TraceQueryDSL().requiring_step(LCEventType.TOOL_ERROR)) == []
+    assert (
+        store.query_runs(TraceQueryDSL().requiring_step(LCEventType.TOOL_ERROR)) == []
+    )
 
 
 # ── Fingerprint: structural identity of an agent's execution path ───────────────
@@ -311,13 +347,17 @@ def test_recorded_run_is_queryable():
 
 def _fingerprint_after(store: SQLiteTraceStore, run_id: uuid.UUID) -> str:
     store.flush()
-    rows = store._db.query("SELECT fingerprint FROM runs WHERE run_id = ?", (str(run_id),))
+    rows = store._db.query(
+        "SELECT fingerprint FROM runs WHERE run_id = ?", (str(run_id),)
+    )
     return rows[0][0]
 
 
 def test_identical_paths_share_a_fingerprint_divergent_paths_do_not():
     with tempfile.TemporaryDirectory() as tmp:
-        store = SQLiteTraceStore(LangChainTraceEvent, f"{tmp}/t.sqlite", start_writer=False)
+        store = SQLiteTraceStore(
+            LangChainTraceEvent, f"{tmp}/t.sqlite", start_writer=False
+        )
         tracer = DProvenanceTracer(store)
 
         # Two runs that take the same structural path (retriever then llm).
@@ -331,10 +371,16 @@ def test_identical_paths_share_a_fingerprint_divergent_paths_do_not():
         # A run that diverges: llm before retriever.
         with tracer.trace(context_id="c") as cb:
             root, retr, llm = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-            cb.on_chain_start({"name": "RagChain"}, {"question": "q"}, run_id=root, parent_run_id=None)
-            cb.on_llm_start({"id": ["ChatOpenAI"]}, ["q"], run_id=llm, parent_run_id=root)
+            cb.on_chain_start(
+                {"name": "RagChain"}, {"question": "q"}, run_id=root, parent_run_id=None
+            )
+            cb.on_llm_start(
+                {"id": ["ChatOpenAI"]}, ["q"], run_id=llm, parent_run_id=root
+            )
             cb.on_llm_end(_FakeLLMResult(), run_id=llm, parent_run_id=root)
-            cb.on_retriever_start({"id": ["MyRetriever"]}, "q", run_id=retr, parent_run_id=root)
+            cb.on_retriever_start(
+                {"id": ["MyRetriever"]}, "q", run_id=retr, parent_run_id=root
+            )
             cb.on_retriever_end([object()], run_id=retr, parent_run_id=root)
             cb.on_chain_end({"answer": "x"}, run_id=root, parent_run_id=None)
             fc = cb.run_id
@@ -369,4 +415,3 @@ def test_real_langchain_runnable_records_a_run():
     types = {e.payload.type_identifier for e in run.events}
     assert LCEventType.CHAIN_STARTED in types
     assert LCEventType.CHAIN_ENDED in types
-

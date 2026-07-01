@@ -16,13 +16,12 @@ import threading
 import time
 import uuid
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Set, Type
 
 from .drop_stats import TraceDropStats, TraceDropTally
 from .edge import TraceEdge, TraceEdgeType
 from .event import RunRow, TraceableEvent, TraceEvent, TraceEventRow
-from .priority import TracePriority
 from .query import TraceQueryCompiler, TraceQueryDSL, TraceRun
 from .store import TraceStore
 from .write_buffer import TraceWriteBuffer
@@ -100,7 +99,12 @@ class SQLiteWriter:
     ``event_count`` or the fingerprint.
     """
 
-    def __init__(self, db: SQLiteConnection, buffer: TraceWriteBuffer, drop_tally: Optional[TraceDropTally] = None):
+    def __init__(
+        self,
+        db: SQLiteConnection,
+        buffer: TraceWriteBuffer,
+        drop_tally: Optional[TraceDropTally] = None,
+    ):
         self._db = db
         self._buffer = buffer
         self._drop_tally = drop_tally if drop_tally is not None else TraceDropTally()
@@ -124,7 +128,9 @@ class SQLiteWriter:
         with self._lock:
             if self._thread is not None:
                 return
-            self._thread = threading.Thread(target=self._loop, name="dprov-sqlite-writer", daemon=True)
+            self._thread = threading.Thread(
+                target=self._loop, name="dprov-sqlite-writer", daemon=True
+            )
             self._thread.start()
 
     def _loop(self) -> None:
@@ -151,7 +157,9 @@ class SQLiteWriter:
     def _tick(self) -> None:
         depth = self._buffer.current_depth
         with self._lock:
-            self._smoothed_load = (self._alpha * depth) + ((1.0 - self._alpha) * self._smoothed_load)
+            self._smoothed_load = (self._alpha * depth) + (
+                (1.0 - self._alpha) * self._smoothed_load
+            )
             smoothed = self._smoothed_load
 
             if smoothed > 5_000:
@@ -169,7 +177,9 @@ class SQLiteWriter:
                     self._idle_sleep_ms = self._base_idle_sleep_ms
                 else:
                     sleep_ms = self._idle_sleep_ms
-                    self._idle_sleep_ms = min(self._idle_sleep_ms * 2, self._max_idle_sleep_ms)
+                    self._idle_sleep_ms = min(
+                        self._idle_sleep_ms * 2, self._max_idle_sleep_ms
+                    )
 
             self._process_batch(max_batch=batch_size)
 
@@ -181,7 +191,9 @@ class SQLiteWriter:
                     self._mark_runs_clean(staged)
                     self._last_run_flush_time = now
                 except Exception as err:  # pragma: no cover
-                    print(f"🚨 [DProvenanceKit] SQLiteWriter failed to flush runs: {err}")
+                    print(
+                        f"🚨 [DProvenanceKit] SQLiteWriter failed to flush runs: {err}"
+                    )
 
         if sleep_ms > 0:
             time.sleep(sleep_ms / 1000.0)
@@ -320,8 +332,7 @@ class SQLiteTraceStore(TraceStore):
     def _create_schema(self) -> None:
         db = self._db
         with db.transaction():
-            db.execute(
-                """
+            db.execute("""
                 CREATE TABLE IF NOT EXISTS runs (
                     run_id TEXT PRIMARY KEY,
                     context_id TEXT,
@@ -330,10 +341,8 @@ class SQLiteTraceStore(TraceStore):
                     event_count INTEGER,
                     fingerprint TEXT
                 );
-                """
-            )
-            db.execute(
-                """
+                """)
+            db.execute("""
                 CREATE TABLE IF NOT EXISTS trace_events (
                     id TEXT PRIMARY KEY,
                     run_id TEXT NOT NULL,
@@ -347,8 +356,7 @@ class SQLiteTraceStore(TraceStore):
                     payload BLOB NOT NULL,
                     timestamp INTEGER NOT NULL
                 );
-                """
-            )
+                """)
             # Backwards compatibility for existing databases.
             for alter in (
                 "ALTER TABLE trace_events ADD COLUMN span_id TEXT;",
@@ -361,28 +369,37 @@ class SQLiteTraceStore(TraceStore):
 
             db.execute("CREATE INDEX IF NOT EXISTS idx_run_id ON trace_events(run_id);")
             db.execute("CREATE INDEX IF NOT EXISTS idx_type ON trace_events(type);")
-            db.execute("CREATE INDEX IF NOT EXISTS idx_run_type ON trace_events(run_id, type);")
-            db.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON trace_events(timestamp);")
-            db.execute("CREATE INDEX IF NOT EXISTS idx_run_sequence ON trace_events(run_id, sequence);")
-            db.execute("CREATE INDEX IF NOT EXISTS idx_priority ON trace_events(priority);")
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_run_type ON trace_events(run_id, type);"
+            )
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_timestamp ON trace_events(timestamp);"
+            )
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_run_sequence ON trace_events(run_id, sequence);"
+            )
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_priority ON trace_events(priority);"
+            )
 
             if db.user_version < 2:
-                db.execute(
-                    """
+                db.execute("""
                     CREATE TABLE IF NOT EXISTS trace_edges (
                         source_id TEXT NOT NULL,
                         target_id TEXT NOT NULL,
                         edge_type TEXT NOT NULL
                     );
-                    """
+                    """)
+                db.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_edge_source ON trace_edges(source_id, edge_type);"
                 )
-                db.execute("CREATE INDEX IF NOT EXISTS idx_edge_source ON trace_edges(source_id, edge_type);")
-                db.execute("CREATE INDEX IF NOT EXISTS idx_edge_target ON trace_edges(target_id, edge_type);")
+                db.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_edge_target ON trace_edges(target_id, edge_type);"
+                )
                 db.user_version = 2
 
             # Write-behind reconciliation: rebuild any runs interrupted during a crash.
-            db.execute(
-                """
+            db.execute("""
                 INSERT INTO runs (run_id, context_id, start_time, end_time, event_count, fingerprint)
                 SELECT
                     run_id, MAX(context_id), MIN(timestamp), MAX(timestamp), COUNT(*), ''
@@ -394,8 +411,7 @@ class SQLiteTraceStore(TraceStore):
                 ON CONFLICT(run_id) DO UPDATE SET
                     end_time = excluded.end_time,
                     event_count = excluded.event_count;
-                """
-            )
+                """)
 
     def record(self, event: TraceEvent) -> None:
         try:
@@ -422,7 +438,9 @@ class SQLiteTraceStore(TraceStore):
         self._buffer.enqueue(row)
 
     def link(self, source: uuid.UUID, target: uuid.UUID, type: TraceEdgeType) -> None:
-        self._buffer.enqueue_edge(TraceEdge(source_id=source, target_id=target, type=type))
+        self._buffer.enqueue_edge(
+            TraceEdge(source_id=source, target_id=target, type=type)
+        )
 
     def flush(self) -> None:
         self._writer.flush()
@@ -484,12 +502,15 @@ class SQLiteTraceStore(TraceStore):
 
     def get_run(self, id: uuid.UUID) -> Optional[TraceRun]:
         """Fetch a single run by id, indexed on ``run_id`` (no full scan). Flushes pending
-        events first, mirroring :meth:`query_runs`, and parallels ``InMemoryTraceStore``."""
+        events first, mirroring :meth:`query_runs`, and parallels ``InMemoryTraceStore``.
+        """
         self.flush()
         return self._fetch_run(id)
 
     def _fetch_run(self, id: uuid.UUID) -> Optional[TraceRun]:
-        ctx_rows = self._db.query("SELECT context_id FROM runs WHERE run_id = ?", (str(id),))
+        ctx_rows = self._db.query(
+            "SELECT context_id FROM runs WHERE run_id = ?", (str(id),)
+        )
         if not ctx_rows or ctx_rows[0][0] is None:
             return None
         context_id = ctx_rows[0][0]
@@ -501,7 +522,15 @@ class SQLiteTraceStore(TraceStore):
         )
 
         events: List[TraceEvent] = []
-        for engine, span_id, parent_span_id, _type, payload_data, timestamp_us, sequence in rows:
+        for (
+            engine,
+            span_id,
+            parent_span_id,
+            _type,
+            payload_data,
+            timestamp_us,
+            sequence,
+        ) in rows:
             try:
                 payload = self._event_type.decode(bytes(payload_data))
             except Exception:
@@ -579,8 +608,17 @@ class SQLiteTraceStore(TraceStore):
         )
         events: Dict[uuid.UUID, TraceEvent] = {}
         for row in self._db.query(sql, tuple(id_strings)):
-            (id_str, run_id_str, context_id, engine, span_id, parent_span_id,
-             payload_data, timestamp_us, sequence) = row
+            (
+                id_str,
+                run_id_str,
+                context_id,
+                engine,
+                span_id,
+                parent_span_id,
+                payload_data,
+                timestamp_us,
+                sequence,
+            ) = row
             try:
                 event_id = uuid.UUID(id_str)
                 run_id = uuid.UUID(run_id_str)
@@ -605,4 +643,3 @@ class SQLiteTraceStore(TraceStore):
                 timestamp=float(timestamp_us) / 1_000_000.0,
             )
         return events
-

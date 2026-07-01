@@ -22,7 +22,9 @@ class DefaultEquivalenceModel:
     def __init__(self, configuration):
         self.configuration = configuration
 
-    def evaluate(self, a, b, evidence_collector: EvidenceCollector) -> EquivalenceDecision:
+    def evaluate(
+        self, a, b, evidence_collector: EvidenceCollector
+    ) -> EquivalenceDecision:
         score, explanation = self.configuration.score_match(a, b)
         is_equivalent = score >= self.configuration.profile.semantic_threshold
 
@@ -42,4 +44,3 @@ class DefaultEquivalenceModel:
             )
         )
         return decision
-

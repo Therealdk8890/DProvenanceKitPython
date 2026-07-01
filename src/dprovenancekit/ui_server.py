@@ -2,7 +2,6 @@
 
 import json
 import os
-import sqlite3
 import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
@@ -89,7 +88,9 @@ def create_handler(db_path: str):
                     self.send_response(404)
                     self.send_header("Content-Type", "application/json")
                     self.end_headers()
-                    self.wfile.write(json.dumps({"error": "Run not found"}).encode("utf-8"))
+                    self.wfile.write(
+                        json.dumps({"error": "Run not found"}).encode("utf-8")
+                    )
                     return
 
                 # Serialize events
@@ -103,11 +104,12 @@ def create_handler(db_path: str):
                             "payload": {
                                 "type_identifier": event.payload.type_identifier,
                                 "data": _json_serializable(event.payload),
-                            }
+                            },
                         }
                     )
 
                 from .testing import run_fingerprint
+
                 fp = run_fingerprint(run)
 
                 run_data = {
@@ -132,36 +134,36 @@ def create_handler(db_path: str):
                 from .testing import exact_equality_evaluator
                 from .alignment_engine import TraceAlignmentEngine
                 from .alignment_models import AlignmentConfiguration, AlignmentProfile
-                
+
                 query_params = parse_qs(query_string)
                 golden_id_str = query_params.get("golden", [""])[0]
                 candidate_id_str = query_params.get("candidate", [""])[0]
-                
+
                 if not golden_id_str or not candidate_id_str:
                     self.send_error(400, "Missing golden or candidate run IDs")
                     return
-                
+
                 golden_id = uuid.UUID(golden_id_str)
                 candidate_id = uuid.UUID(candidate_id_str)
-                
+
                 store = SQLiteTraceStore(AnyTraceableEvent, db_path, start_writer=False)
                 golden_run = store.get_run(golden_id)
                 candidate_run = store.get_run(candidate_id)
                 store.close()
-                
+
                 if not golden_run or not candidate_run:
                     self.send_error(404, "Run not found")
                     return
-                
+
                 engine = TraceAlignmentEngine(
                     AlignmentConfiguration(
                         profile=AlignmentProfile.strict_audit_v1,
-                        equivalence_evaluator=exact_equality_evaluator()
+                        equivalence_evaluator=exact_equality_evaluator(),
                     )
                 )
-                
+
                 result = engine.align(base=golden_run, comparison=candidate_run)
-                
+
                 alignments_data = []
                 for alignment in result.alignments:
                     base_payload = None
@@ -170,29 +172,38 @@ def create_handler(db_path: str):
                         base_payload = {
                             "sequence": alignment.base_event.sequence,
                             "type_identifier": alignment.base_event.payload.type_identifier,
-                            "data": _json_serializable(alignment.base_event.payload)
+                            "data": _json_serializable(alignment.base_event.payload),
                         }
                     if alignment.comparison_event:
                         candidate_payload = {
                             "sequence": alignment.comparison_event.sequence,
                             "type_identifier": alignment.comparison_event.payload.type_identifier,
-                            "data": _json_serializable(alignment.comparison_event.payload)
+                            "data": _json_serializable(
+                                alignment.comparison_event.payload
+                            ),
                         }
-                        
-                    alignments_data.append({
-                        "kind": alignment.state.kind.value,
-                        "base": base_payload,
-                        "candidate": candidate_payload
-                    })
-                    
+
+                    alignments_data.append(
+                        {
+                            "kind": alignment.state.kind.value,
+                            "base": base_payload,
+                            "candidate": candidate_payload,
+                        }
+                    )
+
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
-                self.wfile.write(json.dumps({"alignments": alignments_data}, default=str).encode("utf-8"))
+                self.wfile.write(
+                    json.dumps({"alignments": alignments_data}, default=str).encode(
+                        "utf-8"
+                    )
+                )
             except ValueError:
                 self.send_error(400, "Invalid run ID format")
             except Exception as e:
                 import traceback
+
                 traceback.print_exc()
                 self.send_error(500, f"Internal Server Error: {e}")
 
@@ -200,7 +211,9 @@ def create_handler(db_path: str):
 
 
 def run_ui_server(db_path: str, port: int = 8080):
-    print(f"Starting DProvenanceKit UI at http://localhost:{port} (serving from {db_path})")
+    print(
+        f"Starting DProvenanceKit UI at http://localhost:{port} (serving from {db_path})"
+    )
     handler = create_handler(db_path)
     server = ThreadingHTTPServer(("", port), handler)
     try:
@@ -208,4 +221,3 @@ def run_ui_server(db_path: str, port: int = 8080):
     except KeyboardInterrupt:
         print("\nShutting down server.")
         server.server_close()
-

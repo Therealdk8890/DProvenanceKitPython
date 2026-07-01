@@ -40,7 +40,9 @@ class AlignmentMetaEvent(TraceableEvent):
     # Factories mirroring the Swift enum cases ----------------------------------
 
     @classmethod
-    def evaluated_pair(cls, causal_parent_id, decision_node_id, base_sequence, comp_sequence, score):
+    def evaluated_pair(
+        cls, causal_parent_id, decision_node_id, base_sequence, comp_sequence, score
+    ):
         return cls(
             MetaEventKind.EVALUATED_PAIR,
             causal_parent_id=causal_parent_id,
@@ -51,7 +53,9 @@ class AlignmentMetaEvent(TraceableEvent):
         )
 
     @classmethod
-    def ambiguity_threshold_met(cls, causal_parent_id, decision_node_id, comp_sequence, score):
+    def ambiguity_threshold_met(
+        cls, causal_parent_id, decision_node_id, comp_sequence, score
+    ):
         return cls(
             MetaEventKind.AMBIGUITY_THRESHOLD_MET,
             causal_parent_id=causal_parent_id,
@@ -61,7 +65,9 @@ class AlignmentMetaEvent(TraceableEvent):
         )
 
     @classmethod
-    def candidate_evicted(cls, causal_parent_id, decision_node_id, comp_sequence, reason):
+    def candidate_evicted(
+        cls, causal_parent_id, decision_node_id, comp_sequence, reason
+    ):
         return cls(
             MetaEventKind.CANDIDATE_EVICTED,
             causal_parent_id=causal_parent_id,
@@ -79,4 +85,3 @@ class AlignmentMetaEvent(TraceableEvent):
             level=level,
             reasoning=reasoning,
         )
-

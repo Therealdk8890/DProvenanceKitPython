@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from dprovenancekit import DProvenanceKit, InMemoryTraceStore, SQLiteTraceStore, TraceQueryDSL
+from dprovenancekit import (
+    DProvenanceKit,
+    InMemoryTraceStore,
+    SQLiteTraceStore,
+    TraceQueryDSL,
+)
 from conftest import TestEvent
 
 
@@ -48,7 +53,9 @@ def test_sequence_uses_causal_order_not_timestamp(temp_db_path):
 
     mem, sql = _matches(
         scenario,
-        TraceQueryDSL().requiring_sequence(["processStarted", "errorDetected", "processFinished"]),
+        TraceQueryDSL().requiring_sequence(
+            ["processStarted", "errorDetected", "processFinished"]
+        ),
         temp_db_path,
     )
     assert mem == sql
@@ -68,18 +75,32 @@ def test_operator_parity_matrix(tmp_path):
         "contains-miss": TraceQueryDSL().requiring_step("rollback"),
         "missing": TraceQueryDSL().missing_step("rollback"),
         "missing-hit": TraceQueryDSL().missing_step("errorDetected"),
-        "after": TraceQueryDSL().requiring_followed_by("processStarted", "processFinished"),
-        "after-miss": TraceQueryDSL().requiring_followed_by("processFinished", "processStarted"),
-        "before": TraceQueryDSL().requiring_preceded_by("errorDetected", "processStarted"),
-        "before-miss": TraceQueryDSL().requiring_preceded_by("processStarted", "errorDetected"),
-        "sequence": TraceQueryDSL().requiring_sequence(["processStarted", "errorDetected", "processFinished"]),
-        "sequence-miss": TraceQueryDSL().requiring_sequence(["processFinished", "processStarted"]),
+        "after": TraceQueryDSL().requiring_followed_by(
+            "processStarted", "processFinished"
+        ),
+        "after-miss": TraceQueryDSL().requiring_followed_by(
+            "processFinished", "processStarted"
+        ),
+        "before": TraceQueryDSL().requiring_preceded_by(
+            "errorDetected", "processStarted"
+        ),
+        "before-miss": TraceQueryDSL().requiring_preceded_by(
+            "processStarted", "errorDetected"
+        ),
+        "sequence": TraceQueryDSL().requiring_sequence(
+            ["processStarted", "errorDetected", "processFinished"]
+        ),
+        "sequence-miss": TraceQueryDSL().requiring_sequence(
+            ["processFinished", "processStarted"]
+        ),
         "and": TraceQueryDSL().requiring_step("errorDetected").missing_step("rollback"),
         # CountStep: stepCompleted occurs twice in the scenario.
         "count-exact": TraceQueryDSL().requiring_repeated_step("stepCompleted", 2),
         "count-over": TraceQueryDSL().requiring_repeated_step("stepCompleted", 3),
         "count-one": TraceQueryDSL().requiring_repeated_step("errorDetected", 1),
-        "count-and": TraceQueryDSL().requiring_repeated_step("stepCompleted", 2).missing_step("rollback"),
+        "count-and": TraceQueryDSL()
+        .requiring_repeated_step("stepCompleted", 2)
+        .missing_step("rollback"),
     }
 
     for name, query in queries.items():
@@ -93,10 +114,18 @@ def test_count_step_matches_at_threshold_and_excludes_below(temp_db_path):
         record(TestEvent.step_completed(1))
         record(TestEvent.step_completed(2))
 
-    hit = _matches(scenario, TraceQueryDSL().requiring_repeated_step("stepCompleted", 2), temp_db_path)
+    hit = _matches(
+        scenario,
+        TraceQueryDSL().requiring_repeated_step("stepCompleted", 2),
+        temp_db_path,
+    )
     assert hit[0] == hit[1] == ["case"]
 
-    miss = _matches(scenario, TraceQueryDSL().requiring_repeated_step("stepCompleted", 3), temp_db_path)
+    miss = _matches(
+        scenario,
+        TraceQueryDSL().requiring_repeated_step("stepCompleted", 3),
+        temp_db_path,
+    )
     assert miss[0] == miss[1] == []
 
 
@@ -114,4 +143,3 @@ def test_count_step_is_rejected_by_the_cloud_wire_serializer():
     # rather than silently serialize it to an empty node.
     with pytest.raises(NotImplementedTraceError):
         _serialize_node(CountStep(step="stepCompleted", min_count=2))
-

@@ -94,11 +94,16 @@ def render_report_html(
             f'{_chips(accepted, "accepted")}</div>'
         )
     if not change_rows:
-        change_rows.append('<p style="color:#656d76;margin:0">No per-step changes — all exact matches.</p>')
+        change_rows.append(
+            '<p style="color:#656d76;margin:0">No per-step changes — all exact matches.</p>'
+        )
 
     meta_rows = [
-        ("Severity", f"{html.escape(report.regression_level.value)} "
-                     f"(strength {report.strength:.2f})"),
+        (
+            "Severity",
+            f"{html.escape(report.regression_level.value)} "
+            f"(strength {report.strength:.2f})",
+        ),
         ("Max allowed", html.escape(report.max_regression_level.value)),
         ("Allow divergent", "yes" if report.allow_divergent_steps else "no"),
         ("Fingerprint", "match" if report.fingerprint_match else "differs"),
@@ -107,14 +112,22 @@ def render_report_html(
         meta_rows.append(("Golden", html.escape(golden_label)))
     if candidate_label:
         meta_rows.append(("Candidate", html.escape(candidate_label)))
-    meta_rows.append(("Golden fingerprint", f'<span class="mono">{_short(report.golden_fingerprint)}</span>'))
-    meta_rows.append(("Candidate fingerprint", f'<span class="mono">{_short(report.candidate_fingerprint)}</span>'))
+    meta_rows.append(
+        (
+            "Golden fingerprint",
+            f'<span class="mono">{_short(report.golden_fingerprint)}</span>',
+        )
+    )
+    meta_rows.append(
+        (
+            "Candidate fingerprint",
+            f'<span class="mono">{_short(report.candidate_fingerprint)}</span>',
+        )
+    )
     if generated_at:
         meta_rows.append(("Generated", html.escape(generated_at)))
 
-    meta_html = "".join(
-        f'<div class="k">{k}</div><div>{v}</div>' for k, v in meta_rows
-    )
+    meta_html = "".join(f'<div class="k">{k}</div><div>{v}</div>' for k, v in meta_rows)
     reasoning = (
         f'<div class="grp"><div class="label">Engine</div><div>{html.escape(report.reasoning)}</div></div>'
         if report.reasoning
@@ -150,4 +163,3 @@ def render_report_html(
 
 
 __all__ = ["render_report_html"]
-

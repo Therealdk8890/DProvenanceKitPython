@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-import pytest
 
 from dprovenancekit import SQLiteTraceStore, TraceEvent, TracePriority, TraceableEvent
 
@@ -31,8 +30,14 @@ class UnencodablePayload(TraceableEvent):
 
 def _event(tier):
     return TraceEvent(
-        run_id=uuid.uuid4(), context_id="ctx", engine_name="engine", schema_version=1,
-        sequence=0, span_id=None, parent_span_id=None, payload=UnencodablePayload(int(tier)),
+        run_id=uuid.uuid4(),
+        context_id="ctx",
+        engine_name="engine",
+        schema_version=1,
+        sequence=0,
+        span_id=None,
+        parent_span_id=None,
+        payload=UnencodablePayload(int(tier)),
     )
 
 
@@ -67,4 +72,3 @@ def test_encode_drops_tally_per_tier(temp_db_path):
     assert stats.critical == 1
     assert stats.total == 3
     assert not stats.preserved_integrity
-

@@ -32,14 +32,22 @@ def _binding(base, comp):
 
 def _decision(base, comp, equivalent):
     return EquivalenceDecisionRecord(
-        lhs=base, rhs=comp, confidence=0.95 if equivalent else 0.2,
-        equivalent=equivalent, reason=EquivalenceReason(""),
+        lhs=base,
+        rhs=comp,
+        confidence=0.95 if equivalent else 0.2,
+        equivalent=equivalent,
+        reason=EquivalenceReason(""),
     )
 
 
 def test_empty_map_is_perfect():
     v = auditor.audit(FormalizationMap(bindings=[], decisions=[], interpretations=[]))
-    assert (v.coverage, v.completeness, v.causal_ordering, v.no_hallucinations) == (1.0, 1.0, 1.0, 1.0)
+    assert (v.coverage, v.completeness, v.causal_ordering, v.no_hallucinations) == (
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+    )
 
 
 def test_fully_grounded_match_is_perfect():
@@ -49,7 +57,12 @@ def test_fully_grounded_match_is_perfect():
         interpretations=[_step("b", "c", "semanticMatch(strength: 0.9)", 0, 0)],
     )
     v = auditor.audit(m)
-    assert (v.coverage, v.completeness, v.causal_ordering, v.no_hallucinations) == (1.0, 1.0, 1.0, 1.0)
+    assert (v.coverage, v.completeness, v.causal_ordering, v.no_hallucinations) == (
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+    )
 
 
 def test_ungrounded_match_hurts_coverage_only():
@@ -130,4 +143,3 @@ def test_reported_reorder_is_faithful():
         ],
     )
     assert auditor.audit(m).causal_ordering == 1.0
-

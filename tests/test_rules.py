@@ -88,7 +88,9 @@ def test_looping_rule_flags_repeated_step():
     looping = _record(store, "looping", ["call", "call", "call"])  # 3x call
     fine = _record(store, "fine", ["call", "done"])  # 1x call
 
-    anomalies = AnomalyDetector(store).detect_anomalies([LoopingRule("call", max_repeats=2)])
+    anomalies = AnomalyDetector(store).detect_anomalies(
+        [LoopingRule("call", max_repeats=2)]
+    )
 
     flagged = {a.run_id for a in anomalies}
     assert looping in flagged
@@ -105,7 +107,10 @@ def test_looping_rule_threshold_is_strictly_more_than_max():
     at_limit = _record(store, "at", ["call", "call"])  # exactly 2 — still healthy
     over = _record(store, "over", ["call", "call", "call"])  # 3 — looping
 
-    flagged = {a.run_id for a in AnomalyDetector(store).detect_anomalies([LoopingRule("call", 2)])}
+    flagged = {
+        a.run_id
+        for a in AnomalyDetector(store).detect_anomalies([LoopingRule("call", 2)])
+    }
     assert over in flagged
     assert at_limit not in flagged
 
@@ -179,4 +184,3 @@ def test_build_rule_surfaces_invalid_field_as_valueerror():
         build_rule({"type": "looping", "step": "x", "max_repeats": "5"})
     with pytest.raises(ValueError):
         build_rule({"type": "tool_drop", "required_step": 123})
-

@@ -26,7 +26,9 @@ from .event import TraceableEvent, TraceEvent
 class ActiveTraceRun(AnyActiveTraceRun):
     """A single in-flight trace run, owning the monotonic per-run sequence counter."""
 
-    def __init__(self, context_id: str, store, event_type: Type, schema_version: int = 1):
+    def __init__(
+        self, context_id: str, store, event_type: Type, schema_version: int = 1
+    ):
         self.run_id = uuid.uuid4()
         self.context_id = context_id
         self._store = store
@@ -75,7 +77,9 @@ class DProvenanceKit:
         self.event_type = event_type
 
     @contextmanager
-    def run(self, context_id: str, store, schema_version: int = 1) -> Iterator[ActiveTraceRun]:
+    def run(
+        self, context_id: str, store, schema_version: int = 1
+    ) -> Iterator[ActiveTraceRun]:
         active = ActiveTraceRun(context_id, store, self.event_type, schema_version)
         token = TraceContext.current_run.set(active)
         try:
@@ -124,4 +128,3 @@ class DProvenanceKit:
         if run is None:
             return
         run.flush()
-

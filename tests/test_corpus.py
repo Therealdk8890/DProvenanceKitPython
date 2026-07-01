@@ -29,7 +29,10 @@ def _corpus_evaluator():
         if b.kind == _AgentKind.TOOL_EXECUTION:
             if b.tool_name == c.tool_name and b.params == c.params:
                 return 1.0
-            if {b.tool_name, c.tool_name} == {"SearchDocumentation", "LookupAPIDocs"} and b.params == c.params:
+            if {b.tool_name, c.tool_name} == {
+                "SearchDocumentation",
+                "LookupAPIDocs",
+            } and b.params == c.params:
                 return 0.95
             return 0.0
         if b.kind == _AgentKind.PLANNING:
@@ -47,7 +50,9 @@ def _corpus_evaluator():
 
 @pytest.fixture
 def engine():
-    config = AlignmentConfiguration(AlignmentProfile.developer_debug_v1, _corpus_evaluator())
+    config = AlignmentConfiguration(
+        AlignmentProfile.developer_debug_v1, _corpus_evaluator()
+    )
     return TraceAlignmentEngine(config)
 
 
@@ -71,7 +76,9 @@ def test_semantic_evolution(engine):
 def test_reordering(engine):
     base, comp = DProvenanceCorpus.reordering()
     result = engine.align(base, comp)
-    reordered = [a for a in result.alignments if a.state.kind == AlignmentStateKind.REORDERED]
+    reordered = [
+        a for a in result.alignments if a.state.kind == AlignmentStateKind.REORDERED
+    ]
     assert len(reordered) == 2
 
 
@@ -83,4 +90,3 @@ def test_branch_collapse(engine):
     removed = [a for a in result.alignments if a.state.is_removed]
     assert len(removed) == 1
     assert removed[0].base_event.payload.type_identifier == "planning"
-

@@ -14,7 +14,9 @@ import runpy
 
 def test_end_to_end_demo_runs_and_self_asserts(tmp_path, capsys, monkeypatch):
     monkeypatch.setenv("DPROV_DEMO_OUT", str(tmp_path))
-    path = os.path.join(os.path.dirname(__file__), "..", "examples", "end_to_end_demo.py")
+    path = os.path.join(
+        os.path.dirname(__file__), "..", "examples", "end_to_end_demo.py"
+    )
 
     runpy.run_path(path, run_name="__main__")
 
@@ -23,4 +25,3 @@ def test_end_to_end_demo_runs_and_self_asserts(tmp_path, capsys, monkeypatch):
     assert "tool_drop:verify" in out and "looping:search" in out
     assert (tmp_path / "demo-report.html").exists()
     assert (tmp_path / "demo-traces.sqlite").exists()
-

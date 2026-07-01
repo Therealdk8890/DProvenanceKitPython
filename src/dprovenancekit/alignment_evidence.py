@@ -101,4 +101,3 @@ class AlignmentEvidenceCollector(EvidenceCollector):
                 equivalence_decisions=list(self._equivalence_decisions),
                 interpretation_steps=list(self._interpretation_steps),
             )
-

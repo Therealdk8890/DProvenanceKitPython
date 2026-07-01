@@ -36,7 +36,9 @@ class TraceStore(ABC):
     def record(self, event: TraceEvent) -> None: ...
 
     @abstractmethod
-    def link(self, source: uuid.UUID, target: uuid.UUID, type: TraceEdgeType) -> None: ...
+    def link(
+        self, source: uuid.UUID, target: uuid.UUID, type: TraceEdgeType
+    ) -> None: ...
 
     @abstractmethod
     def flush(self) -> None: ...
@@ -157,7 +159,11 @@ class InMemoryTraceStore(TraceStore):
             self._decision_type_events.setdefault(type_id, {}).setdefault(
                 event.run_id, []
             ).append(event.timestamp)
-            snapshot = None if self._live_queue is None else self._make_run_locked(event.run_id)
+            snapshot = (
+                None
+                if self._live_queue is None
+                else self._make_run_locked(event.run_id)
+            )
 
         if snapshot is not None:
             self._live_queue.put((event, snapshot))
@@ -238,7 +244,9 @@ class InMemoryTraceStore(TraceStore):
                 elif constraint.kind == "engineName":
                     matching = self._run_by_engine.get(constraint.value, set())
                 else:  # decisionType
-                    matching = set(self._decision_type_events.get(constraint.value, {}).keys())
+                    matching = set(
+                        self._decision_type_events.get(constraint.value, {}).keys()
+                    )
 
                 if candidate_run_ids is None:
                     candidate_run_ids = set(matching)
@@ -260,4 +268,3 @@ class InMemoryTraceStore(TraceStore):
                 if dsl.ast.evaluate(run):
                     matching_runs.append(run)
             return matching_runs
-

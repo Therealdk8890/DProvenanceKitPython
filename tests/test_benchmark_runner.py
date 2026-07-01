@@ -28,7 +28,9 @@ def _factory(capture=VerificationCaptureMode.EVIDENCE_ONLY):
         config = AlignmentConfiguration(
             AlignmentProfile.developer_debug_v1, DProvenanceCorpus.standard_evaluator()
         )
-        return TraceAlignmentEngine(config, capture_mode=capture, meta_trace_callback=callback)
+        return TraceAlignmentEngine(
+            config, capture_mode=capture, meta_trace_callback=callback
+        )
 
     return make
 
@@ -86,11 +88,17 @@ def test_diagnoser_classifies_reorder_false_positives():
         comparison_run=comp,
         expected_findings=[],
     )
-    report = BenchmarkRunner().run(BenchmarkDataset(name="t", description="", cases=[case]), _factory())
+    report = BenchmarkRunner().run(
+        BenchmarkDataset(name="t", description="", cases=[case]), _factory()
+    )
     result = report.case_results[0]
     assert result.false_positives
     reorder_diag = next(
-        (d for d in result.diagnoses if d.finding.kind == AlignmentFindingKind.REORDERED_EXECUTION),
+        (
+            d
+            for d in result.diagnoses
+            if d.finding.kind == AlignmentFindingKind.REORDERED_EXECUTION
+        ),
         None,
     )
     assert reorder_diag is not None
@@ -121,20 +129,46 @@ def test_multiset_matching_consumes_duplicates():
     base = [_decision("ValidateA", 0), _decision("ValidateB", 1)]
     comp = []
 
-    two = _run(base, comp, [
-        ExpectedFinding(AlignmentFinding.critical_step_removed("decision")),
-        ExpectedFinding(AlignmentFinding.critical_step_removed("decision")),
-    ])
-    assert sum(1 for f in two.true_positives if f.kind == AlignmentFindingKind.CRITICAL_STEP_REMOVED) == 2
+    two = _run(
+        base,
+        comp,
+        [
+            ExpectedFinding(AlignmentFinding.critical_step_removed("decision")),
+            ExpectedFinding(AlignmentFinding.critical_step_removed("decision")),
+        ],
+    )
+    assert (
+        sum(
+            1
+            for f in two.true_positives
+            if f.kind == AlignmentFindingKind.CRITICAL_STEP_REMOVED
+        )
+        == 2
+    )
 
-    one = _run(base, comp, [ExpectedFinding(AlignmentFinding.critical_step_removed("decision"))])
-    assert sum(1 for f in one.true_positives if f.kind == AlignmentFindingKind.CRITICAL_STEP_REMOVED) == 1
-    assert any(f.kind == AlignmentFindingKind.CRITICAL_STEP_REMOVED for f in one.false_positives)
+    one = _run(
+        base,
+        comp,
+        [ExpectedFinding(AlignmentFinding.critical_step_removed("decision"))],
+    )
+    assert (
+        sum(
+            1
+            for f in one.true_positives
+            if f.kind == AlignmentFindingKind.CRITICAL_STEP_REMOVED
+        )
+        == 1
+    )
+    assert any(
+        f.kind == AlignmentFindingKind.CRITICAL_STEP_REMOVED
+        for f in one.false_positives
+    )
 
 
 def test_empty_findings_with_missed_expectation_scores_zero():
-    result = _run([], [], [ExpectedFinding(AlignmentFinding.critical_step_removed("decision"))])
+    result = _run(
+        [], [], [ExpectedFinding(AlignmentFinding.critical_step_removed("decision"))]
+    )
     assert not result.actual_findings
     assert result.false_negatives
     assert result.fidelity_score.overall_score == 0.0
-

@@ -11,7 +11,9 @@ _GITLAB_DIR = Path(__file__).resolve().parents[1] / "gitlab"
 
 
 def _load(name):
-    spec = importlib.util.spec_from_file_location(f"gitlab_{name}", _GITLAB_DIR / f"{name}.py")
+    spec = importlib.util.spec_from_file_location(
+        f"gitlab_{name}", _GITLAB_DIR / f"{name}.py"
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -80,7 +82,11 @@ def test_post_note_updates_existing_sticky():
         return 200, {}
 
     iid = mr_note.post_note(
-        {"passed": False, "regression_level": "high", "steps_by_change": {"removed": ["v"]}},
+        {
+            "passed": False,
+            "regression_level": "high",
+            "steps_by_change": {"removed": ["v"]},
+        },
         _env(),
         api=fake_api,
     )
@@ -108,7 +114,9 @@ def test_post_note_url_encodes_project_path():
         return (200, []) if method == "GET" else (201, {"id": 1})
 
     mr_note.post_note(
-        {"passed": True, "steps_by_change": {}}, _env(CI_PROJECT_ID="group/proj"), api=fake_api
+        {"passed": True, "steps_by_change": {}},
+        _env(CI_PROJECT_ID="group/proj"),
+        api=fake_api,
     )
     assert "group%2Fproj" in seen["url"]
 
@@ -123,7 +131,9 @@ def test_post_note_dry_run_without_token(capsys):
 
 
 def test_main_reads_report_from_env(capsys):
-    rc = mr_note.main({"DPROV_REPORT_JSON": json.dumps({"passed": True, "steps_by_change": {}})})
+    rc = mr_note.main(
+        {"DPROV_REPORT_JSON": json.dumps({"passed": True, "steps_by_change": {}})}
+    )
     assert rc == 0
     assert mr_note._MARKER in capsys.readouterr().out
 
@@ -131,4 +141,3 @@ def test_main_reads_report_from_env(capsys):
 def test_main_errors_on_empty_input(monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO(""))
     assert mr_note.main({}) == 1
-

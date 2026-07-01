@@ -29,7 +29,9 @@ from .write_buffer import TraceWriteBuffer
 Transport = Callable[[str, str, Dict[str, str], Optional[bytes]], Tuple[int, bytes]]
 
 
-def default_transport(method: str, url: str, headers: Dict[str, str], body: Optional[bytes]) -> Tuple[int, bytes]:
+def default_transport(
+    method: str, url: str, headers: Dict[str, str], body: Optional[bytes]
+) -> Tuple[int, bytes]:
     request = urllib.request.Request(url=url, data=body, headers=headers, method=method)
     try:
         with urllib.request.urlopen(request) as response:
@@ -44,7 +46,9 @@ class CloudTraceStoreError(Exception):
 
 class UnsupportedSchemaError(CloudTraceStoreError):
     def __init__(self, expected: str, received: str):
-        super().__init__(f"unsupported schema: expected {expected}, received {received}")
+        super().__init__(
+            f"unsupported schema: expected {expected}, received {received}"
+        )
         self.expected = expected
         self.received = received
 
@@ -66,7 +70,13 @@ class FlushTimedOut(CloudWriterError):
 
 
 class CloudWriter:
-    def __init__(self, endpoint: str, api_key: str, buffer: TraceWriteBuffer, transport: Transport = default_transport):
+    def __init__(
+        self,
+        endpoint: str,
+        api_key: str,
+        buffer: TraceWriteBuffer,
+        transport: Transport = default_transport,
+    ):
         self._endpoint = endpoint
         self._api_key = api_key
         self._buffer = buffer
@@ -85,7 +95,9 @@ class CloudWriter:
         with self._state_lock:
             if self._thread is not None:
                 return
-            self._thread = threading.Thread(target=self._loop, name="dprov-cloud-writer", daemon=True)
+            self._thread = threading.Thread(
+                target=self._loop, name="dprov-cloud-writer", daemon=True
+            )
             self._thread.start()
 
     def _loop(self) -> None:
@@ -121,7 +133,12 @@ class CloudWriter:
         with self._state_lock:
             return [row for batch in self._quarantine_queue for row in batch]
 
-    def _process_next_batch(self, drain_all: bool = False, max_batch: int = 1000, deadline: Optional[float] = None) -> None:
+    def _process_next_batch(
+        self,
+        drain_all: bool = False,
+        max_batch: int = 1000,
+        deadline: Optional[float] = None,
+    ) -> None:
         with self._state_lock:
             if self._sending:
                 return
@@ -139,7 +156,11 @@ class CloudWriter:
             if self._inflight_batch is not None:
                 batch = self._inflight_batch
             else:
-                drained = self._buffer.flush_all() if drain_all else self._buffer.drain(max_batch)
+                drained = (
+                    self._buffer.flush_all()
+                    if drain_all
+                    else self._buffer.drain(max_batch)
+                )
                 if not drained:
                     return
                 batch = drained
@@ -154,7 +175,9 @@ class CloudWriter:
                 try:
                     status_code = self._send_batch(batch)
                     if status_code == 400:
-                        print("🚨 [DProvenanceKit] Poison batch detected (400 Bad Request). Quarantining.")
+                        print(
+                            "🚨 [DProvenanceKit] Poison batch detected (400 Bad Request). Quarantining."
+                        )
                         with self._state_lock:
                             self._quarantine_queue.append(batch)
                         self._inflight_batch = None
@@ -169,7 +192,9 @@ class CloudWriter:
                     self._attempt_count += 1
                     self._circuit_breaker.record_failure()
                     if self._attempt_count >= max_attempts:
-                        print(f"🚨 [DProvenanceKit] Batch failed {max_attempts} times. Quarantining.")
+                        print(
+                            f"🚨 [DProvenanceKit] Batch failed {max_attempts} times. Quarantining."
+                        )
                         with self._state_lock:
                             self._quarantine_queue.append(batch)
                         self._inflight_batch = None
@@ -180,7 +205,9 @@ class CloudWriter:
                     if self._attempt_count == 1:
                         backoff = random.uniform(0.1, 1.0)
                     else:
-                        cap = min(max_backoff, base_backoff * (2.0 ** self._attempt_count))
+                        cap = min(
+                            max_backoff, base_backoff * (2.0**self._attempt_count)
+                        )
                         backoff = random.uniform(0.0, cap)
                     if deadline is not None and time.time() + backoff >= deadline:
                         return
@@ -237,10 +264,15 @@ class CloudTraceStore(TraceStore):
         self._event_type = event_type
         self._endpoint = endpoint.rstrip("/")
         self._api_key = api_key
-        self._buffer = TraceWriteBuffer(config=config if config is not None else OfflineConfig())
+        self._buffer = TraceWriteBuffer(
+            config=config if config is not None else OfflineConfig()
+        )
         self._transport = transport
         self._writer = CloudWriter(
-            endpoint=self._endpoint + "/ingest", api_key=api_key, buffer=self._buffer, transport=transport
+            endpoint=self._endpoint + "/ingest",
+            api_key=api_key,
+            buffer=self._buffer,
+            transport=transport,
         )
         if start_writer:
             self._writer.start()
@@ -266,7 +298,9 @@ class CloudTraceStore(TraceStore):
         self._buffer.enqueue(row)
 
     def link(self, source: uuid.UUID, target: uuid.UUID, type: TraceEdgeType) -> None:
-        self._buffer.enqueue_edge(TraceEdge(source_id=source, target_id=target, type=type))
+        self._buffer.enqueue_edge(
+            TraceEdge(source_id=source, target_id=target, type=type)
+        )
 
     def flush(self, timeout: Optional[float] = None) -> None:
         if timeout is None:
@@ -280,7 +314,9 @@ class CloudTraceStore(TraceStore):
 
     def negotiate_capabilities(self) -> None:
         headers = {"Authorization": f"Bearer {self._api_key}"}
-        status, _ = self._transport("GET", self._endpoint + "/capabilities", headers, None)
+        status, _ = self._transport(
+            "GET", self._endpoint + "/capabilities", headers, None
+        )
         if not (200 <= status <= 299):
             raise ServerError(status)
 
@@ -289,7 +325,11 @@ class CloudTraceStore(TraceStore):
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
         }
-        payload = {"schemaVersion": dsl.schema_version, "dsl": _serialize_node(dsl.ast), "limit": 100}
+        payload = {
+            "schemaVersion": dsl.schema_version,
+            "dsl": _serialize_node(dsl.ast),
+            "limit": 100,
+        }
         body = json.dumps(payload).encode("utf-8")
         status, data = self._transport("POST", self._endpoint + "/query", headers, body)
 
@@ -299,7 +339,9 @@ class CloudTraceStore(TraceStore):
             except Exception:
                 err = {}
             if err.get("error") == "UNSUPPORTED_SCHEMA":
-                raise UnsupportedSchemaError(err.get("expected", ""), err.get("received", ""))
+                raise UnsupportedSchemaError(
+                    err.get("expected", ""), err.get("received", "")
+                )
         if status == 501:
             raise NotImplementedTraceError("not implemented")
         if not (200 <= status <= 299):
@@ -338,7 +380,9 @@ class CloudTraceStore(TraceStore):
         matched: List[TraceEvent] = []
         for run_id, events in by_run.items():
             ordered = sorted(events, key=lambda e: e.sequence)
-            run = TraceRun(run_id=run_id, context_id=ordered[0].context_id, events=ordered)
+            run = TraceRun(
+                run_id=run_id, context_id=ordered[0].context_id, events=ordered
+            )
             if dsl.ast.evaluate(run):
                 matched.extend(events)
         return matched
@@ -392,4 +436,3 @@ def _serialize_node(node) -> dict:
         f"query node {type(node).__name__} is not supported over the cloud query wire "
         "(Trace Spec v1); it is available on the in-memory and SQLite backends"
     )
-

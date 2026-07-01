@@ -52,7 +52,9 @@ def _count(db, sql):
 
 def test_failed_batch_insert_is_tallied_and_breaks_integrity(temp_db_path):
     db = SQLiteConnection(temp_db_path)
-    _create_runs_table(db)  # omit trace_events so the batch INSERT is guaranteed to fail
+    _create_runs_table(
+        db
+    )  # omit trace_events so the batch INSERT is guaranteed to fail
 
     buffer = TraceWriteBuffer(max_global_buffer=1_000)
     tally = TraceDropTally()
@@ -92,4 +94,3 @@ def test_successful_insert_tallies_nothing_and_records_accurate_metadata(temp_db
 
     assert _count(db, "SELECT COUNT(*) FROM trace_events;") == 3
     assert _count(db, "SELECT event_count FROM runs WHERE run_id = 'run-1';") == 3
-

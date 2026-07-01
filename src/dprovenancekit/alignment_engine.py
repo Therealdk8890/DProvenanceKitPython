@@ -41,7 +41,9 @@ class TraceAlignmentEngine:
         self.meta_trace_callback = meta_trace_callback
         self._matcher = DefaultTraceMatcher(configuration)
         self._semantics = DefaultEquivalenceModel(configuration)
-        self._interpreter = DefaultAlignmentInterpreter(configuration, meta_trace_callback)
+        self._interpreter = DefaultAlignmentInterpreter(
+            configuration, meta_trace_callback
+        )
 
     def align(
         self,
@@ -50,7 +52,9 @@ class TraceAlignmentEngine:
         minimum_priority: TracePriority = TracePriority.STRUCTURAL,
     ) -> TraceAlignmentResult:
         base_events = [e for e in base.events if e.payload.priority >= minimum_priority]
-        comp_events = [e for e in comparison.events if e.payload.priority >= minimum_priority]
+        comp_events = [
+            e for e in comparison.events if e.payload.priority >= minimum_priority
+        ]
 
         collector = (
             AlignmentEvidenceCollector()
@@ -58,7 +62,9 @@ class TraceAlignmentEngine:
             else NullEvidenceCollector()
         )
 
-        bindings = self._matcher.match(base_events, comp_events, evidence_collector=collector)
+        bindings = self._matcher.match(
+            base_events, comp_events, evidence_collector=collector
+        )
 
         def equivalence(a, b):
             return self._semantics.evaluate(a, b, evidence_collector=collector)
@@ -93,7 +99,9 @@ class TraceAlignmentEngine:
             and a.base_event.payload.priority == TracePriority.CRITICAL
         ]
         if removed_critical:
-            critical_types = ", ".join(a.base_event.payload.type_identifier for a in removed_critical)
+            critical_types = ", ".join(
+                a.base_event.payload.type_identifier for a in removed_critical
+            )
             risk = RegressionRisk(
                 level=RegressionLevel.HIGH,
                 strength=0.95,
@@ -131,4 +139,3 @@ class TraceAlignmentEngine:
 
     def evaluate_score(self, base, comparison):
         return self.configuration.score_match(base, comparison)
-

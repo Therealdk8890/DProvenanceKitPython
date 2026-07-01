@@ -53,7 +53,11 @@ def test_heavy_burst_sheds_telemetry_but_keeps_critical():
         if is_critical:
             criticals_enqueued += 1
         buffer.enqueue(
-            _make_row("rogue", i, TracePriority.CRITICAL if is_critical else TracePriority.TELEMETRY)
+            _make_row(
+                "rogue",
+                i,
+                TracePriority.CRITICAL if is_critical else TracePriority.TELEMETRY,
+            )
         )
 
     assert buffer.current_depth <= cap
@@ -102,4 +106,3 @@ def test_global_eviction_is_counted():
     drained = buffer.flush_all()
     assert len(drained) + drops.total == cap + critical_count
     assert sum(1 for d in drained if d.type == "critical") == critical_count
-

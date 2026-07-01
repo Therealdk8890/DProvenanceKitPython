@@ -6,7 +6,7 @@ identities and a flattened, collapse-aware tree — without any SwiftUI views.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional, Set
 
 from .render_hints import RenderHints
@@ -45,7 +45,9 @@ class SpanViewModel:
 
         children = []
         for child in node.children:
-            child_path = f"{path_part}->{child.span_id if child.span_id is not None else 'anon'}"
+            child_path = (
+                f"{path_part}->{child.span_id if child.span_id is not None else 'anon'}"
+            )
             children.append(
                 SpanViewModel.from_node(
                     node=child,
@@ -110,4 +112,3 @@ def flatten_span_tree(
         traverse(root, True)
 
     return result
-

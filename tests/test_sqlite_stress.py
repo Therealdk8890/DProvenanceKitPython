@@ -9,7 +9,9 @@ from conftest import TestEvent
 
 
 def test_concurrency_10k(temp_db_path):
-    store = SQLiteTraceStore(TestEvent, temp_db_path, max_global_buffer=10_000, max_per_run_buffer=1000)
+    store = SQLiteTraceStore(
+        TestEvent, temp_db_path, max_global_buffer=10_000, max_per_run_buffer=1000
+    )
     kit = DProvenanceKit(TestEvent)
 
     def worker(i):
@@ -34,7 +36,9 @@ def test_concurrency_10k(temp_db_path):
 
 
 def test_query_engine(temp_db_path):
-    store = SQLiteTraceStore(TestEvent, temp_db_path, max_global_buffer=10_000, max_per_run_buffer=1000)
+    store = SQLiteTraceStore(
+        TestEvent, temp_db_path, max_global_buffer=10_000, max_per_run_buffer=1000
+    )
     kit = DProvenanceKit(TestEvent)
 
     with kit.run(context_id="q1", store=store):
@@ -51,19 +55,25 @@ def test_query_engine(temp_db_path):
     store.flush()
 
     runs = store.query_runs(
-        TraceQueryDSL().requiring_step("processFinished").requiring_step("errorDetected")
+        TraceQueryDSL()
+        .requiring_step("processFinished")
+        .requiring_step("errorDetected")
     )
     assert len(runs) == 1
     assert runs[0].context_id == "q1"
 
     seq_runs = store.query_runs(
-        TraceQueryDSL().requiring_sequence(["processStarted", "errorDetected", "processFinished"])
+        TraceQueryDSL().requiring_sequence(
+            ["processStarted", "errorDetected", "processFinished"]
+        )
     )
     assert len(seq_runs) == 1
 
 
 def test_flush_is_barrier_and_preserves_record_order(temp_db_path):
-    store = SQLiteTraceStore(TestEvent, temp_db_path, max_global_buffer=10_000, max_per_run_buffer=1000)
+    store = SQLiteTraceStore(
+        TestEvent, temp_db_path, max_global_buffer=10_000, max_per_run_buffer=1000
+    )
     kit = DProvenanceKit(TestEvent)
     n = 500
 
@@ -84,7 +94,9 @@ def test_flush_is_barrier_and_preserves_record_order(temp_db_path):
 
 def test_burst_ingestion_collapse(tmp_path):
     burst_path = str(tmp_path / "burst.sqlite")
-    store = SQLiteTraceStore(TestEvent, burst_path, max_global_buffer=100, max_per_run_buffer=50)
+    store = SQLiteTraceStore(
+        TestEvent, burst_path, max_global_buffer=100, max_per_run_buffer=50
+    )
     kit = DProvenanceKit(TestEvent)
 
     with kit.run(context_id="rogue_agent", store=store):
@@ -111,4 +123,3 @@ def test_burst_ingestion_collapse(tmp_path):
     assert drops.critical == 0
     assert drops.structural == 0
     assert drops.preserved_integrity
-

@@ -64,7 +64,9 @@ class DefaultAlignmentInterpreter:
         for i, b_event in enumerate(base):
             binding = binding_map.get(b_event.id)
             if binding is not None and binding.comparison_event_id in comp_index_by_id:
-                matched_pairs.append((i, comp_index_by_id[binding.comparison_event_id], b_event.id))
+                matched_pairs.append(
+                    (i, comp_index_by_id[binding.comparison_event_id], b_event.id)
+                )
 
         reordered_base_ids = set()
         for a in matched_pairs:
@@ -81,7 +83,9 @@ class DefaultAlignmentInterpreter:
             ambiguous_options: List[AmbiguousMatch] = []
 
             binding = binding_map.get(b_event.id)
-            match_idx = comp_index_by_id.get(binding.comparison_event_id) if binding else None
+            match_idx = (
+                comp_index_by_id.get(binding.comparison_event_id) if binding else None
+            )
 
             if binding is not None and match_idx is not None:
                 c_event = comparison[match_idx]
@@ -100,7 +104,9 @@ class DefaultAlignmentInterpreter:
                     )
                 )
 
-                ambiguity_threshold = config.equivalence_evaluator.ambiguity_threshold(b_event.payload)
+                ambiguity_threshold = config.equivalence_evaluator.ambiguity_threshold(
+                    b_event.payload
+                )
                 best_explanation = explanation
 
                 for j, comp_event in enumerate(comparison):
@@ -111,11 +117,18 @@ class DefaultAlignmentInterpreter:
                     decision_j = equivalence(b_event, comp_event)
                     j_score = decision_j.confidence
                     _, j_explanation = config.score_match(b_event, comp_event)
-                    if j_score >= ambiguity_threshold and j not in bound_comparison_indices:
+                    if (
+                        j_score >= ambiguity_threshold
+                        and j not in bound_comparison_indices
+                    ):
                         delta = score - j_score
                         if delta <= config.profile.ambiguity_delta_threshold:
                             ambiguous_options.append(
-                                AmbiguousMatch(event=comp_event, strength=j_score, explanation=j_explanation)
+                                AmbiguousMatch(
+                                    event=comp_event,
+                                    strength=j_score,
+                                    explanation=j_explanation,
+                                )
                             )
                             emit_meta(
                                 AlignmentMetaEvent.ambiguity_threshold_met(
@@ -126,15 +139,25 @@ class DefaultAlignmentInterpreter:
                                 )
                             )
 
-                ambiguous_options = AlignmentExecutionContract.canonical_sort_ambiguity(ambiguous_options)
+                ambiguous_options = AlignmentExecutionContract.canonical_sort_ambiguity(
+                    ambiguous_options
+                )
 
                 if score < config.profile.semantic_threshold or ambiguous_options:
                     ambiguous_options.append(
-                        AmbiguousMatch(event=c_event, strength=score, explanation=best_explanation)
+                        AmbiguousMatch(
+                            event=c_event, strength=score, explanation=best_explanation
+                        )
                     )
-                    ambiguous_options = AlignmentExecutionContract.canonical_sort_ambiguity(ambiguous_options)
+                    ambiguous_options = (
+                        AlignmentExecutionContract.canonical_sort_ambiguity(
+                            ambiguous_options
+                        )
+                    )
                     if len(ambiguous_options) > config.profile.max_ambiguous_candidates:
-                        ambiguous_options = ambiguous_options[: config.profile.max_ambiguous_candidates]
+                        ambiguous_options = ambiguous_options[
+                            : config.profile.max_ambiguous_candidates
+                        ]
                     state = AlignmentState.ambiguous(len(ambiguous_options))
                     used_comparison_indices.add(match_idx)
                 else:
@@ -144,7 +167,9 @@ class DefaultAlignmentInterpreter:
                         and b_event.id in reordered_base_ids
                     )
                     if is_reordered:
-                        state = AlignmentState.reordered(b_event.sequence, c_event.sequence)
+                        state = AlignmentState.reordered(
+                            b_event.sequence, c_event.sequence
+                        )
                     elif b_event.payload == c_event.payload:
                         state = AlignmentState.exact_match()
                     else:
@@ -218,4 +243,3 @@ class DefaultAlignmentInterpreter:
                 )
 
         return AlignmentExecutionContract.canonical_sort_alignments(alignments)
-

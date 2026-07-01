@@ -25,4 +25,3 @@ class EvictionPolicy(Enum):
 class OfflineConfig:
     capacity: BufferCapacity = BufferCapacity()
     eviction: EvictionPolicy = EvictionPolicy.DROP_OLDEST
-

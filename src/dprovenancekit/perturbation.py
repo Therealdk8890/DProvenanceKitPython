@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Optional
 
 from .alignment_config import AnyEquivalenceEvaluator
 
@@ -35,7 +34,9 @@ class EvaluationPerturbationLayer:
     def __init__(self, mode: PerturbationMode):
         self.mode = mode
 
-    def evaluator(self, base: AnyEquivalenceEvaluator, boundary) -> AnyEquivalenceEvaluator:
+    def evaluator(
+        self, base: AnyEquivalenceEvaluator, boundary
+    ) -> AnyEquivalenceEvaluator:
         if (
             self.mode.kind != "scoreNoise"
             or boundary.cache_isolated
@@ -56,4 +57,3 @@ class EvaluationPerturbationLayer:
             evaluator=noisy,
             ambiguity_threshold_fn=lambda e: base.ambiguity_threshold(e),
         )
-

@@ -19,4 +19,3 @@ class RenderHints:
     important_event_types: Set[str] = field(default_factory=set)
     highlight_quarantine: bool = True
     diff_mode: DiffPresentationMode = DiffPresentationMode.NONE
-

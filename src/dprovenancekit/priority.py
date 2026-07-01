@@ -32,4 +32,3 @@ class TracePriority(IntEnum):
     #: Replay correctness boundary. Crucial for replay integrity and anomaly detection.
     #: NEVER dropped (e.g. start, end, error).
     CRITICAL = 3
-

@@ -130,7 +130,10 @@ class TraceWriteBuffer:
 
             # 1. Soft per-run limit: shed verbose/diagnostic for a bursting run, but keep
             #    its structural and critical events even while it bursts.
-            if run_depth >= self._max_per_run_buffer and priority <= TracePriority.DIAGNOSTIC:
+            if (
+                run_depth >= self._max_per_run_buffer
+                and priority <= TracePriority.DIAGNOSTIC
+            ):
                 self._dropped_by_tier[priority] += 1
                 return
 
@@ -152,7 +155,9 @@ class TraceWriteBuffer:
 
             stamp = self._enqueue_counter
             self._enqueue_counter += 1
-            self._tiers[priority].append(_Buffered(stamp=stamp, row=event, bytes=event_bytes))
+            self._tiers[priority].append(
+                _Buffered(stamp=stamp, row=event, bytes=event_bytes)
+            )
             self._total_count += 1
             self._total_bytes += event_bytes
             self._queue_depth_by_run[event.run_id] = run_depth + 1
@@ -234,4 +239,3 @@ class TraceWriteBuffer:
                     break
                 result.append(edge)
             return result
-

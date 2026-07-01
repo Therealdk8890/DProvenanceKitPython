@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import uuid
 from dataclasses import dataclass
 
@@ -179,8 +178,14 @@ def test_diff_symmetry():
 
     assert diff_ab.summary.divergence_points == diff_ba.summary.divergence_points
     if diff_ab.divergences and diff_ba.divergences:
-        assert diff_ab.divergences[0].left_event.event.id == diff_ba.divergences[0].right_event.event.id
-        assert diff_ab.divergences[0].right_event.event.id == diff_ba.divergences[0].left_event.event.id
+        assert (
+            diff_ab.divergences[0].left_event.event.id
+            == diff_ba.divergences[0].right_event.event.id
+        )
+        assert (
+            diff_ab.divergences[0].right_event.event.id
+            == diff_ba.divergences[0].left_event.event.id
+        )
 
 
 @dataclass(frozen=True)
@@ -220,4 +225,3 @@ def test_diff_compares_payload_value_not_encoded_hash():
 
     assert diff.summary.modified_events == 1
     assert diff.summary.divergence_points == 1
-

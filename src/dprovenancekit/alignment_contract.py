@@ -23,19 +23,25 @@ class AlignmentExecutionContract:
     contract_version = CONTRACT_VERSION
 
     @staticmethod
-    def canonical_sort_evidence(evidence: List[HeuristicEvidence]) -> List[HeuristicEvidence]:
+    def canonical_sort_evidence(
+        evidence: List[HeuristicEvidence],
+    ) -> List[HeuristicEvidence]:
         return sort_evidence(evidence)
 
     @staticmethod
-    def canonical_sort_ambiguity(ambiguity: List[AmbiguousMatch]) -> List[AmbiguousMatch]:
+    def canonical_sort_ambiguity(
+        ambiguity: List[AmbiguousMatch],
+    ) -> List[AmbiguousMatch]:
         return sorted(ambiguity, key=lambda a: (-a.strength, a.event.sequence))
 
     @staticmethod
-    def canonical_sort_alignments(alignments: List[EventAlignment]) -> List[EventAlignment]:
+    def canonical_sort_alignments(
+        alignments: List[EventAlignment],
+    ) -> List[EventAlignment]:
         def key(a: EventAlignment):
             base = a.base_event
             comp = a.comparison_event
-            seq = (base.sequence if base else (comp.sequence if comp else 0))
+            seq = base.sequence if base else (comp.sequence if comp else 0)
             id_ = ""
             if base is not None:
                 id_ = str(base.id)
@@ -46,7 +52,9 @@ class AlignmentExecutionContract:
         return sorted(alignments, key=key)
 
     @staticmethod
-    def compute_profile_hash(profile, evaluator_identifier: str, engine_version: str) -> str:
+    def compute_profile_hash(
+        profile, evaluator_identifier: str, engine_version: str
+    ) -> str:
         payload = (
             f"contractVersion:{CONTRACT_VERSION}\n"
             f"engineVersion:{engine_version}\n"
@@ -71,4 +79,3 @@ def _fmt(value: float) -> str:
     if value == int(value):
         return f"{value:.1f}"
     return repr(value)
-

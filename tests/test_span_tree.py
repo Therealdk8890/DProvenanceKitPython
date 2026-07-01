@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from dprovenancekit import DProvenanceKit, SQLiteTraceStore, TracePriority, TraceQueryDSL, TraceableEvent
+from dprovenancekit import (
+    DProvenanceKit,
+    SQLiteTraceStore,
+    TracePriority,
+    TraceQueryDSL,
+    TraceableEvent,
+)
 
 
 @dataclass(frozen=True)
@@ -59,4 +65,3 @@ def test_nested_spans(temp_db_path):
     assert grandchild.span_id is not None
     assert grandchild.parent_span_id == child.span_id
     assert grandchild.span_id != child.span_id
-

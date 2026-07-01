@@ -124,7 +124,9 @@ class OpenAIAgentsTraceEvent(TraceableEvent):
         attrs = {k: v for k, v in data.items() if k not in ("type", "priority")}
         return cls.make(
             type_name=data["type"],
-            priority=TracePriority(int(data.get("priority", int(TracePriority.STRUCTURAL)))),
+            priority=TracePriority(
+                int(data.get("priority", int(TracePriority.STRUCTURAL)))
+            ),
             attributes=attrs,
         )
 
@@ -163,9 +165,13 @@ def _usage_attrs(usage: Any) -> Dict[str, Any]:
 
 def _engine_for(span_data: Any, default: str) -> str:
     kind = getattr(span_data, "type", None)
-    if kind in ("agent", "function", "guardrail", "custom", "task") and getattr(span_data, "name", None):
+    if kind in ("agent", "function", "guardrail", "custom", "task") and getattr(
+        span_data, "name", None
+    ):
         return str(span_data.name)
-    if kind in ("generation", "speech", "transcription") and getattr(span_data, "model", None):
+    if kind in ("generation", "speech", "transcription") and getattr(
+        span_data, "model", None
+    ):
         return str(span_data.model)
     if kind == "handoff":
         to_agent = getattr(span_data, "to_agent", None)
@@ -257,11 +263,16 @@ def _error_attributes(error: Any) -> Dict[str, Any]:
 @dataclass
 class _TraceState:
     """Per-trace bookkeeping. All span-level state is scoped here, not globally, so two
-    concurrently-open traces can never collide on a span id or leak across each other."""
+    concurrently-open traces can never collide on a span id or leak across each other.
+    """
 
     run: ActiveTraceRun
-    start_events: Dict[str, uuid.UUID] = field(default_factory=dict)  # span_id -> start id
-    ended_spans: Set[str] = field(default_factory=set)  # span_ids already ended (idempotency)
+    start_events: Dict[str, uuid.UUID] = field(
+        default_factory=dict
+    )  # span_id -> start id
+    ended_spans: Set[str] = field(
+        default_factory=set
+    )  # span_ids already ended (idempotency)
 
 
 class DProvenanceTracingProcessor(_TracingProcessor):  # type: ignore[misc,valid-type]
@@ -346,7 +357,9 @@ class DProvenanceTracingProcessor(_TracingProcessor):  # type: ignore[misc,valid
             )
             if self._link:
                 if span_id is not None:
-                    state.start_events[str(span_id)] = event_id  # only kept if edges are on
+                    state.start_events[str(span_id)] = (
+                        event_id  # only kept if edges are on
+                    )
                 if parent_id is not None:
                     parent_start = state.start_events.get(str(parent_id))
                     if parent_start is not None:
@@ -367,12 +380,18 @@ class DProvenanceTracingProcessor(_TracingProcessor):  # type: ignore[misc,valid
             kind = getattr(span_data, "type", "span")
             error = getattr(span, "error", None)
             if error is not None:
-                type_name, priority, attrs = f"{kind}.error", TracePriority.CRITICAL, _error_attributes(error)
+                type_name, priority, attrs = (
+                    f"{kind}.error",
+                    TracePriority.CRITICAL,
+                    _error_attributes(error),
+                )
             else:
                 attrs = _span_attributes(span_data, self._capture)
                 # A triggered guardrail is a decision boundary worth never dropping.
                 triggered = attrs.get("triggered") is True
-                priority = TracePriority.CRITICAL if triggered else TracePriority.STRUCTURAL
+                priority = (
+                    TracePriority.CRITICAL if triggered else TracePriority.STRUCTURAL
+                )
                 type_name = f"{kind}.end"
             event_id = self._record(
                 state.run,
@@ -453,4 +472,3 @@ __all__ = [
     "OpenAIAgentsTraceEvent",
     "register",
 ]
-

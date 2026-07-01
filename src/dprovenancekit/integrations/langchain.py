@@ -55,7 +55,9 @@ from ..priority import TracePriority
 # back to ``object`` otherwise so the translation logic stays importable and testable
 # without the dependency. The ``on_*`` methods below are identical either way.
 try:  # pragma: no cover - import side-effect, both branches are exercised across envs
-    from langchain_core.callbacks.base import BaseCallbackHandler as _BaseCallbackHandler
+    from langchain_core.callbacks.base import (
+        BaseCallbackHandler as _BaseCallbackHandler,
+    )
 
     _HAS_LANGCHAIN = True
 except Exception:  # noqa: BLE001 - any import failure means "not available"
@@ -154,7 +156,9 @@ class LangChainTraceEvent(TraceableEvent):
         attrs = {k: v for k, v in data.items() if k not in ("type", "priority")}
         return cls.make(
             type_name=data["type"],
-            priority=TracePriority(int(data.get("priority", int(TracePriority.STRUCTURAL)))),
+            priority=TracePriority(
+                int(data.get("priority", int(TracePriority.STRUCTURAL)))
+            ),
             attributes=attrs,
         )
 
@@ -314,7 +318,12 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
         parent_run_id: Any,
     ) -> None:
         event_id = self._record(
-            type_name, priority, attributes, engine=engine, run_id=run_id, parent_run_id=parent_run_id
+            type_name,
+            priority,
+            attributes,
+            engine=engine,
+            run_id=run_id,
+            parent_run_id=parent_run_id,
         )
         key = str(run_id) if run_id is not None else None
         if key is not None:
@@ -336,7 +345,12 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
         parent_run_id: Any,
     ) -> None:
         event_id = self._record(
-            type_name, priority, attributes, engine=engine, run_id=run_id, parent_run_id=parent_run_id
+            type_name,
+            priority,
+            attributes,
+            engine=engine,
+            run_id=run_id,
+            parent_run_id=parent_run_id,
         )
         if self._link and run_id is not None:
             start_id = self._start_event.pop(str(run_id), None)
@@ -388,7 +402,9 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
             parent_run_id=parent_run_id,
         )
 
-    def on_llm_end(self, response: Any, *, run_id: Any, parent_run_id: Any = None, **kwargs: Any) -> None:
+    def on_llm_end(
+        self, response: Any, *, run_id: Any, parent_run_id: Any = None, **kwargs: Any
+    ) -> None:
         attrs = _llm_end_attributes(response)
         if not self._capture:
             attrs.pop("completion_preview", None)
@@ -401,7 +417,14 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
             parent_run_id=parent_run_id,
         )
 
-    def on_llm_error(self, error: BaseException, *, run_id: Any, parent_run_id: Any = None, **kwargs: Any) -> None:
+    def on_llm_error(
+        self,
+        error: BaseException,
+        *,
+        run_id: Any,
+        parent_run_id: Any = None,
+        **kwargs: Any,
+    ) -> None:
         self._on_finish(
             LCEventType.LLM_ERROR,
             TracePriority.CRITICAL,
@@ -437,7 +460,9 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
             parent_run_id=parent_run_id,
         )
 
-    def on_chain_end(self, outputs: Any, *, run_id: Any, parent_run_id: Any = None, **kwargs: Any) -> None:
+    def on_chain_end(
+        self, outputs: Any, *, run_id: Any, parent_run_id: Any = None, **kwargs: Any
+    ) -> None:
         if not self._record_chains:
             return
         attrs: Dict[str, Any] = {}
@@ -453,7 +478,14 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
             parent_run_id=parent_run_id,
         )
 
-    def on_chain_error(self, error: BaseException, *, run_id: Any, parent_run_id: Any = None, **kwargs: Any) -> None:
+    def on_chain_error(
+        self,
+        error: BaseException,
+        *,
+        run_id: Any,
+        parent_run_id: Any = None,
+        **kwargs: Any,
+    ) -> None:
         if not self._record_chains:
             return
         self._on_finish(
@@ -489,7 +521,9 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
             parent_run_id=parent_run_id,
         )
 
-    def on_tool_end(self, output: Any, *, run_id: Any, parent_run_id: Any = None, **kwargs: Any) -> None:
+    def on_tool_end(
+        self, output: Any, *, run_id: Any, parent_run_id: Any = None, **kwargs: Any
+    ) -> None:
         attrs: Dict[str, Any] = {}
         if self._capture and output is not None:
             attrs["output"] = _truncate(str(output))
@@ -502,7 +536,14 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
             parent_run_id=parent_run_id,
         )
 
-    def on_tool_error(self, error: BaseException, *, run_id: Any, parent_run_id: Any = None, **kwargs: Any) -> None:
+    def on_tool_error(
+        self,
+        error: BaseException,
+        *,
+        run_id: Any,
+        parent_run_id: Any = None,
+        **kwargs: Any,
+    ) -> None:
         self._on_finish(
             LCEventType.TOOL_ERROR,
             TracePriority.CRITICAL,
@@ -535,7 +576,9 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
             parent_run_id=parent_run_id,
         )
 
-    def on_retriever_end(self, documents: Any, *, run_id: Any, parent_run_id: Any = None, **kwargs: Any) -> None:
+    def on_retriever_end(
+        self, documents: Any, *, run_id: Any, parent_run_id: Any = None, **kwargs: Any
+    ) -> None:
         count = len(documents) if isinstance(documents, (list, tuple)) else None
         self._on_finish(
             LCEventType.RETRIEVER_ENDED,
@@ -546,7 +589,14 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
             parent_run_id=parent_run_id,
         )
 
-    def on_retriever_error(self, error: BaseException, *, run_id: Any, parent_run_id: Any = None, **kwargs: Any) -> None:
+    def on_retriever_error(
+        self,
+        error: BaseException,
+        *,
+        run_id: Any,
+        parent_run_id: Any = None,
+        **kwargs: Any,
+    ) -> None:
         self._on_finish(
             LCEventType.RETRIEVER_ERROR,
             TracePriority.CRITICAL,
@@ -558,7 +608,9 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
 
     # MARK: - Agent --------------------------------------------------------------
 
-    def on_agent_action(self, action: Any, *, run_id: Any, parent_run_id: Any = None, **kwargs: Any) -> None:
+    def on_agent_action(
+        self, action: Any, *, run_id: Any, parent_run_id: Any = None, **kwargs: Any
+    ) -> None:
         attrs: Dict[str, Any] = {}
         tool = getattr(action, "tool", None)
         if tool is not None:
@@ -578,7 +630,9 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
             parent_run_id=parent_run_id,
         )
 
-    def on_agent_finish(self, finish: Any, *, run_id: Any, parent_run_id: Any = None, **kwargs: Any) -> None:
+    def on_agent_finish(
+        self, finish: Any, *, run_id: Any, parent_run_id: Any = None, **kwargs: Any
+    ) -> None:
         attrs: Dict[str, Any] = {}
         if self._capture:
             return_values = getattr(finish, "return_values", None)
@@ -648,4 +702,3 @@ __all__ = [
     "LangChainTraceEvent",
     "LCEventType",
 ]
-

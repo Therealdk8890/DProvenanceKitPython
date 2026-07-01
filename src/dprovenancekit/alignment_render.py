@@ -33,7 +33,11 @@ class AlignmentRenderNode:
     def canonical_serialization(self) -> str:
         """Deterministic string serialization for snapshot hashing."""
         base = str(self.base_sequence) if self.base_sequence is not None else "nil"
-        comp = str(self.comparison_sequence) if self.comparison_sequence is not None else "nil"
+        comp = (
+            str(self.comparison_sequence)
+            if self.comparison_sequence is not None
+            else "nil"
+        )
         return (
             f"[{base}->{comp}]|{self.type_identifier}|{self.render_hint.value}|"
             f"{self.ambiguous_alternatives}|{str(self.has_detailed_evidence).lower()}|"
@@ -46,7 +50,9 @@ def render_models(result: TraceAlignmentResult) -> List[AlignmentRenderNode]:
     nodes: List[AlignmentRenderNode] = []
     for alignment in result.alignments:
         base_seq = alignment.base_event.sequence if alignment.base_event else None
-        comp_seq = alignment.comparison_event.sequence if alignment.comparison_event else None
+        comp_seq = (
+            alignment.comparison_event.sequence if alignment.comparison_event else None
+        )
         type_id = (
             alignment.base_event.payload.type_identifier
             if alignment.base_event
@@ -70,7 +76,9 @@ def render_models(result: TraceAlignmentResult) -> List[AlignmentRenderNode]:
             explanation = "Reordered"
         elif kind == AlignmentStateKind.AMBIGUOUS:
             hint = RenderHint.WARNING
-            explanation = f"Ambiguous match ({alignment.state.options_count} possibilities)"
+            explanation = (
+                f"Ambiguous match ({alignment.state.options_count} possibilities)"
+            )
         elif kind == AlignmentStateKind.ADDED:
             hint = RenderHint.SUCCESS
             explanation = "Added in new version"
@@ -81,7 +89,11 @@ def render_models(result: TraceAlignmentResult) -> List[AlignmentRenderNode]:
         node_id = (
             str(alignment.base_event.id)
             if alignment.base_event
-            else (str(alignment.comparison_event.id) if alignment.comparison_event else str(uuid.uuid4()))
+            else (
+                str(alignment.comparison_event.id)
+                if alignment.comparison_event
+                else str(uuid.uuid4())
+            )
         )
 
         nodes.append(
@@ -97,4 +109,3 @@ def render_models(result: TraceAlignmentResult) -> List[AlignmentRenderNode]:
             )
         )
     return nodes
-

@@ -28,7 +28,10 @@ def test_written_run_survives_raw_trace_store_reopen(temp_db_path):
     assert len(run.events) == 4
 
     assert [e.type_identifier for e in run.events] == [
-        "processStarted", "stepCompleted", "errorDetected", "processFinished"
+        "processStarted",
+        "stepCompleted",
+        "errorDetected",
+        "processFinished",
     ]
     assert [e.sequence for e in run.events] == [0, 1, 2, 3]
 
@@ -41,4 +44,3 @@ def test_written_run_survives_raw_trace_store_reopen(temp_db_path):
     step = next(e for e in run.events if e.type_identifier == "stepCompleted")
     decoded_step = TestEvent.from_dict(json.loads(step.payload_json))
     assert decoded_step == TestEvent.step_completed(7)
-

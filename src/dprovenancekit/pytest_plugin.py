@@ -20,7 +20,7 @@ def pytest_exception_interact(node, call, report):
 @pytest.fixture
 def dprovenance_gate():
     """Returns a fresh RegressionGate configured with default strictness.
-    
+
     Usage:
         def test_agent_regression(dprovenance_gate, golden_run, candidate_run):
             dprovenance_gate.assert_no_regression(golden_run, candidate_run)
@@ -38,4 +38,3 @@ def dprovenance_strict_gate():
 def dprovenance_relaxed_gate():
     """Returns a RegressionGate that allows benign divergent steps as long as the severity level is acceptable."""
     return RegressionGate(allow_divergent_steps=True)
-

@@ -115,8 +115,12 @@ class TracedEvent(TraceableEvent):
         return json.loads(self.attributes_json)
 
     def to_dict(self) -> dict:
-        out: Dict[str, Any] = {"type": self.type_name, "priority": self.priority_value}
-        out.update(json.loads(self.attributes_json))
+        # Identity fields win over same-named user attributes: decode paths and
+        # golden-run diffs key on them, so an attribute called "type" or "priority"
+        # must not be able to rewrite the event's identity.
+        out: Dict[str, Any] = dict(json.loads(self.attributes_json))
+        out["type"] = self.type_name
+        out["priority"] = self.priority_value
         return out
 
     @classmethod

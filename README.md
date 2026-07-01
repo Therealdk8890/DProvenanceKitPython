@@ -85,12 +85,16 @@ trace.save("golden_run.sqlite")
 
 # 3. Print a structural explanation
 trace.explain()
-# --- Execution Trace (b4f8d2...) ---
+# --- Execution Trace (b4f8d2…) ---
 # ▶ Started Agent Workflow
 #   ▶ Started Retrieve Documents
+#   ✔ Finished Retrieve Documents
 #   ▶ Started Verify Claims
+#   ✔ Finished Verify Claims
+# ✔ Finished Agent Workflow
 
-# 4. Catch regressions when the logic changes
+# 4. Catch regressions when the logic changes: rerun the (now buggy) workflow,
+#    then diff the current run against the saved golden baseline
 trace.diff("golden_run.sqlite")
 # --- Trace Diff (Golden vs Current) ---
 # ❌ Missing step: Verify Claims
@@ -125,6 +129,7 @@ implementation case-for-case.
 | --- | --- |
 | Event model, priority tiers, drop accounting | `event`, `priority`, `drop_stats` |
 | Recording API + ambient context | `kit`, `context` |
+| Global `trace` facade (record / save / explain / diff) | `facade` |
 | Stores (in-memory, WAL SQLite, raw read) | `store`, `sqlite_store`, `raw_store` |
 | Priority-aware write buffer | `write_buffer` |
 | Query DSL + two backends (AST eval + SQL compiler) | `query` |
@@ -133,17 +138,14 @@ implementation case-for-case.
 | Deterministic replay | `replay` |
 | Semantic alignment engine + evidence + verification | `alignment_*`, `verification` |
 | Benchmark harness, failure diagnoser, corpus | `benchmark`, `corpus` |
-| Conformance testing | `conformance` |
-| Automated testing tools (e.g. fingerprinting) | `testing` |
+| Conformance testing | [`conformance/`](conformance/) (repo directory, not a package module) |
+| Regression gate + fingerprinting test helpers | `testing`, `pytest_plugin` |
 | Visualizer (HTML rendering) | `visualizer` |
-| Server and sync client | `server`, `ui_server`, `sync_client` |
+| Local trace viewer server | `ui_server` |
 | Pure view models for a trace viewer | `viewmodel` |
-| Framework-agnostic instrumentation | `instrument` |
-| Framework adapters | `integrations.langchain`, `integrations.fastapi`, `integrations.jupyter`, `integrations.llama_index`, `integrations.mcp`, `integrations.google_genai`, `integrations.crewai` |
-| Framework adapters (OpenAI Agents SDK) | `integrations.openai_agents` |
-| Regression-gate test helper | `testing` |
-| Shareable HTML regression report | `report` |
 | Framework-agnostic instrumentation (decorators) | `instrument` |
+| Framework adapters | `integrations.langchain`, `integrations.openai_agents`, `integrations.llama_index`, `integrations.crewai`, `integrations.google_genai`, `integrations.fastapi`, `integrations.jupyter`, `integrations.mcp` |
+| Shareable HTML regression report | `report` |
 | Headless CLI — `gate`, `anomalies`, `runs`, `evaluate` | `cli` |
 
 The SwiftUI `DProvenanceUI` target is intentionally **not** ported (it is Apple-platform UI); its
@@ -240,14 +242,22 @@ pip install dprovenancekit[llama-index]
 
 ```python
 from llama_index.core import Settings
-from dprovenancekit.integrations.llama_index import DProvenanceLlamaIndexCallbackHandler
+from dprovenancekit import DProvenanceKit, SQLiteTraceStore
+from dprovenancekit.integrations.llama_index import (
+    DProvenanceLlamaIndexCallbackHandler,
+    LlamaIndexTraceEvent,
+)
 
-# Attach the callback handler globally
-tracer = DProvenanceLlamaIndexCallbackHandler(store)
-Settings.callback_manager.add_handler(tracer)
+kit = DProvenanceKit(LlamaIndexTraceEvent)
+store = SQLiteTraceStore(LlamaIndexTraceEvent, "traces.sqlite")
 
-# Execute queries normally; they will be recorded to the trace store
-response = index.as_query_engine().query("What did the author do growing up?")
+# The handler records into an active run
+with kit.run(context_id="qa-session", store=store) as run:
+    handler = DProvenanceLlamaIndexCallbackHandler(run)
+    Settings.callback_manager.add_handler(handler)
+
+    # Execute queries normally; they are recorded to the trace store
+    response = index.as_query_engine().query("What did the author do growing up?")
 ```
 
 ### CrewAI
@@ -257,20 +267,19 @@ pip install dprovenancekit[crewai]
 ```
 
 ```python
-from crewai import Crew
+from dprovenancekit import DProvenanceKit, InMemoryTraceStore
 from dprovenancekit.integrations.crewai import CrewAITracer
 
-# Attach the tracer to capture CrewAI agent events
-tracer = CrewAITracer(store)
+# CrewAI runs on LangChain under the hood; the tracer is a LangChain callback
+# handler that records each agent's chain start/end as typed events. Start events
+# record under the agent's role (from callback metadata) as the engine name.
+kit = DProvenanceKit(MyEvent)  # your TraceableEvent subclass
+tracer = CrewAITracer(kit, MyEvent.agent_start, MyEvent.agent_end)
 
-crew = Crew(
-    agents=[researcher, writer],
-    tasks=[research_task, write_task],
-    step_callback=tracer.step_callback,
-    task_callback=tracer.task_callback
-)
-
-result = crew.kickoff()
+store = InMemoryTraceStore()
+with kit.run(context_id="crew-run", store=store):
+    # ... attach `tracer` as a LangChain callback and kick off your crew ...
+    result = crew.kickoff()
 ```
 
 ---
@@ -348,34 +357,19 @@ fingerprint / diff / align / the regression gate all apply.
 
 ---
 
-## Example: regression testing
-
-[`examples/regression_testing.py`](examples/regression_testing.py) is the end-to-end story in ~150
-readable lines: record a **golden** run of a fact-checking agent, then catch a later run that skips
-its verification step — via both the fast **fingerprint** check and the detailed **alignment**
-verdict (which flags the dropped `claimVerified` step as a HIGH regression).
-
-```bash
-python examples/regression_testing.py
-```
-
-It self-asserts its verdicts, so it doubles as an executable test of the headline use case.
-
----
-
 ## Tests
 
 ```bash
 python -m pytest
 ```
 
-246 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress +
+251 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress +
 drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, …),
 28 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain
 integration tests, 16 OpenAI Agents SDK integration tests, 16 instrumentation-layer tests, 13
-regression-gate tests, ecosystem integration tests (FastAPI, Jupyter, MCP, CrewAI), visualizer
-tests, and the regression-testing example run as a self-asserting test. (The real-framework tests
-run only when the integrations are installed, otherwise skipped.)
+regression-gate tests, facade tests, ecosystem integration tests (FastAPI, Jupyter, MCP, CrewAI),
+visualizer tests, and the regression-testing example run as a self-asserting test. (The
+real-framework tests run only when the integrations are installed, otherwise skipped.)
 
 ---
 

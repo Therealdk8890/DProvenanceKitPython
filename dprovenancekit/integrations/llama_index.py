@@ -11,6 +11,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional
 
+from ..context import TraceContext
 from ..edge import TraceEdgeType
 from ..event import TraceableEvent
 from ..kit import ActiveTraceRun
@@ -82,6 +83,15 @@ class LlamaIndexTraceEvent(TraceableEvent):
         )
 
 
+@dataclass(frozen=True)
+class _OpenEvent:
+    """Span identity and start-event id of a LlamaIndex event awaiting its end callback."""
+
+    span_id: str
+    parent_span_id: Optional[str]
+    start_event_id: uuid.UUID
+
+
 class DProvenanceLlamaIndexCallbackHandler(BaseCallbackHandler):
     """LlamaIndex callback handler that pushes events into an ActiveTraceRun."""
 
@@ -89,8 +99,24 @@ class DProvenanceLlamaIndexCallbackHandler(BaseCallbackHandler):
         super().__init__(event_starts_to_ignore=[], event_ends_to_ignore=[])
         self.trace_run = trace_run
         self.link_lifecycle = link_lifecycle
-        self._span_stack: list[uuid.UUID] = []
-        self._event_spans: dict[str, uuid.UUID] = {}
+        self._span_stack: list[str] = []
+        self._open_events: dict[str, _OpenEvent] = {}
+
+    def _record_in_span(
+        self,
+        event: LlamaIndexTraceEvent,
+        span_id: str,
+        parent_span_id: Optional[str],
+    ) -> uuid.UUID:
+        """Record under an explicit span, set transiently and reset immediately
+        (mirrors ``dprovenancekit.instrument._record_in_span``)."""
+        span_token = TraceContext.current_span_id.set(span_id)
+        parent_token = TraceContext.parent_span_id.set(parent_span_id)
+        try:
+            return self.trace_run.record(event, engine_name="llama_index")
+        finally:
+            TraceContext.parent_span_id.reset(parent_token)
+            TraceContext.current_span_id.reset(span_token)
 
     def on_event_start(
         self,
@@ -100,11 +126,14 @@ class DProvenanceLlamaIndexCallbackHandler(BaseCallbackHandler):
         parent_id: str = "",
         **kwargs: Any,
     ) -> str:
-        span_id = uuid.uuid4()
-        self._event_spans[event_id] = span_id
-
-        parent_span_id = self._span_stack[-1] if self._span_stack else None
-        self._span_stack.append(span_id)
+        span_id = str(uuid.uuid4())
+        # Nest under the enclosing LlamaIndex event, or the ambient span if the
+        # handler fires inside instrumented code (e.g. a @traced step).
+        parent_span_id = (
+            self._span_stack[-1]
+            if self._span_stack
+            else TraceContext.current_span_id.get()
+        )
 
         attrs = {"llama_event_id": event_id}
         if payload:
@@ -124,12 +153,13 @@ class DProvenanceLlamaIndexCallbackHandler(BaseCallbackHandler):
             attributes=attrs,
         )
 
-        self.trace_run.append(
-            event=event,
-            engine_name="llama_index",
+        start_event_id = self._record_in_span(event, span_id, parent_span_id)
+        self._open_events[event_id] = _OpenEvent(
             span_id=span_id,
             parent_span_id=parent_span_id,
+            start_event_id=start_event_id,
         )
+        self._span_stack.append(span_id)
         return event_id
 
     def on_event_end(
@@ -139,11 +169,23 @@ class DProvenanceLlamaIndexCallbackHandler(BaseCallbackHandler):
         event_id: str = "",
         **kwargs: Any,
     ) -> None:
-        if self._span_stack:
-            self._span_stack.pop()
-
-        start_span_id = self._event_spans.pop(event_id, None)
-        end_span_id = uuid.uuid4()
+        open_event = self._open_events.pop(event_id, None)
+        if open_event is not None:
+            # The end event shares the start event's span (same model as
+            # instrument.traced: one span brackets a step's whole lifecycle).
+            span_id = open_event.span_id
+            parent_span_id = open_event.parent_span_id
+            if span_id in self._span_stack:
+                self._span_stack.remove(span_id)
+        else:
+            # End without a recorded start: record it in its own span rather
+            # than dropping it, but leave the stack untouched.
+            span_id = str(uuid.uuid4())
+            parent_span_id = (
+                self._span_stack[-1]
+                if self._span_stack
+                else TraceContext.current_span_id.get()
+            )
 
         attrs = {"llama_event_id": event_id}
         if payload:
@@ -165,17 +207,13 @@ class DProvenanceLlamaIndexCallbackHandler(BaseCallbackHandler):
             attributes=attrs,
         )
 
-        self.trace_run.append(
-            event=event,
-            engine_name="llama_index",
-            span_id=end_span_id,
-        )
+        end_event_id = self._record_in_span(event, span_id, parent_span_id)
 
-        if self.link_lifecycle and start_span_id:
+        if self.link_lifecycle and open_event is not None:
             self.trace_run.link(
-                source_span_id=end_span_id,
-                target_span_id=start_span_id,
-                edge_type=TraceEdgeType.DERIVED_FROM,
+                open_event.start_event_id,
+                end_event_id,
+                TraceEdgeType.DERIVED_FROM,
             )
 
     def start_trace(self, trace_id: Optional[str] = None) -> None:

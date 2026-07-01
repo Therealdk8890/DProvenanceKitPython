@@ -110,3 +110,5 @@ def flatten_span_tree(
         traverse(root, True)
 
     return result
+
+# git-blob-rewrite

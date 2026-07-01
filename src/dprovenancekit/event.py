@@ -146,3 +146,5 @@ class AnyTraceableEvent(TraceableEvent):
             "priority_value": self.priority_value,
             "raw_json": self.raw_json,
         }
+
+# git-blob-rewrite

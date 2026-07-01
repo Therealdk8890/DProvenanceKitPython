@@ -59,3 +59,5 @@ class AlignmentSnapshotValidator:
             )
             return False
         return True
+
+# git-blob-rewrite

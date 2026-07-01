@@ -59,3 +59,5 @@ def test_nested_spans(temp_db_path):
     assert grandchild.span_id is not None
     assert grandchild.parent_span_id == child.span_id
     assert grandchild.span_id != child.span_id
+
+# git-blob-rewrite

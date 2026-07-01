@@ -137,3 +137,5 @@ def test_empty_findings_with_missed_expectation_scores_zero():
     assert not result.actual_findings
     assert result.false_negatives
     assert result.fidelity_score.overall_score == 0.0
+
+# git-blob-rewrite

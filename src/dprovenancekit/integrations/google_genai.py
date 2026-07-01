@@ -140,3 +140,5 @@ class _ModelsWrapper:
             if self.link_lifecycle:
                 self.trace_run.link(err_span, start_span, TraceEdgeType.DERIVED_FROM)
             raise e
+
+# git-blob-rewrite

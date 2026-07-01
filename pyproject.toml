@@ -57,3 +57,5 @@ dprovenancekit = ["py.typed", "index.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# git-blob-rewrite

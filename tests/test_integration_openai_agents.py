@@ -419,3 +419,5 @@ def test_real_span_data_objects_are_handled():
     by_type = _events_by_type(store.get_run(run_id))
     assert "function.start" in by_type and "function.end" in by_type
     assert by_type["function.start"].engine_name == "search"
+
+# git-blob-rewrite

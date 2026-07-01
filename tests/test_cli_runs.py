@@ -79,3 +79,5 @@ def test_runs_unopenable_db_exits_2(tmp_path, capsys):
     code = main(["runs", "--db", str(tmp_path), "--format", "id"])  # a directory
     assert code == 2
     assert "could not open database" in capsys.readouterr().err
+
+# git-blob-rewrite

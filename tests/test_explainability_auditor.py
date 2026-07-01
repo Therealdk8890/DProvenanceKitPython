@@ -130,3 +130,5 @@ def test_reported_reorder_is_faithful():
         ],
     )
     assert auditor.audit(m).causal_ordering == 1.0
+
+# git-blob-rewrite

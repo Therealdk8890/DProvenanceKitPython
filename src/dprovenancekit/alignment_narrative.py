@@ -71,3 +71,5 @@ class AlignmentNarrativeCompiler:
         paragraphs.append(f"Overall regression risk: {risk_level.value.capitalize()}.")
 
         return "\n\n".join(paragraphs)
+
+# git-blob-rewrite

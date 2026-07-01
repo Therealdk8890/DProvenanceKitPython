@@ -277,3 +277,5 @@ class SnapshotDiffEngine:
             event_changes=event_changes,
             divergences=divergences,
         )
+
+# git-blob-rewrite

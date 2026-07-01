@@ -70,3 +70,5 @@ class LiveAnomalySubscription(TraceQuerySubscription):
 
     def on_update(self, run: TraceRun) -> None:
         pass
+
+# git-blob-rewrite

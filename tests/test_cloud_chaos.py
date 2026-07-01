@@ -155,3 +155,5 @@ def test_flush_times_out_on_sustained_outage_instead_of_hanging():
         writer.flush(timeout=1.0)
     elapsed = time.time() - start
     assert elapsed < 8.0
+
+# git-blob-rewrite

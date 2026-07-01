@@ -125,3 +125,5 @@ def test_pull_run(tmp_path):
     # We just assume it succeeds if it didn't crash.
     
     store.close()
+
+# git-blob-rewrite

@@ -131,3 +131,5 @@ def test_main_reads_report_from_env(capsys):
 def test_main_errors_on_empty_input(monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO(""))
     assert mr_note.main({}) == 1
+
+# git-blob-rewrite

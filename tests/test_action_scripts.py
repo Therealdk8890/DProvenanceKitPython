@@ -310,3 +310,5 @@ def test_run_anomalies_publishes_outputs(tmp_path, capsys):
     assert json.loads(parsed["anomalies-json"])["count"] == 1
     # The warning annotation is emitted to the log.
     assert "::warning" in capsys.readouterr().out
+
+# git-blob-rewrite

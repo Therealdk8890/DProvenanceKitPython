@@ -151,3 +151,5 @@ runs:
       run: |
         echo "::error title=DProvenanceKit::${{ steps.anomalies.outputs.anomaly-count }} anomaly rule(s) fired"
         exit 1
+
+# git-blob-rewrite

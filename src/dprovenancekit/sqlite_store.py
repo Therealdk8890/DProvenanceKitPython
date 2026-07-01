@@ -605,3 +605,5 @@ class SQLiteTraceStore(TraceStore):
                 timestamp=float(timestamp_us) / 1_000_000.0,
             )
         return events
+
+# git-blob-rewrite

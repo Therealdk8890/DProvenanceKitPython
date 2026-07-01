@@ -84,3 +84,5 @@ class LiveTraceQueryEngine:
                         state.matching_runs.discard(run.run_id)
 
                 self._query_states[query_id] = state
+
+# git-blob-rewrite

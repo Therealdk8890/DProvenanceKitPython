@@ -115,3 +115,5 @@ class TraceDiffEngine:
             comparison_run_id=comparison.run_id,
             changes=changes,
         )
+
+# git-blob-rewrite

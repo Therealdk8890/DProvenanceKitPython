@@ -220,3 +220,5 @@ def test_diff_compares_payload_value_not_encoded_hash():
 
     assert diff.summary.modified_events == 1
     assert diff.summary.divergence_points == 1
+
+# git-blob-rewrite

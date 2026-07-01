@@ -180,3 +180,5 @@ class AlignmentConfiguration:
             primary_reason=primary_reason, final_score=score, ranked_evidence=evidence
         )
         return score, explanation
+
+# git-blob-rewrite

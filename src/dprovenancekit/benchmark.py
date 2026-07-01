@@ -781,3 +781,5 @@ class BenchmarkRunner:
             strength_category=category,
             meta_event=meta,
         )
+
+# git-blob-rewrite

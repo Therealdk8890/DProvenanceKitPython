@@ -39,3 +39,5 @@ class TraceExplanation:
             lines.append("")
 
         return "\n".join(lines).strip()
+
+# git-blob-rewrite

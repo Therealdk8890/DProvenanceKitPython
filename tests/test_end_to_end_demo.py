@@ -23,3 +23,5 @@ def test_end_to_end_demo_runs_and_self_asserts(tmp_path, capsys, monkeypatch):
     assert "tool_drop:verify" in out and "looping:search" in out
     assert (tmp_path / "demo-report.html").exists()
     assert (tmp_path / "demo-traces.sqlite").exists()
+
+# git-blob-rewrite

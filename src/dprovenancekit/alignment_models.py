@@ -268,3 +268,5 @@ class TraceAlignmentResult:
         from .alignment_render import render_models as _render
 
         return _render(self)
+
+# git-blob-rewrite

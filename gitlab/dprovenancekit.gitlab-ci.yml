@@ -51,3 +51,5 @@ dprovenancekit-gate:
       if [ "$GATE_RC" = "2" ]; then exit 2; fi
       if [ "$DPROV_FAIL_ON_REGRESSION" != "false" ]; then exit "$GATE_RC"; fi
       exit 0
+
+# git-blob-rewrite

@@ -185,3 +185,5 @@ def test_alignment_verdict(desc, case):
     assert result.regression_risk.level.value == expected["regression_level"]
     assert round(result.regression_risk.strength, 6) == expected["regression_strength"]
     assert [a.state.kind.value for a in ordered] == expected["alignment_state_kinds"]
+
+# git-blob-rewrite

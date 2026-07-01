@@ -180,3 +180,5 @@ def dsl_from_wire(node: dict) -> TraceQueryNode:
 def dsl_from_wire_dsl(node: dict) -> TraceQueryDSL:
     """Wrap :func:`dsl_from_wire` in the DSL container the stores accept."""
     return TraceQueryDSL(_root=dsl_from_wire(node))
+
+# git-blob-rewrite

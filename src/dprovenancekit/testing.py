@@ -275,3 +275,5 @@ __all__ = [
     "exact_equality_evaluator",
     "run_fingerprint",
 ]
+
+# git-blob-rewrite

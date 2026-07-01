@@ -67,3 +67,5 @@ class AlignmentFindingsExtractor:
                     )
 
         return findings
+
+# git-blob-rewrite

@@ -131,3 +131,5 @@ class TraceAlignmentEngine:
 
     def evaluate_score(self, base, comparison):
         return self.configuration.score_match(base, comparison)
+
+# git-blob-rewrite

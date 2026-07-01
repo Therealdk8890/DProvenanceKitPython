@@ -68,3 +68,5 @@ def test_no_duplicate_render_ids_in_flattened_output():
     assert len(ids) == len(set(ids))
     assert len(ids) == 3
     assert all(f.is_visible for f in flattened)
+
+# git-blob-rewrite

@@ -55,3 +55,5 @@ class DefaultTraceMatcher:
             )
 
         return bindings
+
+# git-blob-rewrite

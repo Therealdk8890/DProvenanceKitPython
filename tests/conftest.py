@@ -68,3 +68,5 @@ class TestEvent(TraceableEvent):
 def temp_db_path(tmp_path):
     """An absolute path to a unique, not-yet-created SQLite file under pytest's tmp dir."""
     return str(tmp_path / (uuid.uuid4().hex + ".sqlite"))
+
+# git-blob-rewrite

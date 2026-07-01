@@ -218,3 +218,5 @@ class DefaultAlignmentInterpreter:
                 )
 
         return AlignmentExecutionContract.canonical_sort_alignments(alignments)
+
+# git-blob-rewrite

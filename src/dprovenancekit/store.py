@@ -260,3 +260,5 @@ class InMemoryTraceStore(TraceStore):
                 if dsl.ast.evaluate(run):
                     matching_runs.append(run)
             return matching_runs
+
+# git-blob-rewrite

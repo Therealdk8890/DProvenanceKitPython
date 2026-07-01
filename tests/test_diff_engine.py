@@ -123,3 +123,5 @@ def test_engine_name_causes_divergence():
     addition = next(c for c in diff.changes if c.kind == ChangeKind.ADDED)
     assert addition.engine_name == "engine2"
     assert addition.type_identifier == "stepB"
+
+# git-blob-rewrite

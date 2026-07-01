@@ -92,3 +92,5 @@ class TraceDropTally:
                 structural=self._by_tier[TracePriority.STRUCTURAL],
                 critical=self._by_tier[TracePriority.CRITICAL],
             )
+
+# git-blob-rewrite

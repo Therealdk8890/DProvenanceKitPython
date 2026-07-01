@@ -17,3 +17,5 @@ def test_regression_example_runs_and_self_asserts(capsys):
     runpy.run_path(path, run_name="__main__")
     out = capsys.readouterr().out
     assert "HIGH regression" in out
+
+# git-blob-rewrite

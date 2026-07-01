@@ -79,3 +79,5 @@ class AlignmentMetaEvent(TraceableEvent):
             level=level,
             reasoning=reasoning,
         )
+
+# git-blob-rewrite

@@ -122,3 +122,5 @@ class CloudSyncClient:
                 target=uuid.UUID(edge_data["target_id"]),
                 type=TraceEdgeType(edge_data["type"])
             )
+
+# git-blob-rewrite

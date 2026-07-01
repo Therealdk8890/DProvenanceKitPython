@@ -71,3 +71,5 @@ def _fmt(value: float) -> str:
     if value == int(value):
         return f"{value:.1f}"
     return repr(value)
+
+# git-blob-rewrite

@@ -154,3 +154,5 @@ def build_rules(specs: Iterable[Dict[str, Any]]) -> List[AnomalyRule]:
 
 
 __all__ = ["ToolDropRule", "LoopingRule", "build_rule", "build_rules"]
+
+# git-blob-rewrite

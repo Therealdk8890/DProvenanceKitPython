@@ -125,3 +125,5 @@ def test_anomalies_bad_run_uuid_does_not_create_db_file(tmp_path, db_and_rules):
     assert code == 2
     # The bad-UUID error is reported before the store is opened, so no DB file is created.
     assert not fresh.exists()
+
+# git-blob-rewrite

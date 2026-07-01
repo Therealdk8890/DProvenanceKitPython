@@ -114,3 +114,5 @@ def test_count_step_is_rejected_by_the_cloud_wire_serializer():
     # rather than silently serialize it to an empty node.
     with pytest.raises(NotImplementedTraceError):
         _serialize_node(CountStep(step="stepCompleted", min_count=2))
+
+# git-blob-rewrite

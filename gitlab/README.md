@@ -45,3 +45,5 @@ dprovenancekit-gate:
   `dprovenancekit runs --db baseline.sqlite --context my-agent --latest --format id`, then pass
   `DPROV_GOLDEN_DB` / `DPROV_CANDIDATE_DB` (see the [action README](../action/README.md#baseline-selection)).
 - The job runs only on merge-request pipelines (`$CI_PIPELINE_SOURCE == "merge_request_event"`).
+
+# git-blob-rewrite

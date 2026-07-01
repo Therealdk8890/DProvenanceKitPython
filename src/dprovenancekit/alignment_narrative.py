@@ -72,4 +72,3 @@ class AlignmentNarrativeCompiler:
 
         return "\n\n".join(paragraphs)
 
-# git-blob-rewrite

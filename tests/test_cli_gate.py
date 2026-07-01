@@ -155,4 +155,3 @@ def test_gate_requires_a_db_source(trace_db, capsys):
     assert code == 2
     assert "provide --db" in capsys.readouterr().err
 
-# git-blob-rewrite

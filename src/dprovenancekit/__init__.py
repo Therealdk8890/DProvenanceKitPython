@@ -213,4 +213,3 @@ from .instrument import TracedEvent, traced, traced_run, record_event
 
 __version__ = "0.2.0"
 
-# git-blob-rewrite

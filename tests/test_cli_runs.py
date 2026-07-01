@@ -80,4 +80,3 @@ def test_runs_unopenable_db_exits_2(tmp_path, capsys):
     assert code == 2
     assert "could not open database" in capsys.readouterr().err
 
-# git-blob-rewrite

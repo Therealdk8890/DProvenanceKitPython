@@ -276,4 +276,3 @@ __all__ = [
     "run_fingerprint",
 ]
 
-# git-blob-rewrite

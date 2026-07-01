@@ -33,4 +33,3 @@ class TracePriority(IntEnum):
     #: NEVER dropped (e.g. start, end, error).
     CRITICAL = 3
 
-# git-blob-rewrite

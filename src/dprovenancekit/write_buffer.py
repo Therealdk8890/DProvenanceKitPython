@@ -235,4 +235,3 @@ class TraceWriteBuffer:
                 result.append(edge)
             return result
 
-# git-blob-rewrite

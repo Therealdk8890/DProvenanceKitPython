@@ -18,4 +18,3 @@ def test_regression_example_runs_and_self_asserts(capsys):
     out = capsys.readouterr().out
     assert "HIGH regression" in out
 
-# git-blob-rewrite

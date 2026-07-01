@@ -32,4 +32,3 @@ gate-agent-reasoning:
     # in your GitLab CI/CD project variables, and the template will handle it!
     # DPROV_GITLAB_TOKEN: $GITLAB_TOKEN # Required for MR comments
 
-# git-blob-rewrite

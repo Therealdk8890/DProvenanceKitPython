@@ -164,4 +164,3 @@ def test_trace_explanation_formatting():
     assert "Derived From:" in text
     assert "evidence: invoice" in text
 
-# git-blob-rewrite

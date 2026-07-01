@@ -99,4 +99,3 @@ class RawTraceStore:
             )
         return events
 
-# git-blob-rewrite

@@ -649,4 +649,3 @@ __all__ = [
     "LCEventType",
 ]
 
-# git-blob-rewrite

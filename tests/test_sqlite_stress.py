@@ -112,4 +112,3 @@ def test_burst_ingestion_collapse(tmp_path):
     assert drops.structural == 0
     assert drops.preserved_integrity
 
-# git-blob-rewrite

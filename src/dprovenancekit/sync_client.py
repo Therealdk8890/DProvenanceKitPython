@@ -123,4 +123,3 @@ class CloudSyncClient:
                 type=TraceEdgeType(edge_data["type"])
             )
 
-# git-blob-rewrite

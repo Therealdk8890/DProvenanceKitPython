@@ -269,4 +269,3 @@ class TraceAlignmentResult:
 
         return _render(self)
 
-# git-blob-rewrite

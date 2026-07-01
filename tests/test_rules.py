@@ -180,4 +180,3 @@ def test_build_rule_surfaces_invalid_field_as_valueerror():
     with pytest.raises(ValueError):
         build_rule({"type": "tool_drop", "required_step": 123})
 
-# git-blob-rewrite

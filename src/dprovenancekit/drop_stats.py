@@ -93,4 +93,3 @@ class TraceDropTally:
                 critical=self._by_tier[TracePriority.CRITICAL],
             )
 
-# git-blob-rewrite

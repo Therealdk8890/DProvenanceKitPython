@@ -124,4 +124,3 @@ def test_engine_name_causes_divergence():
     assert addition.engine_name == "engine2"
     assert addition.type_identifier == "stepB"
 
-# git-blob-rewrite

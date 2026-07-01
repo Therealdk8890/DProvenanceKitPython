@@ -282,4 +282,3 @@ def test_run_fingerprint_tracks_structural_path():
     assert run_fingerprint(golden) == run_fingerprint(same)
     assert run_fingerprint(golden) != run_fingerprint(skipped)
 
-# git-blob-rewrite

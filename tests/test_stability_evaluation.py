@@ -89,4 +89,3 @@ def test_perturbation_is_gated_by_boundary():
     leaky = layer.evaluator(base, DeterministicBoundary(cache_isolated=False))
     assert leaky.evaluator_identifier == "base+noise"
 
-# git-blob-rewrite

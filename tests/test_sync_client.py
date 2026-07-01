@@ -126,4 +126,3 @@ def test_pull_run(tmp_path):
     
     store.close()
 
-# git-blob-rewrite

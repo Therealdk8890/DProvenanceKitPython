@@ -102,4 +102,3 @@ class AlignmentEvidenceCollector(EvidenceCollector):
                 interpretation_steps=list(self._interpretation_steps),
             )
 
-# git-blob-rewrite

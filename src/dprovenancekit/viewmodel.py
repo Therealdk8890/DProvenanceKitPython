@@ -111,4 +111,3 @@ def flatten_span_tree(
 
     return result
 
-# git-blob-rewrite

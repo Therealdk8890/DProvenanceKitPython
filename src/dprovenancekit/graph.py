@@ -40,4 +40,3 @@ class TraceExplanation:
 
         return "\n".join(lines).strip()
 
-# git-blob-rewrite

@@ -42,4 +42,3 @@ def test_written_run_survives_raw_trace_store_reopen(temp_db_path):
     decoded_step = TestEvent.from_dict(json.loads(step.payload_json))
     assert decoded_step == TestEvent.step_completed(7)
 
-# git-blob-rewrite

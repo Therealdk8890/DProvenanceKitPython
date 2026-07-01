@@ -782,4 +782,3 @@ class BenchmarkRunner:
             meta_event=meta,
         )
 
-# git-blob-rewrite

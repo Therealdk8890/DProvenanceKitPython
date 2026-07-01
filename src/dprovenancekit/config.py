@@ -26,4 +26,3 @@ class OfflineConfig:
     capacity: BufferCapacity = BufferCapacity()
     eviction: EvictionPolicy = EvictionPolicy.DROP_OLDEST
 
-# git-blob-rewrite

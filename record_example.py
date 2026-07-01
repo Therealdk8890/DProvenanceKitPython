@@ -43,4 +43,3 @@ print("db       :", DB)
 print("golden   :", golden)
 print("candidate:", candidate)
 
-# git-blob-rewrite

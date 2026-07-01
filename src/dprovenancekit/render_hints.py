@@ -20,4 +20,3 @@ class RenderHints:
     highlight_quarantine: bool = True
     diff_mode: DiffPresentationMode = DiffPresentationMode.NONE
 
-# git-blob-rewrite

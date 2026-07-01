@@ -408,4 +408,3 @@ class TraceQueryCompiler:
 
         raise ValueError(f"Unknown query node: {node!r}")  # pragma: no cover
 
-# git-blob-rewrite

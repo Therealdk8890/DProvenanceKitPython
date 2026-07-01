@@ -230,4 +230,3 @@ class TraceGraphProvenanceValidator:
 
         return anomalies
 
-# git-blob-rewrite

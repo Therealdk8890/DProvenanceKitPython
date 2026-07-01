@@ -22,4 +22,3 @@ class TraceEdge:
     target_id: uuid.UUID
     type: TraceEdgeType
 
-# git-blob-rewrite

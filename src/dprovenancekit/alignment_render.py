@@ -98,4 +98,3 @@ def render_models(result: TraceAlignmentResult) -> List[AlignmentRenderNode]:
         )
     return nodes
 
-# git-blob-rewrite

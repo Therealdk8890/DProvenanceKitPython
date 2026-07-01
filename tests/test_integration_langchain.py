@@ -370,4 +370,3 @@ def test_real_langchain_runnable_records_a_run():
     assert LCEventType.CHAIN_STARTED in types
     assert LCEventType.CHAIN_ENDED in types
 
-# git-blob-rewrite

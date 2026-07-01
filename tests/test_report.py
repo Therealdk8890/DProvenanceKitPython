@@ -72,4 +72,3 @@ def test_report_escapes_step_names():
     assert "<script>x</script>" not in html
     assert "&lt;script&gt;x&lt;/script&gt;" in html
 
-# git-blob-rewrite

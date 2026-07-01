@@ -311,4 +311,3 @@ def test_run_anomalies_publishes_outputs(tmp_path, capsys):
     # The warning annotation is emitted to the log.
     assert "::warning" in capsys.readouterr().out
 
-# git-blob-rewrite

@@ -209,4 +209,3 @@ def run_ui_server(db_path: str, port: int = 8080):
         print("\nShutting down server.")
         server.server_close()
 
-# git-blob-rewrite

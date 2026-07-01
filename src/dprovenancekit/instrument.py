@@ -388,4 +388,3 @@ __all__ = [
     "record_event",
 ]
 
-# git-blob-rewrite

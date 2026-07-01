@@ -288,4 +288,3 @@ A Rust / TypeScript / … SDK is v1-conformant when, reading the same `vectors/*
 Vectors are versioned by `spec_version`. A backward-incompatible change ships as
 Trace Specification **v2** with its own vector set; v1 vectors remain frozen.
 
-# git-blob-rewrite

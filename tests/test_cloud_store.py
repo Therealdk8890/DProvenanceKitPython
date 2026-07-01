@@ -77,4 +77,3 @@ def test_retry_and_backoff():
     store.flush()
     assert attempts["n"] == 3
 
-# git-blob-rewrite

@@ -606,4 +606,3 @@ class SQLiteTraceStore(TraceStore):
             )
         return events
 
-# git-blob-rewrite

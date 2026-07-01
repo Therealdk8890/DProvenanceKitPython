@@ -539,4 +539,3 @@ def main(argv=None) -> int:
 if __name__ == "__main__":
     raise SystemExit(main())
 
-# git-blob-rewrite

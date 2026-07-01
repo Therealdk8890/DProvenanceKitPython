@@ -454,4 +454,3 @@ __all__ = [
     "register",
 ]
 
-# git-blob-rewrite

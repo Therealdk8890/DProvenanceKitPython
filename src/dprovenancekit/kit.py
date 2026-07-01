@@ -125,4 +125,3 @@ class DProvenanceKit:
             return
         run.flush()
 
-# git-blob-rewrite

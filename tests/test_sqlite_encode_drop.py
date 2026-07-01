@@ -68,4 +68,3 @@ def test_encode_drops_tally_per_tier(temp_db_path):
     assert stats.total == 3
     assert not stats.preserved_integrity
 
-# git-blob-rewrite

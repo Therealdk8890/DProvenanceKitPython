@@ -393,4 +393,3 @@ def _serialize_node(node) -> dict:
         "(Trace Spec v1); it is available on the in-memory and SQLite backends"
     )
 
-# git-blob-rewrite

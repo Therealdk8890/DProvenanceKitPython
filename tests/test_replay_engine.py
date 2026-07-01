@@ -111,4 +111,3 @@ def test_sequence_gaps():
     assert (gaps[1].lower_bound, gaps[1].upper_bound) == (3, 4)
     assert (gaps[2].lower_bound, gaps[2].upper_bound) == (7, 9)
 
-# git-blob-rewrite

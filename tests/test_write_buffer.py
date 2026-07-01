@@ -103,4 +103,3 @@ def test_global_eviction_is_counted():
     assert len(drained) + drops.total == cap + critical_count
     assert sum(1 for d in drained if d.type == "critical") == critical_count
 
-# git-blob-rewrite

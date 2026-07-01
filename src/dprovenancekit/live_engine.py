@@ -85,4 +85,3 @@ class LiveTraceQueryEngine:
 
                 self._query_states[query_id] = state
 
-# git-blob-rewrite

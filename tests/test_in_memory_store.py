@@ -97,4 +97,3 @@ def test_live_engine_receives_ordered_delivery():
         time.sleep(0.005)
     assert sub.count == 1
 
-# git-blob-rewrite

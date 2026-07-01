@@ -38,4 +38,3 @@ class TraceContext:
         "dprov_parent_span_id", default=None
     )
 
-# git-blob-rewrite

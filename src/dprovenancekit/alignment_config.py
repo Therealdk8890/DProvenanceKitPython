@@ -181,4 +181,3 @@ class AlignmentConfiguration:
         )
         return score, explanation
 
-# git-blob-rewrite

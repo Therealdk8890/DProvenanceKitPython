@@ -39,4 +39,3 @@ def dprovenance_relaxed_gate():
     """Returns a RegressionGate that allows benign divergent steps as long as the severity level is acceptable."""
     return RegressionGate(allow_divergent_steps=True)
 
-# git-blob-rewrite

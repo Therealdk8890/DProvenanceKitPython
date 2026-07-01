@@ -261,4 +261,3 @@ class InMemoryTraceStore(TraceStore):
                     matching_runs.append(run)
             return matching_runs
 
-# git-blob-rewrite

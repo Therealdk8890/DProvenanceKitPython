@@ -175,4 +175,3 @@ def test_formalization_map_produces_correct_causal_graph():
     assert vector.causal_ordering == 1.0
     assert vector.no_hallucinations == 1.0
 
-# git-blob-rewrite

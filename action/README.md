@@ -125,4 +125,3 @@ step loudly instead of silently passing an empty id.
 - The action reads databases in the standard type-erased format the library's stores and the
   hosted backend produce.
 
-# git-blob-rewrite

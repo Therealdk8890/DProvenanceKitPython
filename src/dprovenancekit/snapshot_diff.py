@@ -278,4 +278,3 @@ class SnapshotDiffEngine:
             divergences=divergences,
         )
 
-# git-blob-rewrite

@@ -84,4 +84,3 @@ def test_branch_collapse(engine):
     assert len(removed) == 1
     assert removed[0].base_event.payload.type_identifier == "planning"
 
-# git-blob-rewrite

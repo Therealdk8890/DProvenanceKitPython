@@ -80,4 +80,3 @@ class AlignmentMetaEvent(TraceableEvent):
             reasoning=reasoning,
         )
 
-# git-blob-rewrite

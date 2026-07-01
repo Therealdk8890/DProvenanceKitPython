@@ -43,4 +43,3 @@ class DefaultEquivalenceModel:
         )
         return decision
 
-# git-blob-rewrite

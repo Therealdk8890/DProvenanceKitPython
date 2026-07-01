@@ -116,4 +116,3 @@ class TraceDiffEngine:
             changes=changes,
         )
 
-# git-blob-rewrite

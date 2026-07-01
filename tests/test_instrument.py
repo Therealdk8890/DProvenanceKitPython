@@ -364,4 +364,3 @@ def test_same_path_shares_fingerprint_different_path_differs():
     assert fp1 == fp2
     assert fp1 != fp3
 
-# git-blob-rewrite

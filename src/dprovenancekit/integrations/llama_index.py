@@ -175,4 +175,3 @@ class DProvenanceLlamaIndexCallbackHandler(BaseCallbackHandler):
     def end_trace(self, trace_id: Optional[str] = None, trace_map: Optional[Dict[str, List[str]]] = None) -> None:
         pass
 
-# git-blob-rewrite

@@ -243,4 +243,3 @@ class TraceReplayEngine:
             metadata=metadata,
         )
 
-# git-blob-rewrite

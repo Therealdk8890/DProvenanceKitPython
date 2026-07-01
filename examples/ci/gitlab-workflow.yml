@@ -1,0 +1,33 @@
+include:
+  # Pulls in the core DProvenanceKit gate logic
+  - remote: 'https://raw.githubusercontent.com/Therealdk8890/DProvenanceKitPython/main/gitlab/dprovenancekit.gitlab-ci.yml'
+
+stages:
+  - test
+  - gate
+
+run-agent-tests:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - python -m pip install -r requirements.txt
+    - pip install pytest dprovenancekit
+    # This runs your tests and generates the candidate trace in traces.sqlite
+    - pytest
+  artifacts:
+    paths:
+      - traces.sqlite
+    expire_in: 1 day
+
+gate-agent-reasoning:
+  stage: gate
+  extends: dprovenancekit-gate
+  dependencies:
+    - run-agent-tests
+  variables:
+    DPROV_DB: traces.sqlite
+    DPROV_GOLDEN: "YOUR-GOLDEN-RUN-UUID-HERE"
+    DPROV_CANDIDATE: "YOUR-CANDIDATE-RUN-UUID-HERE"
+    # To automatically pull the golden run from the cloud, set DPROV_API_KEY
+    # in your GitLab CI/CD project variables, and the template will handle it!
+    # DPROV_GITLAB_TOKEN: $GITLAB_TOKEN # Required for MR comments

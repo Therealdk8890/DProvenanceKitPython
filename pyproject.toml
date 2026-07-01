@@ -39,6 +39,10 @@ openai-agents = ["openai-agents>=0.1"]
 [project.scripts]
 dprovenancekit = "dprovenancekit.cli:main"
 
+[project.entry-points.pytest11]
+dprovenancekit = "dprovenancekit.pytest_plugin"
+
+
 [project.urls]
 Homepage = "https://github.com/Therealdk8890/DProvenanceKitPython"
 Repository = "https://github.com/Therealdk8890/DProvenanceKitPython"
@@ -49,7 +53,7 @@ Issues = "https://github.com/Therealdk8890/DProvenanceKitPython/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-dprovenancekit = ["py.typed"]
+dprovenancekit = ["py.typed", "index.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -32,6 +32,12 @@ dprovenancekit-gate:
     - |
       GOLDEN_DB="${DPROV_GOLDEN_DB:-$DPROV_DB}"
       CANDIDATE_DB="${DPROV_CANDIDATE_DB:-$DPROV_DB}"
+      
+      if [ -n "$DPROV_API_KEY" ]; then
+        echo "Pulling golden trace from cloud..."
+        python -m dprovenancekit.cli sync pull --run "$DPROV_GOLDEN" --db "$GOLDEN_DB"
+      fi
+
       set -- --golden-db "$GOLDEN_DB" --candidate-db "$CANDIDATE_DB" \
              --golden "$DPROV_GOLDEN" --candidate "$DPROV_CANDIDATE" \
              --max-level "$DPROV_MAX_LEVEL" --json

@@ -1,0 +1,41 @@
+name: Agent Regression Testing
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-and-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest dprovenancekit
+
+      - name: Run Pytest (Generates Candidate Trace)
+        env:
+          DPROV_DB: traces.sqlite
+          # Optional API keys for your agents (e.g. OPENAI_API_KEY)
+        run: |
+          # This runs your tests and generates the candidate trace in traces.sqlite
+          pytest
+
+      - name: DProvenanceKit Regression Gate
+        uses: Therealdk8890/DProvenanceKitPython/action@main
+        with:
+          db-path: traces.sqlite
+          golden-run-id: "YOUR-GOLDEN-RUN-UUID-HERE"
+          candidate-run-id: "YOUR-CANDIDATE-RUN-UUID-HERE" # Typically read from a file dumped by your tests
+          dprov-api-key: ${{ secrets.DPROV_API_KEY }}
+          # When dprov-api-key is provided, this action automatically pulls the 
+          # golden run from the cloud into traces.sqlite before comparing!

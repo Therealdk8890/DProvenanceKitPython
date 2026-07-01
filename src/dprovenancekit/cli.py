@@ -315,6 +315,66 @@ def _run_runs(argv) -> int:
     return 0
 
 
+def _run_ui(argv) -> int:
+    """``dprovenancekit ui`` — run local trace visualization."""
+    import argparse
+    from .ui_server import run_ui_server
+
+    ap = argparse.ArgumentParser(
+        prog="dprovenancekit ui", description="Start local trace visualization UI."
+    )
+    ap.add_argument("--db", required=True, help="path to the SQLite trace database")
+    ap.add_argument("--port", type=int, default=8080, help="port to listen on (default: 8080)")
+    args = ap.parse_args(argv)
+
+    run_ui_server(args.db, args.port)
+    return 0
+
+
+def _run_sync(argv) -> int:
+    """``dprovenancekit sync`` — push/pull traces to/from the SaaS backend."""
+    import argparse
+    import uuid
+    import sys
+    from .sync_client import CloudSyncClient
+    from .sqlite_store import SQLiteTraceStore
+    from .event import AnyTraceableEvent
+
+    ap = argparse.ArgumentParser(
+        prog="dprovenancekit sync", description="Sync traces with the DProvenance SaaS."
+    )
+    ap.add_argument("action", choices=["push", "pull"], help="Sync action")
+    ap.add_argument("--run", required=True, help="run ID to sync")
+    ap.add_argument("--db", required=True, help="path to local SQLite trace database")
+    args = ap.parse_args(argv)
+    
+    try:
+        run_id = uuid.UUID(args.run)
+    except ValueError:
+        print("error: --run must be a valid run id (UUID)", file=sys.stderr)
+        return 2
+
+    store = SQLiteTraceStore(AnyTraceableEvent, args.db, start_writer=False)
+    client = CloudSyncClient()
+    
+    try:
+        if args.action == "push":
+            print(f"Pushing run {run_id} to cloud...")
+            client.push_run(run_id, store)
+            print("Push complete.")
+        else:
+            print(f"Pulling run {run_id} from cloud...")
+            client.pull_run(run_id, store)
+            print("Pull complete.")
+    except Exception as e:
+        print(f"Sync failed: {e}", file=sys.stderr)
+        return 1
+    finally:
+        store.close()
+        
+    return 0
+
+
 def main(argv=None) -> int:
     if argv is None:
         argv = sys.argv[1:]
@@ -325,13 +385,17 @@ def main(argv=None) -> int:
         return _run_anomalies(argv[1:])
     if argv and argv[0] == "runs":
         return _run_runs(argv[1:])
+    if argv and argv[0] == "ui":
+        return _run_ui(argv[1:])
+    if argv and argv[0] == "sync":
+        return _run_sync(argv[1:])
 
     print("DProvenanceKit CLI Evaluator")
     print("============================")
 
     mode = argv[0] if argv else "evaluate"
     if mode not in ("evaluate", "diagnose", "stability"):
-        print("Usage: dprovenancekit <gate|anomalies|runs|evaluate|diagnose|stability>")
+        print("Usage: dprovenancekit <gate|anomalies|runs|ui|sync|evaluate|diagnose|stability>")
         return 0
 
     runner = BenchmarkRunner()

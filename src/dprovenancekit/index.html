@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DProvenanceKit Trace Viewer</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 20px; background: #f9fafb; color: #111827; }
+        .container { max-width: 1200px; margin: 0 auto; display: flex; gap: 20px; }
+        .sidebar { width: 300px; background: white; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); height: calc(100vh - 40px); overflow-y: auto; }
+        .main-content { flex: 1; background: white; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); height: calc(100vh - 40px); overflow-y: auto; }
+        h1, h2, h3 { margin-top: 0; color: #1f2937; }
+        .run-list { list-style: none; padding: 0; margin: 0; }
+        .run-item { padding: 12px; border-bottom: 1px solid #e5e7eb; cursor: pointer; border-radius: 4px; }
+        .run-item:hover { background: #f3f4f6; }
+        .run-item.active { background: #e0e7ff; border-left: 4px solid #4f46e5; padding-left: 8px; }
+        .run-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+        .run-meta { font-size: 12px; color: #6b7280; }
+        
+        .event-list { display: flex; flex-direction: column; gap: 12px; }
+        .event-card { border: 1px solid #e5e7eb; border-radius: 6px; padding: 16px; background: #ffffff; }
+        .event-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+        .event-type { font-weight: 600; color: #4f46e5; }
+        .event-time { font-size: 12px; color: #9ca3af; }
+        .event-payload { background: #f8fafc; padding: 12px; border-radius: 4px; font-family: monospace; font-size: 12px; white-space: pre-wrap; overflow-x: auto; border: 1px solid #e2e8f0; }
+        
+        .loading { text-align: center; padding: 40px; color: #6b7280; font-style: italic; }
+        
+        .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 500; background: #e5e7eb; color: #374151; margin-left: 8px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h2>Recorded Runs</h2>
+            <div id="runs-loading" class="loading">Loading runs...</div>
+            <ul id="run-list" class="run-list"></ul>
+        </div>
+        <div class="main-content">
+            <div id="trace-view">
+                <div class="loading">Select a run from the sidebar to view its trace.</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchRuns() {
+            try {
+                const response = await fetch('/api/runs');
+                const runs = await response.json();
+                
+                const listEl = document.getElementById('run-list');
+                document.getElementById('runs-loading').style.display = 'none';
+                
+                if (runs.length === 0) {
+                    listEl.innerHTML = '<div class="loading">No runs found in database.</div>';
+                    return;
+                }
+                
+                runs.forEach(run => {
+                    const li = document.createElement('li');
+                    li.className = 'run-item';
+                    li.onclick = () => loadRun(run.run_id, li);
+                    
+                    const date = new Date(run.start_time * 1000).toLocaleString();
+                    
+                    li.innerHTML = `
+                        <div class="run-title">${run.context_id || 'Unknown Context'}</div>
+                        <div class="run-meta">
+                            ${date}<br>
+                            Events: ${run.event_count}
+                        </div>
+                    `;
+                    listEl.appendChild(li);
+                });
+            } catch (error) {
+                console.error("Error fetching runs:", error);
+                document.getElementById('runs-loading').textContent = 'Error loading runs.';
+            }
+        }
+
+        async function loadRun(runId, listItem) {
+            // Update active state
+            document.querySelectorAll('.run-item').forEach(el => el.classList.remove('active'));
+            if (listItem) listItem.classList.add('active');
+            
+            const viewEl = document.getElementById('trace-view');
+            viewEl.innerHTML = '<div class="loading">Loading trace details...</div>';
+            
+            try {
+                const response = await fetch(`/api/runs/${runId}`);
+                const run = await response.json();
+                
+                if (run.error) {
+                    viewEl.innerHTML = `<div class="loading" style="color: #ef4444;">${run.error}</div>`;
+                    return;
+                }
+                
+                let html = `
+                    <h2>Trace: ${run.context_id || 'Unknown'}</h2>
+                    <p class="run-meta" style="margin-bottom: 20px;">
+                        Run ID: ${run.run_id}<br>
+                        Fingerprint: ${run.fingerprint}
+                    </p>
+                    <div class="event-list">
+                `;
+                
+                run.events.forEach((event, idx) => {
+                    const payloadStr = JSON.stringify(event.payload, null, 2);
+                    const engineName = event.engine_name ? `<span class="badge">${event.engine_name}</span>` : '';
+                    
+                    html += `
+                        <div class="event-card">
+                            <div class="event-header">
+                                <div>
+                                    <span class="event-type">#${event.sequence} ${event.payload.type_identifier}</span>
+                                    ${engineName}
+                                </div>
+                                <span class="event-time">${event.timestamp}</span>
+                            </div>
+                            <div class="event-payload">${payloadStr}</div>
+                        </div>
+                    `;
+                });
+                
+                html += `</div>`;
+                viewEl.innerHTML = html;
+                
+            } catch (error) {
+                console.error("Error fetching run details:", error);
+                viewEl.innerHTML = '<div class="loading" style="color: #ef4444;">Error loading trace details.</div>';
+            }
+        }
+
+        // Initialize
+        fetchRuns();
+    </script>
+</body>
+</html>

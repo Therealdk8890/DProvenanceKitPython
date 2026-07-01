@@ -58,6 +58,14 @@ inputs:
     description: "Token used to post the PR comment. Defaults to the job's GITHUB_TOKEN."
     required: false
     default: ${{ github.token }}
+  dprov-api-key:
+    description: "API Key for DProvenanceKit SaaS. Required for syncing golden traces from the cloud."
+    required: false
+    default: ""
+  dprov-api-url:
+    description: "Optional URL for a custom DProvenanceKit SaaS backend."
+    required: false
+    default: "https://api.dprovenance.dev"
 
 outputs:
   passed:
@@ -90,6 +98,14 @@ runs:
     - name: Install dprovenancekit
       shell: bash
       run: python -m pip install --disable-pip-version-check "${{ inputs.install-spec }}"
+
+    - name: Pull golden trace from cloud
+      if: ${{ inputs.dprov-api-key != '' }}
+      shell: bash
+      run: python -m dprovenancekit.cli sync pull --run "${{ inputs.golden-run-id }}" --db "${{ inputs.golden-db || inputs.db-path }}"
+      env:
+        DPROV_API_KEY: ${{ inputs.dprov-api-key }}
+        DPROV_API_URL: ${{ inputs.dprov-api-url }}
 
     - name: Run regression gate
       id: gate

@@ -30,7 +30,9 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "fastapi", "httpx", "IPython", "pytest-asyncio"]
+# langchain-core is included so CI exercises the LangChain + CrewAI integration
+# tests instead of silently skipping them.
+dev = ["pytest>=7.0", "fastapi", "httpx", "IPython", "pytest-asyncio", "langchain-core>=0.2"]
 # Framework adapters. The core package stays pure standard library; these extras are only
 # needed to wire DProvenanceKit into the corresponding framework.
 langchain = ["langchain-core>=0.2"]

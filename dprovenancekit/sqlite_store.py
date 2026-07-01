@@ -529,13 +529,14 @@ class SQLiteTraceStore(TraceStore):
         context_id = ctx_rows[0][0]
 
         rows = self._db.query(
-            "SELECT engine, span_id, parent_span_id, type, payload, timestamp, sequence "
+            "SELECT id, engine, span_id, parent_span_id, type, payload, timestamp, sequence "
             "FROM trace_events WHERE run_id = ? ORDER BY sequence ASC",
             (str(id),),
         )
 
         events: List[TraceEvent] = []
         for (
+            event_id,
             engine,
             span_id,
             parent_span_id,
@@ -550,6 +551,7 @@ class SQLiteTraceStore(TraceStore):
                 continue
             events.append(
                 TraceEvent(
+                    id=uuid.UUID(event_id),
                     run_id=id,
                     context_id=context_id,
                     engine_name=engine if engine is not None else "Unknown",

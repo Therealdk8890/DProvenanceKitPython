@@ -48,13 +48,11 @@ dprovenancekit = "dprovenancekit.cli:main"
 [project.entry-points.pytest11]
 dprovenancekit = "dprovenancekit.pytest_plugin"
 
-
 [project.urls]
 Homepage = "https://github.com/Therealdk8890/DProvenanceKitPython"
 Repository = "https://github.com/Therealdk8890/DProvenanceKitPython"
 Issues = "https://github.com/Therealdk8890/DProvenanceKitPython/issues"
 "Swift original" = "https://github.com/Therealdk8890/DProvenanceKit"
-
 
 [tool.setuptools.package-data]
 dprovenancekit = ["py.typed", "index.html"]

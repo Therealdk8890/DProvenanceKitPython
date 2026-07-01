@@ -69,33 +69,35 @@ class _TraceFacade:
         token = _enclosing_step.set(start_id)
 
         try:
-            with _KIT.with_span(span_id), _KIT.with_engine(name):
-                yield
-        except Exception as error:
-            err_id = _record_in_span(
-                f"{name}.error",
-                TracePriority.CRITICAL,
-                {"name": name, "error": str(error)},
+            try:
+                with _KIT.with_span(span_id), _KIT.with_engine(name):
+                    yield
+            except Exception as error:
+                err_id = _record_in_span(
+                    f"{name}.error",
+                    TracePriority.CRITICAL,
+                    {"name": name, "error": str(error)},
+                    engine=name,
+                    span_id=span_id,
+                    parent_span_id=parent,
+                )
+                _link(start_id, err_id, TraceEdgeType.DERIVED_FROM)
+                raise
+            finally:
+                _enclosing_step.reset(token)
+
+            end_id = _record_in_span(
+                f"{name}.end",
+                TracePriority.STRUCTURAL,
+                {"name": name},
                 engine=name,
                 span_id=span_id,
                 parent_span_id=parent,
             )
-            _link(start_id, err_id, TraceEdgeType.DERIVED_FROM)
-            raise
+            _link(start_id, end_id, TraceEdgeType.DERIVED_FROM)
         finally:
-            _enclosing_step.reset(token)
             if is_root and run_ctx:
                 run_ctx.__exit__(None, None, None)
-
-        end_id = _record_in_span(
-            f"{name}.end",
-            TracePriority.STRUCTURAL,
-            {"name": name},
-            engine=name,
-            span_id=span_id,
-            parent_span_id=parent,
-        )
-        _link(start_id, end_id, TraceEdgeType.DERIVED_FROM)
 
     def save(self, filepath: Union[str, Path], run_id: Optional[uuid.UUID] = None) -> None:
         """Saves the trace run to a file (.jsonl or .sqlite)."""

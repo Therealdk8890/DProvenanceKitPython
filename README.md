@@ -8,6 +8,12 @@ When an agent's reasoning drifts between runs, DProvenanceKit turns each executi
 
 > Run → Record → Query → Diff → Detect regressions → Gate in CI
 
+<p align="center">
+  <img src="assets/demo.gif" alt="DProvenanceKit records two runs of a research agent, gates the candidate against the golden run, and blocks the PR when the agent drops its verify step and loops its search tool" width="820">
+</p>
+
+<p align="center"><em>Two runs of the same agent. The candidate dropped its <code>verify</code> step and looped <code>search</code> — the gate caught it and failed CI. <a href="demo/demo_gif.py">(regenerate)</a></em></p>
+
 **It's not just the library** — it ships the surfaces that make reasoning regressions actionable:
 
 - **Gate in CI** — a server-less `dprovenancekit gate` CLI, plus a drop-in [GitHub Action](action/README.md) and [GitLab CI template](gitlab/README.md) that fail a PR/MR when an agent's reasoning drifts from a golden baseline, and comment the diff.
@@ -212,7 +218,7 @@ Both corpora score **Precision 1.000 / Recall 1.000 / F1 1.000** — 8 standard 
 | --- | --- |
 | Event model, priority tiers, drop accounting | `event`, `priority`, `drop_stats` |
 | Recording API + ambient context | `kit`, `context` |
-| Stores (in-memory, WAL SQLite, raw read, cloud) | `store`, `sqlite_store`, `raw_store`, `cloud_store` |
+| Stores (in-memory, WAL SQLite, raw read) | `store`, `sqlite_store`, `raw_store` |
 | Priority-aware write buffer | `write_buffer` |
 | Query DSL + two backends (AST eval + SQL compiler) | `query` |
 | Live querying + anomaly detection + rule library | `live_engine`, `anomaly`, `rules` |
@@ -220,8 +226,13 @@ Both corpora score **Precision 1.000 / Recall 1.000 / F1 1.000** — 8 standard 
 | Deterministic replay | `replay` |
 | Semantic alignment engine + evidence + verification | `alignment_*`, `verification` |
 | Benchmark harness, failure diagnoser, corpus | `benchmark`, `corpus` |
+| Conformance testing | `conformance` |
+| Automated testing tools (e.g. fingerprinting) | `testing` |
+| Visualizer (HTML rendering) | `visualizer` |
+| Server and sync client | `server`, `ui_server`, `sync_client` |
 | Pure view models for a trace viewer | `viewmodel` |
-| Framework adapters (LangChain / LangGraph) | `integrations.langchain` |
+| Framework-agnostic instrumentation | `instrument` |
+| Framework adapters | `integrations.langchain`, `integrations.fastapi`, `integrations.jupyter`, `integrations.llama_index`, `integrations.mcp` |
 | Framework adapters (OpenAI Agents SDK) | `integrations.openai_agents` |
 | Regression-gate test helper | `testing` |
 | Shareable HTML regression report | `report` |
@@ -359,7 +370,7 @@ It self-asserts its verdicts, so it doubles as an executable test of the headlin
 python -m pytest
 ```
 
-246 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, cloud chaos, …), 28 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain integration tests, 16 OpenAI Agents SDK integration tests, 16 instrumentation-layer tests, 13 regression-gate tests, ecosystem integration tests (FastAPI, Jupyter, MCP, CrewAI), visualizer tests, and the regression-testing example run as a self-asserting test. (The real-framework tests run only when the integrations are installed, otherwise skipped.)
+246 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress + drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, …), 28 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain integration tests, 16 OpenAI Agents SDK integration tests, 16 instrumentation-layer tests, 13 regression-gate tests, ecosystem integration tests (FastAPI, Jupyter, MCP, CrewAI), visualizer tests, and the regression-testing example run as a self-asserting test. (The real-framework tests run only when the integrations are installed, otherwise skipped.)
 
 ---
 

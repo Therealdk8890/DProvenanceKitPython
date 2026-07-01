@@ -13,7 +13,6 @@ from dataclasses import dataclass
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from dprovenancekit import TraceableEvent, TracePriority  # noqa: E402
 

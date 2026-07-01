@@ -21,8 +21,6 @@ from typing import Dict, List, Tuple
 # Make the package importable whether this module is loaded by the generator (run from
 # anywhere) or by pytest (which adds ``src`` via conftest, but we must not depend on that).
 _SRC = os.path.join(os.path.dirname(__file__), "..", "src")
-if _SRC not in sys.path:
-    sys.path.insert(0, _SRC)
 
 from dprovenancekit import (  # noqa: E402
     AlignmentConfiguration,

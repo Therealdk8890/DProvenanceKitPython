@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import functools
 import inspect
-from typing import Callable, Any, Dict, Optional
+from typing import Callable, Any, Dict
 
 from dprovenancekit.kit import DProvenanceKit
 from dprovenancekit.event import TraceableEvent

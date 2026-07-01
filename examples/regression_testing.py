@@ -35,7 +35,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 # Make the package importable when run straight from a checkout (no install needed).
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from dprovenancekit import (  # noqa: E402
     AlignmentConfiguration,

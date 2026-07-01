@@ -7,7 +7,6 @@ trace run, and injects the trace ID into the HTTP response headers.
 from __future__ import annotations
 
 import typing
-import uuid
 
 try:
     from starlette.middleware.base import BaseHTTPMiddleware

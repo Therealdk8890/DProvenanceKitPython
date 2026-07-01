@@ -6,7 +6,6 @@ run, and automatically displays the DProvenanceKit trace timeline inline.
 
 from __future__ import annotations
 
-import uuid
 
 try:
     from IPython.core.magic import Magics, magics_class, cell_magic

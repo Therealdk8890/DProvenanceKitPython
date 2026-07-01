@@ -15,9 +15,10 @@ import sqlite3
 import threading
 import time
 import uuid
-from contextlib import contextmanager
+import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Set, Type
+from contextlib import contextmanager
 
 from .drop_stats import TraceDropStats, TraceDropTally
 from .edge import TraceEdge, TraceEdgeType
@@ -25,6 +26,8 @@ from .event import RunRow, TraceableEvent, TraceEvent, TraceEventRow
 from .query import TraceQueryCompiler, TraceQueryDSL, TraceRun
 from .store import TraceStore
 from .write_buffer import TraceWriteBuffer
+
+logger = logging.getLogger(__name__)
 
 
 class SQLiteConnection:
@@ -191,8 +194,8 @@ class SQLiteWriter:
                     self._mark_runs_clean(staged)
                     self._last_run_flush_time = now
                 except Exception as err:  # pragma: no cover
-                    print(
-                        f"🚨 [DProvenanceKit] SQLiteWriter failed to flush runs: {err}"
+                    logger.error(
+                        f"[DProvenanceKit] SQLiteWriter failed to flush runs: {err}"
                     )
 
         if sleep_ms > 0:
@@ -214,12 +217,21 @@ class SQLiteWriter:
             # Durably committed: now safe to fold into in-memory run metadata.
             for event in batch:
                 self._update_run_state(event)
+        except sqlite3.OperationalError as err:
+            err_msg = str(err).lower()
+            if "locked" in err_msg or "busy" in err_msg:
+                logger.error(f"[DProvenanceKit] SQLiteWriter database locked/busy, requeuing batch: {err}")
+                self._buffer.requeue(batch, edges_batch)
+            else:
+                for event in batch:
+                    self._drop_tally.record(priority=event.priority)
+                logger.error(f"[DProvenanceKit] SQLiteWriter fatal insert error, dropping batch: {err}")
         except Exception as err:
             # The transaction rolled back: these rows were already drained and are gone.
             # Count the loss per tier so it surfaces in dropStats / preserved_integrity.
             for event in batch:
                 self._drop_tally.record(priority=event.priority)
-            print(f"🚨 [DProvenanceKit] SQLiteWriter failed to insert batch: {err}")
+            logger.error(f"[DProvenanceKit] SQLiteWriter fatal insert error, dropping batch: {err}")
 
     def _insert_edges(self, edges: List[TraceEdge]) -> None:
         sql = "INSERT INTO trace_edges (source_id, target_id, edge_type) VALUES (?, ?, ?);"
@@ -446,20 +458,21 @@ class SQLiteTraceStore(TraceStore):
         self._writer.flush()
 
     def close(self) -> None:
-        """Stop the background writer (if running) and close the database connection.
-
-        Safe to call when ``start_writer=False`` (no thread was started) — it still flushes
-        any buffered events and releases the SQLite file handle.
-        """
+        """Shut down the writer thread and close the database. Required for final durability."""
         self._writer.shutdown()
         self._db.close()
+
+    def __enter__(self) -> "SQLiteTraceStore":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
 
     @property
     def drop_stats(self) -> TraceDropStats:
         return self._buffer.drop_stats + self._drop_tally.snapshot
 
     def query_runs(self, dsl: TraceQueryDSL) -> List[TraceRun]:
-        self.flush()
         compiled = TraceQueryCompiler.compile(dsl.ast)
         rows = self._db.query(compiled.sql, tuple(compiled.bindings))
         run_ids = [r[0] for r in rows if r[0] is not None]

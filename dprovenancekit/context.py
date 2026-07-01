@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 from contextvars import ContextVar
-from typing import List, Optional
+from typing import Optional
 
 
 class AnyActiveTraceRun:
@@ -30,7 +30,7 @@ class TraceContext:
     current_run: ContextVar[Optional[AnyActiveTraceRun]] = ContextVar(
         "dprov_current_run", default=None
     )
-    engine_stack: ContextVar[List[str]] = ContextVar("dprov_engine_stack", default=[])
+    engine_stack: ContextVar[tuple[str, ...]] = ContextVar("dprov_engine_stack", default=())
     current_span_id: ContextVar[Optional[str]] = ContextVar(
         "dprov_current_span_id", default=None
     )

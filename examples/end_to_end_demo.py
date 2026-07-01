@@ -24,8 +24,6 @@ from dataclasses import dataclass
 
 # Run from a checkout without installing: make src/ importable.
 _SRC = os.path.join(os.path.dirname(__file__), "..", "src")
-if os.path.isdir(_SRC) and _SRC not in sys.path:
-    sys.path.insert(0, _SRC)
 
 from dprovenancekit import (  # noqa: E402
     AnomalyDetector,

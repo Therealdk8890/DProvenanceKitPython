@@ -96,6 +96,8 @@ class TraceWriteBuffer:
         self._enqueue_counter = 0
         self._dropped_by_tier = [0, 0, 0, 0]
         self._queue_depth_by_run: Dict[str, int] = {}
+        self._retry_queue: List[TraceEventRow] = []
+        self._retry_edges: List[TraceEdge] = []
 
     @property
     def current_depth(self) -> int:
@@ -209,10 +211,19 @@ class TraceWriteBuffer:
             return self._drain_locked(_MAX_INT)
 
     def _drain_locked(self, max_count: int) -> List[TraceEventRow]:
-        """k-way merge across the priority tiers by insertion stamp."""
-        if max_count <= 0 or self._total_count == 0:
+        """k-way merge across the priority tiers by insertion stamp, pulling retries first."""
+        if max_count <= 0:
             return []
+            
         result: List[TraceEventRow] = []
+        
+        # Drain retries first
+        while self._retry_queue and len(result) < max_count:
+            result.append(self._retry_queue.pop(0))
+            
+        if self._total_count == 0 or len(result) >= max_count:
+            return result
+            
         while len(result) < max_count:
             best_tier = -1
             best_stamp = _MAX_INT
@@ -233,9 +244,17 @@ class TraceWriteBuffer:
     def drain_edges(self) -> List[TraceEdge]:
         with self._lock:
             result: List[TraceEdge] = []
+            while self._retry_edges:
+                result.append(self._retry_edges.pop(0))
             while True:
                 edge = self._edge_queue.pop_first()
                 if edge is None:
                     break
                 result.append(edge)
             return result
+
+    def requeue(self, events: List[TraceEventRow], edges: List[TraceEdge]) -> None:
+        """Push a failed batch back to the absolute front of the line for the next drain."""
+        with self._lock:
+            self._retry_queue = events + self._retry_queue
+            self._retry_edges = edges + self._retry_edges

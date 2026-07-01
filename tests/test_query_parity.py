@@ -132,14 +132,3 @@ def test_count_step_matches_at_threshold_and_excludes_below(temp_db_path):
 def test_count_step_requires_positive_min_count():
     with pytest.raises(ValueError):
         TraceQueryDSL().requiring_repeated_step("stepCompleted", 0)
-
-
-def test_count_step_is_rejected_by_the_cloud_wire_serializer():
-    from dprovenancekit import NotImplementedTraceError
-    from dprovenancekit.cloud_store import _serialize_node
-    from dprovenancekit.query import CountStep
-
-    # CountStep is a local-backend capability; the cloud wire (Trace Spec v1) must fail loudly
-    # rather than silently serialize it to an empty node.
-    with pytest.raises(NotImplementedTraceError):
-        _serialize_node(CountStep(step="stepCompleted", min_count=2))

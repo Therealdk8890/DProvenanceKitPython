@@ -213,7 +213,7 @@ def _record_in_span(
     span_token = TraceContext.current_span_id.set(span_id)
     parent_token = TraceContext.parent_span_id.set(parent_span_id)
     engine_token = TraceContext.engine_stack.set(
-        list(TraceContext.engine_stack.get()) + [engine]
+        tuple(list(TraceContext.engine_stack.get()) + [engine])
     )
     try:
         return _record(type_name, priority, attributes)

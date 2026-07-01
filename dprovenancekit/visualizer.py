@@ -7,7 +7,6 @@ inline CSS and Vanilla JS for interactive exploration of AI execution traces.
 from __future__ import annotations
 
 import json
-from typing import Optional, Any
 
 from .graph import TraceGraph
 

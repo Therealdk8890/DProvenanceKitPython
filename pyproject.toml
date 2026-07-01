@@ -53,8 +53,6 @@ Repository = "https://github.com/Therealdk8890/DProvenanceKitPython"
 Issues = "https://github.com/Therealdk8890/DProvenanceKitPython/issues"
 "Swift original" = "https://github.com/Therealdk8890/DProvenanceKit"
 
-[tool.setuptools.packages.find]
-where = ["src"]
 
 [tool.setuptools.package-data]
 dprovenancekit = ["py.typed", "index.html"]
@@ -62,3 +60,5 @@ dprovenancekit = ["py.typed", "index.html"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.setuptools.packages.find]
+include = ["dprovenancekit*"]

@@ -150,6 +150,18 @@ class InMemoryTraceStore(TraceStore):
             event, run = item
             self._live_engine.process(event=event, run=run)
 
+    def close(self) -> None:
+        if self._live_queue is not None and self._live_thread is not None:
+            self._live_queue.put(None)
+            self._live_thread.join()
+            self._live_thread = None
+
+    def __enter__(self) -> "InMemoryTraceStore":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
     def record(self, event: TraceEvent) -> None:
         with self._lock:
             self._events_by_run.setdefault(event.run_id, []).append(event)
@@ -164,9 +176,8 @@ class InMemoryTraceStore(TraceStore):
                 if self._live_queue is None
                 else self._make_run_locked(event.run_id)
             )
-
-        if snapshot is not None:
-            self._live_queue.put((event, snapshot))
+            if snapshot is not None:
+                self._live_queue.put((event, snapshot))
 
     def link(self, source: uuid.UUID, target: uuid.UUID, type: TraceEdgeType) -> None:
         with self._lock:

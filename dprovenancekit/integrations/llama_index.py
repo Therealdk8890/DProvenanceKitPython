@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from ..edge import TraceEdgeType
 from ..event import TraceableEvent
@@ -18,7 +18,7 @@ from ..priority import TracePriority
 
 try:
     from llama_index.core.callbacks.base_handler import BaseCallbackHandler
-    from llama_index.core.callbacks.schema import CBEventType, EventPayload
+    from llama_index.core.callbacks.schema import CBEventType
 
     _HAS_LLAMA_INDEX = True
 except ImportError:

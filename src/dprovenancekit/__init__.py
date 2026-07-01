@@ -207,6 +207,7 @@ from .testing import (
     run_fingerprint,
 )
 from .report import render_report_html
+from .visualizer import render_trace_html
 
 # Framework-agnostic instrumentation (decorators / context manager)
 from .instrument import TracedEvent, traced, traced_run, record_event

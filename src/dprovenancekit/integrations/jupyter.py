@@ -6,6 +6,8 @@ run, and automatically displays the DProvenanceKit trace timeline inline.
 
 from __future__ import annotations
 
+import uuid
+
 try:
     from IPython.core.magic import Magics, magics_class, cell_magic
     from IPython.display import display, HTML
@@ -45,33 +47,27 @@ class DProvenanceMagics(Magics):
             
         # Only render if there wasn't a syntax error in the cell itself
         if result.error_in_exec is None:
-            # Simple fallback HTML table of events for Jupyter inline view
-            events = store.get_run(run.run_id).events if store.get_run(run.run_id) else []
-            html_rows = []
-            for i, ev in enumerate(events):
-                payload_str = str(ev.payload); payload_str = (payload_str[:100] + '...') if len(payload_str) > 100 else ev.payload
-                html_rows.append(
-                    f"<tr><td style='padding:4px; border:1px solid #ccc;'>{i}</td>"
-                    f"<td style='padding:4px; border:1px solid #ccc;'>{ev.engine_name}</td>"
-                    f"<td style='padding:4px; border:1px solid #ccc;'>{ev.payload.type_identifier}</td>"
-                    f"<td style='padding:4px; border:1px solid #ccc;'><pre style='margin:0;'>{payload_str}</pre></td></tr>"
-                )
+            # Lazy import to avoid circular dependency
+            from ..visualizer import render_trace_html
+            from ..graph import TraceGraph
             
-            table = f"""
-            <div style="font-family: sans-serif; border: 1px solid #ccc; padding: 10px; border-radius: 4px; margin-top: 10px;">
-                <h3>Trace Timeline (Run: {run.run_id})</h3>
-                <table style='width:100%; border-collapse: collapse;'>
-                    <tr style='background: #eee;'>
-                        <th style='padding:4px; border:1px solid #ccc; text-align: left;'>Seq</th>
-                        <th style='padding:4px; border:1px solid #ccc; text-align: left;'>Engine</th>
-                        <th style='padding:4px; border:1px solid #ccc; text-align: left;'>Type</th>
-                        <th style='padding:4px; border:1px solid #ccc; text-align: left;'>Payload</th>
-                    </tr>
-                    {''.join(html_rows)}
-                </table>
-            </div>
-            """
-            display(HTML(table))
+            run_obj = store.get_run(run.run_id)
+            if not run_obj:
+                display(HTML("<p>No events recorded.</p>"))
+                return
+                
+            nodes = {ev.id: ev for ev in run_obj.events}
+            
+            edges = []
+            if hasattr(store, '_edges'):
+                for e in store._edges:
+                    if e.source_id in nodes and e.target_id in nodes:
+                        edges.append(e)
+            
+            graph = TraceGraph(nodes=nodes, edges=edges)
+            html_content = render_trace_html(graph, title=f"Trace: {run.run_id}")
+            
+            display(HTML(f"<div style='height: 500px; overflow: hidden; border-radius: 8px; border: 1px solid #334155;'>{html_content}</div>"))
 
 
 def load_ipython_extension(ipython):

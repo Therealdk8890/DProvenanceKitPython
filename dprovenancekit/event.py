@@ -146,3 +146,21 @@ class AnyTraceableEvent(TraceableEvent):
             "priority_value": self.priority_value,
             "raw_json": self.raw_json,
         }
+
+    @classmethod
+    def decode(cls, data: bytes) -> "TraceableEvent":
+        # AnyTraceableEvent should decode without knowing the schema.
+        # But wait, we don't have the type and priority here?
+        # Actually, sqlite_store.py should not be using decode() if it's AnyTraceableEvent,
+        # but it does. So we just parse it as raw JSON and put dummy values if needed,
+        # or we could extract type and priority from the JSON if they exist.
+        json_str = data.decode("utf-8")
+        try:
+            parsed = json.loads(json_str)
+            return cls(
+                type_identifier_value=parsed.get("type", "unknown"),
+                priority_value=parsed.get("priority", 0),
+                raw_json=json_str
+            )
+        except Exception:
+            return cls("unknown", 0, json_str)

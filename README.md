@@ -261,6 +261,9 @@ with kit.run(context_id="qa-session", store=store) as run:
 
     # Execute queries normally; they are recorded to the trace store
     response = index.as_query_engine().query("What did the author do growing up?")
+
+# Flush buffered events so the recorded run is durable before the script exits
+store.flush()
 ```
 
 ### CrewAI

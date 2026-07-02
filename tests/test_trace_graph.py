@@ -178,6 +178,98 @@ def test_link_rejects_self_referential_edge():
     assert store.lineage_edges(a) == []
 
 
+def _record_chain(store):
+    """a -> b -> c -> d, returning the four event ids."""
+    kit = DProvenanceKit(TestEvent)
+    with kit.run(context_id="chain", store=store):
+        a = kit.record(TestEvent.process_started())
+        b = kit.record(TestEvent.step_completed(1))
+        c = kit.record(TestEvent.step_completed(2))
+        d = kit.record(TestEvent.process_finished())
+        kit.link(a, b, TraceEdgeType.DERIVED_FROM)
+        kit.link(b, c, TraceEdgeType.DERIVED_FROM)
+        kit.link(c, d, TraceEdgeType.DERIVED_FROM)
+    store.flush()
+    return a, b, c, d
+
+
+@pytest.fixture(params=["memory", "sqlite"])
+def chain_store(request, temp_db_path):
+    if request.param == "memory":
+        store = InMemoryTraceStore()
+    else:
+        store = SQLiteTraceStore(TestEvent, temp_db_path)
+    yield store
+
+
+def test_lineage_max_depth_bounds_the_walk(chain_store):
+    a, b, c, d = _record_chain(chain_store)
+
+    assert len(chain_store.lineage_edges(d, max_depth=1)) == 1
+    assert len(chain_store.lineage_edges(d, max_depth=2)) == 2
+    assert len(chain_store.lineage_edges(d, max_depth=3)) == 3
+    assert len(chain_store.lineage_edges(d, max_depth=10)) == 3
+    assert len(chain_store.lineage_edges(d)) == 3
+
+    shallow = chain_store.lineage(d, max_depth=1)
+    assert shallow.edges == [TraceEdge(c, d, TraceEdgeType.DERIVED_FROM)]
+    assert set(shallow.nodes.keys()) == {c, d}
+
+
+def test_impact_max_depth_bounds_the_walk(chain_store):
+    a, b, c, d = _record_chain(chain_store)
+
+    assert len(chain_store.impact_edges(a, max_depth=1)) == 1
+    assert len(chain_store.impact_edges(a, max_depth=2)) == 2
+    assert len(chain_store.impact_edges(a)) == 3
+
+    shallow = chain_store.impact(a, max_depth=1)
+    assert shallow.edges == [TraceEdge(a, b, TraceEdgeType.DERIVED_FROM)]
+    assert set(shallow.nodes.keys()) == {a, b}
+
+
+def test_max_depth_zero_returns_just_the_root(chain_store):
+    a, b, c, d = _record_chain(chain_store)
+
+    assert chain_store.lineage_edges(d, max_depth=0) == []
+    graph = chain_store.lineage(d, max_depth=0)
+    assert graph.edges == []
+    assert set(graph.nodes.keys()) == {d}
+    assert chain_store.impact_edges(a, max_depth=0) == []
+
+
+def test_negative_max_depth_raises(chain_store):
+    a, b, c, d = _record_chain(chain_store)
+
+    with pytest.raises(ValueError):
+        chain_store.lineage_edges(d, max_depth=-1)
+    with pytest.raises(ValueError):
+        chain_store.impact(a, max_depth=-1)
+
+
+def test_max_depth_terminates_and_dedups_on_cycles(chain_store):
+    kit = DProvenanceKit(TestEvent)
+    with kit.run(context_id="cycle", store=chain_store):
+        a = kit.record(TestEvent.process_started())
+        b = kit.record(TestEvent.process_finished())
+        kit.link(a, b, TraceEdgeType.DERIVED_FROM)
+        kit.link(b, a, TraceEdgeType.DERIVED_FROM)  # cycle
+    chain_store.flush()
+
+    # A depth cap far past the cycle length must not duplicate edges.
+    assert len(chain_store.lineage_edges(a, max_depth=50)) == 2
+    assert len(chain_store.impact_edges(a, max_depth=50)) == 2
+    assert len(chain_store.lineage_edges(a, max_depth=1)) == 1
+
+
+def test_explain_unaffected_by_deep_ancestry(chain_store):
+    a, b, c, d = _record_chain(chain_store)
+
+    explanation = chain_store.explain(d)
+    assert len(explanation.derived_from) == 1
+    assert explanation.informed_by == []
+
+
 def test_trace_explanation_formatting():
     explanation = TraceExplanation(
         target_node_id=uuid.uuid4(),

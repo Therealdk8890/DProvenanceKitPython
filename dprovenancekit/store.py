@@ -29,6 +29,11 @@ class NotImplementedTraceError(TraceError):
     pass
 
 
+def validate_max_depth(max_depth: Optional[int]) -> None:
+    if max_depth is not None and max_depth < 0:
+        raise ValueError(f"max_depth must be non-negative, got {max_depth}")
+
+
 class TraceStore(ABC):
     """A store of trace events and provenance edges."""
 
@@ -58,16 +63,26 @@ class TraceStore(ABC):
     # MARK: - Graph traversal ----------------------------------------------------
 
     @abstractmethod
-    def lineage_edges(self, id: uuid.UUID) -> List[TraceEdge]: ...
+    def lineage_edges(
+        self, id: uuid.UUID, max_depth: Optional[int] = None
+    ) -> List[TraceEdge]: ...
 
     @abstractmethod
-    def impact_edges(self, id: uuid.UUID) -> List[TraceEdge]: ...
+    def impact_edges(
+        self, id: uuid.UUID, max_depth: Optional[int] = None
+    ) -> List[TraceEdge]: ...
 
     @abstractmethod
     def get_events(self, ids: Set[uuid.UUID]) -> Dict[uuid.UUID, TraceEvent]: ...
 
-    def lineage(self, id: uuid.UUID) -> TraceGraph:
-        edges = self.lineage_edges(id)
+    def lineage(self, id: uuid.UUID, max_depth: Optional[int] = None) -> TraceGraph:
+        """The ancestry graph of ``id``: every edge on a path into it.
+
+        ``max_depth`` bounds the walk to edges within that many hops of ``id``
+        (``None`` walks the whole connected ancestry) — cap it when traces may
+        contain long tool loops.
+        """
+        edges = self.lineage_edges(id, max_depth=max_depth)
         ids_to_fetch: Set[uuid.UUID] = {id}
         for edge in edges:
             ids_to_fetch.add(edge.source_id)
@@ -75,8 +90,13 @@ class TraceStore(ABC):
         nodes = self.get_events(ids_to_fetch)
         return TraceGraph(nodes=nodes, edges=edges)
 
-    def impact(self, id: uuid.UUID) -> TraceGraph:
-        edges = self.impact_edges(id)
+    def impact(self, id: uuid.UUID, max_depth: Optional[int] = None) -> TraceGraph:
+        """The descendants graph of ``id``: every edge on a path out of it.
+
+        ``max_depth`` bounds the walk to edges within that many hops of ``id``
+        (``None`` walks the whole connected impact set).
+        """
+        edges = self.impact_edges(id, max_depth=max_depth)
         ids_to_fetch: Set[uuid.UUID] = {id}
         for edge in edges:
             ids_to_fetch.add(edge.source_id)
@@ -85,7 +105,8 @@ class TraceStore(ABC):
         return TraceGraph(nodes=nodes, edges=edges)
 
     def explain(self, id: uuid.UUID) -> TraceExplanation:
-        graph = self.lineage(id)
+        # Only direct parents feed the explanation, so depth 1 suffices.
+        graph = self.lineage(id, max_depth=1)
         target = graph.nodes.get(id)
         if target is None:
             raise NodeNotFoundError(id)
@@ -191,34 +212,46 @@ class InMemoryTraceStore(TraceStore):
         with self._lock:
             return self._make_run_locked(id)
 
-    def lineage_edges(self, id: uuid.UUID) -> List[TraceEdge]:
+    def lineage_edges(
+        self, id: uuid.UUID, max_depth: Optional[int] = None
+    ) -> List[TraceEdge]:
+        validate_max_depth(max_depth)
         with self._lock:
             result: List[TraceEdge] = []
-            queue_ = [id]
+            # BFS, so each node is first reached at its minimal depth and the
+            # depth cap never prunes an edge that a shorter path would keep.
+            queue_ = [(id, 0)]
             visited: Set[uuid.UUID] = set()
             while queue_:
-                current = queue_.pop(0)
+                current, depth = queue_.pop(0)
                 if current in visited:
                     continue
                 visited.add(current)
+                if max_depth is not None and depth >= max_depth:
+                    continue
                 incoming = [e for e in self._edges if e.target_id == current]
                 result.extend(incoming)
-                queue_.extend(e.source_id for e in incoming)
+                queue_.extend((e.source_id, depth + 1) for e in incoming)
             return result
 
-    def impact_edges(self, id: uuid.UUID) -> List[TraceEdge]:
+    def impact_edges(
+        self, id: uuid.UUID, max_depth: Optional[int] = None
+    ) -> List[TraceEdge]:
+        validate_max_depth(max_depth)
         with self._lock:
             result: List[TraceEdge] = []
-            queue_ = [id]
+            queue_ = [(id, 0)]
             visited: Set[uuid.UUID] = set()
             while queue_:
-                current = queue_.pop(0)
+                current, depth = queue_.pop(0)
                 if current in visited:
                     continue
                 visited.add(current)
+                if max_depth is not None and depth >= max_depth:
+                    continue
                 outgoing = [e for e in self._edges if e.source_id == current]
                 result.extend(outgoing)
-                queue_.extend(e.target_id for e in outgoing)
+                queue_.extend((e.target_id, depth + 1) for e in outgoing)
             return result
 
     def get_events(self, ids: Set[uuid.UUID]) -> Dict[uuid.UUID, TraceEvent]:

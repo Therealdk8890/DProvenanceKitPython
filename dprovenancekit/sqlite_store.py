@@ -24,7 +24,7 @@ from .drop_stats import TraceDropStats, TraceDropTally
 from .edge import TraceEdge, TraceEdgeType
 from .event import RunRow, TraceableEvent, TraceEvent, TraceEventRow
 from .query import TraceQueryCompiler, TraceQueryDSL, TraceRun
-from .store import TraceStore
+from .store import TraceStore, validate_max_depth
 from .write_buffer import TraceWriteBuffer
 
 logger = logging.getLogger(__name__)
@@ -568,31 +568,69 @@ class SQLiteTraceStore(TraceStore):
             return None
         return TraceRun(run_id=id, context_id=context_id, events=events)
 
-    def lineage_edges(self, id: uuid.UUID) -> List[TraceEdge]:
+    def lineage_edges(
+        self, id: uuid.UUID, max_depth: Optional[int] = None
+    ) -> List[TraceEdge]:
+        validate_max_depth(max_depth)
         self.flush()
+        if max_depth is None:
+            # `UNION` dedups edge rows, which is also what terminates cycles.
+            sql = """
+            WITH RECURSIVE lineage_cte(source_id, target_id, edge_type) AS (
+                SELECT source_id, target_id, edge_type FROM trace_edges WHERE target_id = ?
+                UNION
+                SELECT e.source_id, e.target_id, e.edge_type
+                FROM trace_edges e JOIN lineage_cte l ON e.target_id = l.source_id
+            )
+            SELECT source_id, target_id, edge_type FROM lineage_cte;
+            """
+            return self._read_edges(sql, (str(id),))
+        if max_depth == 0:
+            return []
+        # Carrying a depth column defeats UNION's edge dedup (the same edge at two
+        # depths is two distinct rows), so cycles terminate via the depth bound and
+        # the final DISTINCT re-dedups edges.
         sql = """
-        WITH RECURSIVE lineage_cte(source_id, target_id, edge_type) AS (
-            SELECT source_id, target_id, edge_type FROM trace_edges WHERE target_id = ?
+        WITH RECURSIVE lineage_cte(source_id, target_id, edge_type, depth) AS (
+            SELECT source_id, target_id, edge_type, 1 FROM trace_edges WHERE target_id = ?
             UNION
-            SELECT e.source_id, e.target_id, e.edge_type
+            SELECT e.source_id, e.target_id, e.edge_type, l.depth + 1
             FROM trace_edges e JOIN lineage_cte l ON e.target_id = l.source_id
+            WHERE l.depth < ?
         )
-        SELECT source_id, target_id, edge_type FROM lineage_cte;
+        SELECT DISTINCT source_id, target_id, edge_type FROM lineage_cte;
         """
-        return self._read_edges(sql, (str(id),))
+        return self._read_edges(sql, (str(id), max_depth))
 
-    def impact_edges(self, id: uuid.UUID) -> List[TraceEdge]:
+    def impact_edges(
+        self, id: uuid.UUID, max_depth: Optional[int] = None
+    ) -> List[TraceEdge]:
+        validate_max_depth(max_depth)
         self.flush()
+        if max_depth is None:
+            sql = """
+            WITH RECURSIVE impact_cte(source_id, target_id, edge_type) AS (
+                SELECT source_id, target_id, edge_type FROM trace_edges WHERE source_id = ?
+                UNION
+                SELECT e.source_id, e.target_id, e.edge_type
+                FROM trace_edges e JOIN impact_cte l ON e.source_id = l.target_id
+            )
+            SELECT source_id, target_id, edge_type FROM impact_cte;
+            """
+            return self._read_edges(sql, (str(id),))
+        if max_depth == 0:
+            return []
         sql = """
-        WITH RECURSIVE impact_cte(source_id, target_id, edge_type) AS (
-            SELECT source_id, target_id, edge_type FROM trace_edges WHERE source_id = ?
+        WITH RECURSIVE impact_cte(source_id, target_id, edge_type, depth) AS (
+            SELECT source_id, target_id, edge_type, 1 FROM trace_edges WHERE source_id = ?
             UNION
-            SELECT e.source_id, e.target_id, e.edge_type
+            SELECT e.source_id, e.target_id, e.edge_type, l.depth + 1
             FROM trace_edges e JOIN impact_cte l ON e.source_id = l.target_id
+            WHERE l.depth < ?
         )
-        SELECT source_id, target_id, edge_type FROM impact_cte;
+        SELECT DISTINCT source_id, target_id, edge_type FROM impact_cte;
         """
-        return self._read_edges(sql, (str(id),))
+        return self._read_edges(sql, (str(id), max_depth))
 
     def _read_edges(self, sql: str, params) -> List[TraceEdge]:
         edges: List[TraceEdge] = []

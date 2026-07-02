@@ -348,32 +348,49 @@ def test_run_anomalies_publishes_outputs(tmp_path, capsys):
 # ── context-based run selection (golden-context / candidate-context inputs) ──────
 
 
-def test_gate_argv_run_id_wins_over_context():
+def test_gate_resolve_run_id_wins_over_context():
     # action.yml documents setting candidate-run-id alongside candidate-context (to
-    # scope anomaly rules); the gate argv must forward only ONE selector per side or
-    # the CLI rejects the combination with exit 2.
-    env = {
-        "DPROV_DB": "traces.sqlite",
-        "DPROV_GOLDEN": "aaaa",
-        "DPROV_GOLDEN_CONTEXT": "golden-ctx",
-        "DPROV_CANDIDATE": "bbbb",
-        "DPROV_CANDIDATE_CONTEXT": "candidate-ctx",
-    }
-    argv = run_gate.build_gate_argv(env)
-    assert "--golden" in argv and "--golden-context" not in argv
-    assert "--candidate" in argv and "--candidate-context" not in argv
+    # scope anomaly rules); the explicit id must win with no subprocess resolution.
+    def fake_run(argv, capture_output, text):  # pragma: no cover - must not be called
+        raise AssertionError("resolution subprocess should not run")
+
+    env = {"DPROV_GOLDEN": "aaaa", "DPROV_GOLDEN_CONTEXT": "golden-ctx"}
+    run_id, error = run_gate.resolve_run(
+        env, "DPROV_GOLDEN", "DPROV_GOLDEN_CONTEXT", "traces.sqlite", run=fake_run
+    )
+    assert (run_id, error) == ("aaaa", None)
 
 
-def test_gate_argv_falls_back_to_context():
-    env = {
-        "DPROV_DB": "traces.sqlite",
-        "DPROV_GOLDEN_CONTEXT": "golden-ctx",
-        "DPROV_CANDIDATE_CONTEXT": "candidate-ctx",
-    }
-    argv = run_gate.build_gate_argv(env)
-    assert argv[argv.index("--golden-context") + 1] == "golden-ctx"
-    assert argv[argv.index("--candidate-context") + 1] == "candidate-ctx"
-    assert "--golden" not in argv and "--candidate" not in argv
+def test_gate_resolve_run_falls_back_to_context():
+    calls = []
+
+    def fake_run(argv, capture_output, text):
+        calls.append(argv)
+
+        class Proc:
+            returncode = 0
+            stdout = "1234-run-id\n"
+            stderr = ""
+
+        return Proc()
+
+    env = {"DPROV_GOLDEN_CONTEXT": "golden-ctx"}
+    run_id, error = run_gate.resolve_run(
+        env, "DPROV_GOLDEN", "DPROV_GOLDEN_CONTEXT", "traces.sqlite", run=fake_run
+    )
+    assert (run_id, error) == ("1234-run-id", None)
+    assert calls and "--latest" in calls[0] and "--context" in calls[0]
+    # Resolution must use the runs subcommand, not the gate's own context flags,
+    # so the action works with SDK versions that predate them.
+    assert "runs" in calls[0]
+
+
+def test_gate_resolve_run_neither_form_is_an_error():
+    run_id, error = run_gate.resolve_run(
+        {}, "DPROV_CANDIDATE", "DPROV_CANDIDATE_CONTEXT", "traces.sqlite"
+    )
+    assert run_id is None
+    assert "candidate-run-id" in error and "candidate-context" in error
 
 
 def test_anomalies_resolves_candidate_context():

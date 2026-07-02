@@ -33,8 +33,20 @@ def build_gate_argv(env):
         sys.executable, "-m", "dprovenancekit.cli", "gate",
         "--golden-db", golden_db,
         "--candidate-db", candidate_db,
-        "--golden", env["DPROV_GOLDEN"],
-        "--candidate", env["DPROV_CANDIDATE"],
+    ]
+    # Run selection: an explicit run id wins per side; otherwise newest-run-by-context.
+    # (Both may legitimately be set — e.g. candidate-run-id to scope anomaly rules
+    # alongside candidate-context — so only one may be forwarded to the CLI, which
+    # backstops the neither-set case.)
+    if env.get("DPROV_GOLDEN"):
+        argv += ["--golden", env["DPROV_GOLDEN"]]
+    elif env.get("DPROV_GOLDEN_CONTEXT"):
+        argv += ["--golden-context", env["DPROV_GOLDEN_CONTEXT"]]
+    if env.get("DPROV_CANDIDATE"):
+        argv += ["--candidate", env["DPROV_CANDIDATE"]]
+    elif env.get("DPROV_CANDIDATE_CONTEXT"):
+        argv += ["--candidate-context", env["DPROV_CANDIDATE_CONTEXT"]]
+    argv += [
         "--max-level", (env.get("DPROV_MAX_LEVEL") or "none"),
         "--json",
     ]

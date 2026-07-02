@@ -82,8 +82,16 @@ def _run_gate(argv) -> int:
     ap.add_argument(
         "--candidate-db", help="SQLite db holding the candidate run (default: --db)"
     )
-    ap.add_argument("--golden", required=True, help="golden (known-good) run id")
-    ap.add_argument("--candidate", required=True, help="candidate run id to gate")
+    ap.add_argument("--golden", help="golden (known-good) run id")
+    ap.add_argument(
+        "--golden-context",
+        help="instead of --golden: use the newest run with this context id as the golden",
+    )
+    ap.add_argument("--candidate", help="candidate run id to gate")
+    ap.add_argument(
+        "--candidate-context",
+        help="instead of --candidate: use the newest run with this context id as the candidate",
+    )
     ap.add_argument(
         "--max-level",
         default="none",
@@ -98,9 +106,22 @@ def _run_gate(argv) -> int:
     ap.add_argument("--json", action="store_true", help="emit the report as JSON")
     args = ap.parse_args(argv)
 
+    if bool(args.golden) == bool(args.golden_context):
+        print(
+            "error: provide exactly one of --golden or --golden-context",
+            file=sys.stderr,
+        )
+        return 2
+    if bool(args.candidate) == bool(args.candidate_context):
+        print(
+            "error: provide exactly one of --candidate or --candidate-context",
+            file=sys.stderr,
+        )
+        return 2
+
     try:
-        golden_id = uuid.UUID(args.golden)
-        candidate_id = uuid.UUID(args.candidate)
+        golden_id = uuid.UUID(args.golden) if args.golden else None
+        candidate_id = uuid.UUID(args.candidate) if args.candidate else None
     except ValueError:
         print(
             "error: --golden/--candidate must be valid run ids (UUIDs)", file=sys.stderr
@@ -116,6 +137,21 @@ def _run_gate(argv) -> int:
         )
         return 2
 
+    def _resolve_context(store, context_id, role, db_path):
+        # list_run_metadata is newest-first, so the first match is the latest run.
+        for row in store.list_run_metadata():
+            if row.context_id != context_id:
+                continue
+            try:
+                return uuid.UUID(row.run_id)
+            except ValueError:
+                continue  # malformed row (foreign/corrupted db) — skip it
+        print(
+            f"error: no run with context id '{context_id}' in {db_path} ({role})",
+            file=sys.stderr,
+        )
+        return None
+
     opened = {}
     try:
         for path in {golden_db, candidate_db}:
@@ -126,6 +162,16 @@ def _run_gate(argv) -> int:
             except (sqlite3.Error, OSError) as exc:
                 print(f"error: could not open database {path}: {exc}", file=sys.stderr)
                 return 2
+        if golden_id is None:
+            golden_id = _resolve_context(
+                opened[golden_db], args.golden_context, "golden", golden_db
+            )
+        if candidate_id is None:
+            candidate_id = _resolve_context(
+                opened[candidate_db], args.candidate_context, "candidate", candidate_db
+            )
+        if golden_id is None or candidate_id is None:
+            return 2
         golden = opened[golden_db].get_run(golden_id)
         candidate = opened[candidate_db].get_run(candidate_id)
     finally:

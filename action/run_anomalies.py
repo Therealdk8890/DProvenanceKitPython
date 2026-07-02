@@ -21,15 +21,42 @@ import sys
 _DELIM = "__DPROV_OUTPUT_EOF__"
 
 
-def build_argv(env):
+def resolve_candidate(env, run=subprocess.run):
+    """The candidate run id: explicit, or the newest run for DPROV_CANDIDATE_CONTEXT.
+
+    Returns ``(run_id_or_none, error_or_none)`` — ``(None, None)`` means no candidate
+    scoping at all (rules scan every run), which stays valid behavior.
+    """
+    if env.get("DPROV_CANDIDATE"):
+        return env["DPROV_CANDIDATE"], None
+    context = env.get("DPROV_CANDIDATE_CONTEXT")
+    if not context:
+        return None, None
+    proc = run(
+        [
+            sys.executable, "-m", "dprovenancekit.cli", "runs",
+            "--db", env["DPROV_DB"],
+            "--context", context,
+            "--latest", "--format", "id",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None, proc.stderr.strip() or f"no run found for context '{context}'"
+    return proc.stdout.strip().splitlines()[0], None
+
+
+def build_argv(env, candidate=None):
     """Build the ``python -m dprovenancekit.cli anomalies`` command from the environment."""
+    if candidate is None:
+        candidate = env.get("DPROV_CANDIDATE")
     argv = [
         sys.executable, "-m", "dprovenancekit.cli", "anomalies",
         "--db", env["DPROV_DB"],
         "--rules", env["DPROV_ANOMALY_RULES"],
         "--json",
     ]
-    candidate = env.get("DPROV_CANDIDATE")
     if candidate:
         argv += ["--run", candidate]
     return argv
@@ -82,7 +109,14 @@ def render_summary(report):
 def main(env=None):
     env = dict(os.environ if env is None else env)
     try:
-        argv = build_argv(env)
+        candidate, resolve_error = resolve_candidate(env)
+        if resolve_error is not None:
+            print(
+                f"error: could not resolve candidate run: {resolve_error}",
+                file=sys.stderr,
+            )
+            return 2
+        argv = build_argv(env, candidate)
     except KeyError as exc:
         print(f"error: missing required input {exc}", file=sys.stderr)
         return 2

@@ -335,6 +335,16 @@ candidate run and fails the test when its reasoning drifts. Configure the direct
 (`golden_trace("name", max_regression_level="high")`), and use the context manager's `.run` to
 wire a framework adapter inside the block.
 
+### Gate by context id in CI
+
+`dprovenancekit gate` and the [GitHub Action](action/README.md) can select runs by **context id**
+instead of run id — `--golden-context` / `--candidate-context` pick the newest run recorded with
+that context, so CI scripts never extract run UUIDs:
+
+```bash
+dprovenancekit gate --db traces.sqlite --golden-context golden --candidate-context candidate
+```
+
 ---
 
 ## Example: regression testing

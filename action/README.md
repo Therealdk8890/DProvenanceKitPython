@@ -7,8 +7,9 @@ golden run, and posts a sticky summary comment with the diff. It wraps the serve
 > **Published on the GitHub Marketplace** as
 > [DProvenanceKit regression gate](https://github.com/marketplace/actions/dprovenancekit-regression-gate).
 > The canonical path is `uses: Therealdk8890/dprovenancekit-action@v1` (a dedicated repo with the
-> same files); the subdirectory path `Therealdk8890/DProvenanceKitPython/action@v1` shown below
-> continues to work.
+> same files). This in-repo copy is referenced as
+> `Therealdk8890/DProvenanceKitPython/action@main` (this repo's release tags are SDK versions —
+> there is no `v1` tag here).
 
 ## Usage
 
@@ -32,11 +33,11 @@ jobs:
         run: python scripts/record_traces.py   # your script; writes traces.sqlite
 
       - name: Regression gate
-        uses: Therealdk8890/DProvenanceKitPython/action@v1
+        uses: Therealdk8890/dprovenancekit-action@v1
         with:
           db-path: traces.sqlite
-          golden-run-id: ${{ env.GOLDEN_RUN_ID }}
-          candidate-run-id: ${{ env.CANDIDATE_RUN_ID }}
+          golden-context: golden        # newest run recorded with this context id
+          candidate-context: candidate  # (or pass golden-run-id / candidate-run-id)
           max-level: none          # strict: any divergence fails
           # allow-divergent: true  # tolerate per-step changes, gate only on severity
 ```
@@ -48,8 +49,10 @@ jobs:
 | `db-path` | — (required) | SQLite trace database holding both runs. |
 | `golden-db` | `db-path` | SQLite db holding the golden run, if separate (e.g. a restored baseline). |
 | `candidate-db` | `db-path` | SQLite db holding the candidate run, if separate. |
-| `golden-run-id` | — (required) | Run id of the golden (known-good) trace. |
-| `candidate-run-id` | — (required) | Run id of the candidate trace to gate. |
+| `golden-run-id` | `""` | Run id of the golden (known-good) trace. Provide this **or** `golden-context`. |
+| `candidate-run-id` | `""` | Run id of the candidate trace to gate. Provide this **or** `candidate-context`. |
+| `golden-context` | `""` | Select the newest run with this context id as the golden — no run-id extraction needed. Cloud sync (`dprov-api-key`) pulls by run id and still requires `golden-run-id`; the action fails loudly if only a context is given. |
+| `candidate-context` | `""` | Select the newest run with this context id as the candidate. Anomaly rules resolve it the same way. |
 | `max-level` | `none` | Worst severity that still passes: `none` \| `low` \| `medium` \| `high`. |
 | `allow-divergent` | `false` | Tolerate per-step changes; gate only on severity. |
 | `fail-on-regression` | `true` | Fail the job when a regression is detected. |
@@ -87,7 +90,7 @@ candidate run. Findings surface as inline `::warning::` annotations and a job su
 ```
 
 ```yaml
-      - uses: Therealdk8890/DProvenanceKitPython/action@v1
+      - uses: Therealdk8890/dprovenancekit-action@v1
         with:
           db-path: traces.sqlite
           golden-run-id: ${{ env.GOLDEN_RUN_ID }}
@@ -102,26 +105,21 @@ The same rules run anywhere without the action via `dprovenancekit anomalies --d
 
 The golden run usually comes from `main` and the candidate from the PR. Restore a baseline
 database (built on `main`, cached or committed), record the PR's run into a separate database,
-and resolve the run ids with `dprovenancekit runs` — no hardcoded ids:
+and select both by context id — no run-id extraction:
 
 ```yaml
-      - name: Resolve run ids
-        run: |
-          echo "GOLDEN=$(dprovenancekit runs --db baseline.sqlite --context my-agent --latest --format id)" >> "$GITHUB_ENV"
-          echo "CANDIDATE=$(dprovenancekit runs --db candidate.sqlite --context my-agent --latest --format id)" >> "$GITHUB_ENV"
-
-      - uses: Therealdk8890/DProvenanceKitPython/action@v1
+      - uses: Therealdk8890/dprovenancekit-action@v1
         with:
           golden-db: baseline.sqlite
           candidate-db: candidate.sqlite
           db-path: candidate.sqlite      # still required; used as the shared default
-          golden-run-id: ${{ env.GOLDEN }}
-          candidate-run-id: ${{ env.CANDIDATE }}
+          golden-context: my-agent       # newest my-agent run in baseline.sqlite
+          candidate-context: my-agent    # newest my-agent run in candidate.sqlite
 ```
 
-`dprovenancekit runs --db <db> [--context <id>] [--latest] [--format id | --json]` lists or
-selects runs; `--latest` exits non-zero when nothing matches, so a missing baseline fails the
-step loudly instead of silently passing an empty id.
+A context with no matching run fails the gate step loudly (exit 2) instead of silently passing.
+For explicit id selection, `dprovenancekit runs --db <db> [--context <id>] [--latest]
+[--format id | --json]` still lists or selects runs.
 
 ## Notes
 

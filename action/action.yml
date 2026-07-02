@@ -17,11 +17,21 @@ inputs:
     required: false
     default: ""
   golden-run-id:
-    description: "Run id of the golden (known-good) trace."
-    required: true
+    description: "Run id of the golden (known-good) trace. Provide this or golden-context (cloud sync via dprov-api-key requires a run id)."
+    required: false
+    default: ""
   candidate-run-id:
-    description: "Run id of the candidate trace to gate."
-    required: true
+    description: "Run id of the candidate trace to gate. Provide this or candidate-context."
+    required: false
+    default: ""
+  golden-context:
+    description: "Instead of golden-run-id: use the newest run with this context id as the golden. (Cloud sync via dprov-api-key pulls by run id and still requires golden-run-id.)"
+    required: false
+    default: ""
+  candidate-context:
+    description: "Instead of candidate-run-id: use the newest run with this context id as the candidate (anomaly rules resolve it the same way)."
+    required: false
+    default: ""
   max-level:
     description: "Worst regression severity that still passes: none | low | medium | high."
     required: false
@@ -102,7 +112,12 @@ runs:
     - name: Pull golden trace from cloud
       if: ${{ inputs.dprov-api-key != '' }}
       shell: bash
-      run: python -m dprovenancekit.cli sync pull --run "${{ inputs.golden-run-id }}" --db "${{ inputs.golden-db || inputs.db-path }}"
+      run: |
+        if [ -z "${{ inputs.golden-run-id }}" ]; then
+          echo "::error title=DProvenanceKit::dprov-api-key is set but golden-run-id is empty — cloud sync pulls the golden by run id and cannot use golden-context. Pass golden-run-id, or remove dprov-api-key to gate against a local baseline."
+          exit 1
+        fi
+        python -m dprovenancekit.cli sync pull --run "${{ inputs.golden-run-id }}" --db "${{ inputs.golden-db || inputs.db-path }}"
       env:
         DPROV_API_KEY: ${{ inputs.dprov-api-key }}
         DPROV_API_URL: ${{ inputs.dprov-api-url }}
@@ -116,7 +131,9 @@ runs:
         DPROV_GOLDEN_DB: ${{ inputs.golden-db || inputs.db-path }}
         DPROV_CANDIDATE_DB: ${{ inputs.candidate-db || inputs.db-path }}
         DPROV_GOLDEN: ${{ inputs.golden-run-id }}
+        DPROV_GOLDEN_CONTEXT: ${{ inputs.golden-context }}
         DPROV_CANDIDATE: ${{ inputs.candidate-run-id }}
+        DPROV_CANDIDATE_CONTEXT: ${{ inputs.candidate-context }}
         DPROV_MAX_LEVEL: ${{ inputs.max-level }}
         DPROV_ALLOW_DIVERGENT: ${{ inputs.allow-divergent }}
 
@@ -128,6 +145,7 @@ runs:
       env:
         DPROV_DB: ${{ inputs.db-path }}
         DPROV_CANDIDATE: ${{ inputs.candidate-run-id }}
+        DPROV_CANDIDATE_CONTEXT: ${{ inputs.candidate-context }}
         DPROV_ANOMALY_RULES: ${{ inputs.anomaly-rules }}
 
     - name: Comment on pull request

@@ -22,7 +22,7 @@ zero third-party dependencies.
 
 - **Gate in CI** — a server-less `dprovenancekit gate` CLI, plus a drop-in [GitHub Action](action/README.md) ([on the GitHub Marketplace](https://github.com/marketplace/actions/dprovenancekit-regression-gate)) and [GitLab CI template](gitlab/README.md) that fail a PR/MR when an agent's reasoning drifts from a golden baseline, and comment the diff.
 - **Out-of-the-box anomaly rules** — Tool Drop and Looping detection with a JSON rule registry, runnable locally or on every PR.
-- **A hosted visualizer** — a web dashboard (single-run span tree, JSON payload inspector, side-by-side semantic diff, shareable HTML reports) backed by a regression-gate API and multi-tenant control plane. Available as a separate commercial service.
+- **A hosted visualizer** — a web dashboard (single-run span tree, JSON payload inspector, side-by-side semantic diff, shareable HTML reports) backed by a regression-gate API and multi-tenant control plane. Available as a separate commercial service — see [dprovenance.dev](https://dprovenance.dev).
 
 See it all in one runnable script: [`python
 examples/end_to_end_demo.py`](examples/end_to_end_demo.py).

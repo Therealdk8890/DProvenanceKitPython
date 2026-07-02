@@ -2,10 +2,13 @@
 
 [![CI](https://github.com/Therealdk8890/DProvenanceKitPython/actions/workflows/ci.yml/badge.svg)](https://github.com/Therealdk8890/DProvenanceKitPython/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/dprovenancekit)](https://pypi.org/project/dprovenancekit/)
-**Reasoning observability and regression testing for AI systems — a Python port of the Swift [DProvenanceKit](https://github.com/Therealdk8890/DProvenanceKit).**
+**Regression testing and reasoning observability for AI agents — catch the run where your agent
+silently dropped a step, and fail the PR that caused it.**
 
 When an agent's reasoning drifts between runs, DProvenanceKit turns each execution into a queryable,
-diffable trace so you can see *what changed and why* — not just *what happened*.
+diffable trace so you can see *what changed and why* — not just *what happened*. It works with
+LangChain/LangGraph, the OpenAI Agents SDK, LlamaIndex, CrewAI, or plain Python, and the core has
+zero third-party dependencies.
 
 > Run → Record → Query → Diff → Detect regressions → Gate in CI
 
@@ -23,22 +26,6 @@ diffable trace so you can see *what changed and why* — not just *what happened
 
 See it all in one runnable script: [`python
 examples/end_to_end_demo.py`](examples/end_to_end_demo.py).
-
-This is a faithful, dependency-free port of the Swift library to Python. It keeps the same
-architecture and guarantees — synchronous non-blocking recording, priority-aware backpressure, one
-query language over two backends held at parity, structural diffing, formally-modeled semantic
-alignment, and by-tier drop accounting so load-shedding is never silent.
-
-The original Swift package is unchanged; this is a parallel implementation.
-
----
-
-## Why a Python port
-
-The Swift library targets Apple-platform and on-device AI. This port brings the same reasoning-layer
-observability to Python codebases — agent frameworks, LLM workflows, tool-using models — with **zero
-third-party dependencies** (it uses only the standard library: `sqlite3`, `contextvars`,
-`threading`, `json`, `hashlib`, `uuid`, `urllib`).
 
 ---
 
@@ -153,6 +140,22 @@ pure value-model layer (`SpanViewModel`, flattening) is ported in `viewmodel`.
 
 ---
 
+## The Swift original
+
+DProvenanceKit began as a [Swift library](https://github.com/Therealdk8890/DProvenanceKit) for
+Apple-platform and on-device AI. This Python implementation brings the same reasoning-layer
+observability to Python codebases — agent frameworks, LLM workflows, tool-using models — with
+**zero third-party dependencies** (it uses only the standard library: `sqlite3`, `contextvars`,
+`threading`, `json`, `hashlib`, `uuid`, `urllib`).
+
+It is a faithful port, not a loose reimplementation: it keeps the same architecture and guarantees —
+synchronous non-blocking recording, priority-aware backpressure, one query language over two
+backends held at parity, structural diffing, formally-modeled semantic alignment, and by-tier drop
+accounting so load-shedding is never silent. The original Swift package is unchanged; the two are
+held equivalent by the conformance suite below.
+
+---
+
 ## Cross-language conformance
 
 Keeping the Swift and Python SDKs behaviorally equivalent is enforced, not hoped for.
@@ -180,7 +183,7 @@ unless you do.
 ### LangChain / LangGraph
 
 ```bash
-pip install dprovenancekit[langchain]
+pip install "dprovenancekit[langchain]"
 ```
 
 ```python
@@ -212,7 +215,7 @@ retrieval step skipped) produce different fingerprints — a cheap regression si
 ### OpenAI Agents SDK
 
 ```bash
-pip install dprovenancekit[openai-agents]
+pip install "dprovenancekit[openai-agents]"
 ```
 
 ```python
@@ -237,7 +240,7 @@ recorded at `CRITICAL`, and lifecycle **provenance edges** are emitted (same
 ### LlamaIndex
 
 ```bash
-pip install dprovenancekit[llama-index]
+pip install "dprovenancekit[llama-index]"
 ```
 
 ```python
@@ -263,7 +266,7 @@ with kit.run(context_id="qa-session", store=store) as run:
 ### CrewAI
 
 ```bash
-pip install dprovenancekit[crewai]
+pip install "dprovenancekit[crewai]"
 ```
 
 ```python

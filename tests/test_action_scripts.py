@@ -343,3 +343,82 @@ def test_run_anomalies_publishes_outputs(tmp_path, capsys):
     assert json.loads(parsed["anomalies-json"])["count"] == 1
     # The warning annotation is emitted to the log.
     assert "::warning" in capsys.readouterr().out
+
+
+# ── context-based run selection (golden-context / candidate-context inputs) ──────
+
+
+def test_gate_argv_run_id_wins_over_context():
+    # action.yml documents setting candidate-run-id alongside candidate-context (to
+    # scope anomaly rules); the gate argv must forward only ONE selector per side or
+    # the CLI rejects the combination with exit 2.
+    env = {
+        "DPROV_DB": "traces.sqlite",
+        "DPROV_GOLDEN": "aaaa",
+        "DPROV_GOLDEN_CONTEXT": "golden-ctx",
+        "DPROV_CANDIDATE": "bbbb",
+        "DPROV_CANDIDATE_CONTEXT": "candidate-ctx",
+    }
+    argv = run_gate.build_gate_argv(env)
+    assert "--golden" in argv and "--golden-context" not in argv
+    assert "--candidate" in argv and "--candidate-context" not in argv
+
+
+def test_gate_argv_falls_back_to_context():
+    env = {
+        "DPROV_DB": "traces.sqlite",
+        "DPROV_GOLDEN_CONTEXT": "golden-ctx",
+        "DPROV_CANDIDATE_CONTEXT": "candidate-ctx",
+    }
+    argv = run_gate.build_gate_argv(env)
+    assert argv[argv.index("--golden-context") + 1] == "golden-ctx"
+    assert argv[argv.index("--candidate-context") + 1] == "candidate-ctx"
+    assert "--golden" not in argv and "--candidate" not in argv
+
+
+def test_anomalies_resolves_candidate_context():
+    calls = []
+
+    def fake_run(argv, capture_output, text):
+        calls.append(argv)
+
+        class Proc:
+            returncode = 0
+            stdout = "1234-run-id\n"
+            stderr = ""
+
+        return Proc()
+
+    env = {"DPROV_DB": "traces.sqlite", "DPROV_CANDIDATE_CONTEXT": "candidate"}
+    run_id, error = run_anomalies.resolve_candidate(env, run=fake_run)
+    assert error is None
+    assert run_id == "1234-run-id"
+    assert calls and "--latest" in calls[0] and "--context" in calls[0]
+
+
+def test_anomalies_context_resolution_failure_is_an_error():
+    def fake_run(argv, capture_output, text):
+        class Proc:
+            returncode = 1
+            stdout = ""
+            stderr = "error: no run found for context 'candidate'"
+
+        return Proc()
+
+    env = {"DPROV_DB": "traces.sqlite", "DPROV_CANDIDATE_CONTEXT": "candidate"}
+    run_id, error = run_anomalies.resolve_candidate(env, run=fake_run)
+    assert run_id is None
+    assert "no run found" in error
+
+
+def test_anomalies_explicit_run_id_skips_resolution():
+    def fake_run(argv, capture_output, text):  # pragma: no cover - must not be called
+        raise AssertionError("resolution subprocess should not run")
+
+    env = {
+        "DPROV_DB": "traces.sqlite",
+        "DPROV_CANDIDATE": "abcd",
+        "DPROV_CANDIDATE_CONTEXT": "candidate",
+    }
+    run_id, error = run_anomalies.resolve_candidate(env, run=fake_run)
+    assert (run_id, error) == ("abcd", None)

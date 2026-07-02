@@ -264,3 +264,90 @@ def test_golden_trace_block_exception_propagates(pytester):
     result = pytester.runpytest("--dprov-update-golden")
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(["*agent crashed*"])
+
+
+AGENT_CRASHES = """
+    from dprovenancekit import traced, record_event
+
+    @traced
+    def retrieve(q):
+        return ["doc"]
+
+    def test_agent(golden_trace):
+        with golden_trace("demo-agent"):
+            retrieve("q")
+            raise RuntimeError("agent crashed mid-run")
+"""
+
+
+def test_golden_trace_update_crash_preserves_baseline(pytester):
+    # A crashing --dprov-update-golden run must NOT replace the committed baseline
+    # with a partial trace.
+    pytester.makepyfile(AGENT_OK)
+    result = pytester.runpytest("--dprov-update-golden")
+    result.assert_outcomes(passed=1)
+
+    pytester.makepyfile(AGENT_CRASHES)
+    result = pytester.runpytest("--dprov-update-golden")
+    result.assert_outcomes(failed=1)
+
+    # The original baseline still gates the original agent clean.
+    pytester.makepyfile(AGENT_OK)
+    result = pytester.runpytest()
+    result.assert_outcomes(passed=1)
+
+
+def test_golden_trace_name_collision_fails_loudly(pytester):
+    pytester.makepyfile(
+        """
+        from dprovenancekit import record_event
+
+        def test_a(golden_trace):
+            with golden_trace("shared"):
+                record_event("step.a", {})
+
+        def test_b(golden_trace):
+            with golden_trace("shared"):
+                record_event("step.b", {})
+        """
+    )
+    result = pytester.runpytest("--dprov-update-golden")
+    result.assert_outcomes(passed=1, failed=1)
+    result.stdout.fnmatch_lines(
+        ["*name collision*'shared'*", "*unique per test session*"]
+    )
+
+
+def test_golden_trace_sanitized_names_stay_distinct(pytester):
+    # "agent v1" and "agent:v1" both sanitize to agent-v1 — the digest suffix must
+    # keep their baseline files separate.
+    pytester.makepyfile(
+        """
+        from dprovenancekit import record_event
+
+        def test_space(golden_trace):
+            with golden_trace("agent v1"):
+                record_event("step.space", {})
+
+        def test_colon(golden_trace):
+            with golden_trace("agent:v1"):
+                record_event("step.colon", {})
+        """
+    )
+    result = pytester.runpytest("--dprov-update-golden")
+    result.assert_outcomes(passed=2)
+    goldens = sorted(p.name for p in (pytester.path / "tests" / "goldens").iterdir())
+    assert len(goldens) == 2, goldens
+
+    result = pytester.runpytest()
+    result.assert_outcomes(passed=2)
+
+
+def test_golden_trace_corrupt_baseline_fails_actionably(pytester):
+    pytester.makepyfile(AGENT_OK)
+    baseline = pytester.path / "tests" / "goldens" / "demo-agent.sqlite"
+    baseline.parent.mkdir(parents=True)
+    baseline.write_text("this is not a sqlite database")
+    result = pytester.runpytest()
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines(["*could not open trace db*", "*--dprov-update-golden*"])

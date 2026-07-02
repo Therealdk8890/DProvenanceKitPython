@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DProvenanceKit — Regression Testing &amp; CI Gates for AI Agents</title>
+<meta name="description" content="Open-source regression testing and CI gates for AI agents — record runs as diffable traces, diff against a golden baseline, fail the PR when reasoning drifts.">
+<link rel="canonical" href="https://dprovenance.dev/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="DProvenanceKit">
+<meta property="og:title" content="DProvenanceKit — Regression Testing &amp; CI Gates for AI Agents">
+<meta property="og:description" content="Catch the run where your agent silently dropped a step, and fail the PR that caused it. Open-source LLM tracing, trace diffing, and a CI regression gate.">
+<meta property="og:url" content="https://dprovenance.dev/">
+<meta property="og:image" content="https://raw.githubusercontent.com/Therealdk8890/DProvenanceKitPython/main/assets/demo.gif">
+<meta property="og:image:alt" content="Terminal demo: DProvenanceKit diffs two runs of a research agent and fails CI when the candidate drops its verify step and loops its search tool">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="DProvenanceKit — Regression Testing &amp; CI Gates for AI Agents">
+<meta name="twitter:description" content="Catch the run where your agent silently dropped a step, and fail the PR that caused it. Open-source LLM tracing, trace diffing, and a CI regression gate.">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/Therealdk8890/DProvenanceKitPython/main/assets/demo.gif">
+<meta name="twitter:image:alt" content="Terminal demo: DProvenanceKit diffs two runs of a research agent and fails CI when the candidate drops its verify step and loops its search tool">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "DProvenanceKit",
+  "description": "Regression testing and reasoning observability for AI agents. Records each agent execution as a queryable, diffable trace, diffs a candidate run against a golden baseline, and fails CI when reasoning drifts.",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Cross-platform",
+  "url": "https://dprovenance.dev/",
+  "license": "https://www.apache.org/licenses/LICENSE-2.0",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "sameAs": [
+    "https://github.com/Therealdk8890/DProvenanceKitPython",
+    "https://pypi.org/project/dprovenancekit/"
+  ]
+}
+</script>
+<style>
+  :root{
+    --bg:#08090b; --bg2:#0d0f13; --bg3:#101318;
+    --border:#21262e; --border2:#2b323c;
+    --text:#c9d1d9; --dim:#8f99a3; --faint:#7d8590;
+    --red:#f85149; --red-bg:rgba(248,81,73,.10);
+    --green:#3fb950; --green-hi:#56d364; --green-bg:rgba(63,185,80,.10);
+    --amber:#d29922;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);color:var(--text);font-family:var(--mono);
+    font-size:15px;line-height:1.65;
+    background-image:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(63,185,80,.05),transparent),
+                     radial-gradient(ellipse 60% 40% at 80% 0%,rgba(248,81,73,.04),transparent);
+  }
+  a{color:var(--green-hi);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:940px;margin:0 auto;padding:0 20px}
+
+  /* header */
+  header{border-bottom:1px solid var(--border);background:rgba(8,9,11,.92)}
+  .nav{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:16px 0}
+  .logo{color:var(--text);font-weight:700;letter-spacing:-.02em}
+  .logo:hover{text-decoration:none}
+  .logo .p{color:var(--green)}
+  .logo .c{display:inline-block;width:.55em;height:1em;background:var(--green);vertical-align:-.18em;margin-left:2px;animation:blink 1.2s steps(1) infinite}
+  .nav-links{display:flex;gap:16px;flex-wrap:wrap;margin-left:auto;font-size:13px}
+  .nav-links a{color:var(--dim)}
+  .nav-links a:hover{color:var(--text)}
+  @keyframes blink{50%{opacity:0}}
+  @media (prefers-reduced-motion:reduce){.logo .c{animation:none}}
+
+  /* hero */
+  .hero{padding:64px 0 40px;text-align:left}
+  .kicker{font-size:13px;color:var(--dim);margin-bottom:22px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .kicker .cmd{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:7px 12px;color:var(--green-hi)}
+  .kicker .cmd .dollar{color:var(--faint);user-select:none}
+  .kicker button{font:inherit;font-size:12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--dim);padding:7px 10px;cursor:pointer}
+  .kicker button:hover{color:var(--text);border-color:var(--border2)}
+  .kicker .meta{color:var(--faint);font-size:12px}
+  h1{font-size:clamp(26px,5vw,42px);line-height:1.2;letter-spacing:-.02em;font-weight:700;max-width:21ch}
+  h1 .fail{color:var(--red)}
+  .sub{font-family:var(--sans);color:var(--dim);max-width:62ch;margin:20px 0 28px;font-size:16px}
+  .sub strong{color:var(--text);font-weight:600}
+  .ctas{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:48px}
+  .cta-links{font-size:13px;color:var(--faint)}
+  .cta-links a{color:var(--dim)}
+  .cta-links a:hover{color:var(--text)}
+  .btn{display:inline-block;padding:10px 18px;border-radius:6px;font-size:14px;border:1px solid var(--border2);color:var(--text)}
+  .btn:hover{text-decoration:none;border-color:var(--dim)}
+  .btn.primary{background:var(--green);border-color:var(--green);color:#04120a;font-weight:700}
+  .btn.primary:hover{background:var(--green-hi);border-color:var(--green-hi)}
+
+  /* terminal */
+  .term{border:1px solid var(--border);border-radius:10px;background:#0b0d10;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.6)}
+  .term-bar{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--border);background:var(--bg2)}
+  .dot{width:11px;height:11px;border-radius:50%;background:#333a43}
+  .dot.r{background:#71332f}.dot.y{background:#6b5a26}.dot.g{background:#2c5237}
+  .term-title{margin:0 auto;font-size:12px;color:var(--faint);padding:0 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .term-badge{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--amber);border:1px solid var(--amber);border-radius:999px;padding:1px 8px;white-space:nowrap}
+  .term-note{border-top:1px solid var(--border);background:var(--bg2);padding:9px 14px;font-size:12px;color:var(--dim);font-family:var(--sans);white-space:normal}
+  .term-body{padding:18px 18px 20px;font-size:13px;line-height:1.7;overflow-x:auto;white-space:pre;font-family:var(--mono)}
+  .t-dollar{color:var(--faint)}
+  .t-cmd{color:var(--text)}
+  .t-flag{color:var(--green-hi)}
+  .t-dim{color:var(--dim)}
+  .t-faint{color:var(--faint)}
+  .t-red{color:var(--red);font-weight:700}
+  .t-redline{color:var(--red)}
+  .t-green{color:var(--green-hi)}
+  .t-amber{color:var(--amber)}
+  .t-failband{display:inline-block;background:var(--red-bg);border-left:3px solid var(--red);padding:1px 10px 1px 8px;margin-left:-11px}
+
+  /* check rows */
+  .checks{margin-top:14px;border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:13px}
+  .check{display:flex;align-items:baseline;gap:10px;padding:10px 14px;background:var(--bg2)}
+  .check + .check{border-top:1px solid var(--border)}
+  .check .ic{font-weight:700}
+  .check .ok{color:var(--green)}
+  .check .no{color:var(--red)}
+  .check .what{color:var(--text)}
+  .check .status{color:var(--faint);margin-left:auto;white-space:nowrap}
+  .check.failrow{background:var(--red-bg)}
+  .check-note{padding:8px 14px;background:var(--bg2);border-top:1px solid var(--border);font-size:12px;color:var(--dim);font-family:var(--sans)}
+  .hero-cap{font-size:13px;color:var(--faint);margin-top:14px}
+  .hero-cap b{color:var(--dim);font-weight:600}
+
+  /* loop strip */
+  .loop{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;padding:26px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin:56px 0 0;font-size:13px}
+  .loop .step{border:1px solid var(--border2);border-radius:999px;padding:4px 14px;color:var(--dim)}
+  .loop .step.hot{border-color:var(--red);color:var(--red)}
+  .loop .step.go{border-color:var(--green);color:var(--green-hi)}
+  .loop .arr{color:var(--faint)}
+
+  /* sections */
+  section{padding:64px 0}
+  section + section{border-top:1px solid var(--border)}
+  .sec-kicker{font-size:12px;color:var(--faint);letter-spacing:.14em;text-transform:uppercase;margin-bottom:10px}
+  .sec-kicker .no{color:var(--green)}
+  h2{font-size:clamp(21px,3.4vw,28px);letter-spacing:-.02em;line-height:1.25;margin-bottom:14px}
+  .lede{font-family:var(--sans);color:var(--dim);max-width:64ch;font-size:15.5px;margin-bottom:26px}
+  .lede a{color:var(--green-hi)}
+
+  /* code blocks */
+  .code{border:1px solid var(--border);border-radius:10px;background:var(--bg3);overflow:hidden}
+  .code-bar{display:flex;justify-content:space-between;gap:10px;padding:8px 14px;font-size:12px;color:var(--faint);border-bottom:1px solid var(--border);background:var(--bg2)}
+  .code pre{padding:16px 18px;overflow-x:auto;font-size:13px;line-height:1.7;font-family:var(--mono)}
+  .kw{color:#ff7b72}
+  .st{color:#7ee787}
+  .cm{color:#828d99}
+  .out{color:#9aa4ae}
+  .ok{color:var(--green-hi)}
+  .er{color:var(--red);font-weight:700}
+  .er-band{display:inline-block;background:var(--red-bg);border-left:3px solid var(--red);padding:1px 10px 1px 8px;margin-left:-11px}
+  .yk{color:#79c0ff}
+  .caption{font-size:13px;color:var(--faint);margin-top:12px}
+
+  /* demo gif */
+  .gif-frame{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#0b0d10;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .gif-frame img{display:block;width:100%;height:auto}
+
+  /* grids */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:8px}
+  .card{border:1px solid var(--border);border-radius:10px;background:var(--bg2);padding:18px}
+  .card h3{font-size:14.5px;margin-bottom:8px;color:var(--text)}
+  .card h3 .tick{color:var(--green);margin-right:8px}
+  .card p{font-family:var(--sans);font-size:13.5px;color:var(--dim)}
+  .card p a{color:var(--green-hi)}
+  .tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+  .tags .tag{font-size:12.5px;border:1px solid var(--border2);border-radius:6px;padding:4px 10px;color:var(--dim)}
+  .tags .lbl{font-size:12.5px;color:var(--faint);padding:4px 0}
+
+  /* benchmark */
+  .bench{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin:8px 0 20px}
+  .metric{border:1px solid var(--border);border-radius:10px;background:var(--bg2);padding:18px;text-align:center}
+  .metric .v{font-size:30px;font-weight:700;color:var(--green-hi);letter-spacing:-.02em}
+  .metric .k{font-size:12px;color:var(--faint);letter-spacing:.12em;text-transform:uppercase;margin-top:4px}
+
+  /* dashboard */
+  .dash{border:1px solid var(--border2);border-radius:12px;padding:28px;background:linear-gradient(160deg,var(--bg2),#0a0c10)}
+  .pill{display:inline-block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;border:1px solid var(--amber);color:var(--amber);border-radius:999px;padding:3px 10px;margin-bottom:14px}
+  .dash ul{list-style:none;margin:16px 0 24px;font-size:14px;color:var(--dim)}
+  .dash li{padding:4px 0}
+  .dash li::before{content:"▸ ";color:var(--green)}
+
+  footer{border-top:1px solid var(--border);padding:30px 0 44px;font-size:13px;color:var(--faint)}
+  .foot{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center}
+  .foot a{color:var(--dim)}
+  .foot a:hover{color:var(--text)}
+
+  @media (max-width:480px){
+    .term-body,.code pre{font-size:11.5px}
+    .kicker .cmd{font-size:12px}
+    section{padding:48px 0}
+    .hero{padding:44px 0 32px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="logo" href="https://dprovenance.dev/"><span class="p">$</span> dprovenancekit<span class="c" aria-hidden="true"></span></a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#record">record</a>
+      <a href="#ci">gate</a>
+      <a href="#benchmark">benchmark</a>
+      <a href="https://github.com/Therealdk8890/DProvenanceKitPython">GitHub</a>
+      <a href="https://pypi.org/project/dprovenancekit/">PyPI</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap hero">
+    <p class="kicker">
+      <span class="cmd" id="install-cmd"><span class="dollar">$ </span>pip install dprovenancekit</span>
+      <button type="button" id="copy-btn" aria-label="Copy install command">copy</button>
+      <span class="meta">Python 3.9+ · zero third-party deps in the core · Apache-2.0</span>
+    </p>
+    <h1>Your agent silently dropped a step.<br><span class="fail">This build just caught it.</span></h1>
+    <p class="sub">DProvenanceKit is <strong>open source regression testing and reasoning observability for AI agents</strong>. Every run becomes a queryable, diffable trace, and CI fails when the reasoning drifts — a dropped tool call, a looping step, a changed execution path.</p>
+    <p class="sub" style="margin-top:-12px">Observability tools show you what happened. <strong>DProvenanceKit fails the PR that caused it.</strong> Think pytest for agent reasoning.</p>
+    <p class="ctas">
+      <a class="btn primary" href="https://github.com/Therealdk8890/DProvenanceKitPython">View on GitHub →</a>
+      <span class="cta-links"><a href="https://pypi.org/project/dprovenancekit/">PyPI</a> · <a href="https://github.com/marketplace/actions/dprovenancekit-regression-gate">GitHub Action</a></span>
+    </p>
+
+    <div class="term" role="img" aria-label="Illustrative CI terminal (not a real run): the dprovenancekit gate command fails the build because the candidate run is missing its Verify Claims step and repeated its search step; the job exits with code 1.">
+      <div class="term-bar" aria-hidden="true">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="term-title">ci · reasoning-regression · pull_request</span>
+        <span class="term-badge">illustrative</span>
+      </div>
+      <pre class="term-body" aria-hidden="true"><span class="t-dollar">$</span> <span class="t-cmd">dprovenancekit gate</span> <span class="t-flag">--db</span> traces.sqlite <span class="t-faint">\</span>
+      <span class="t-flag">--golden-context</span> golden <span class="t-flag">--candidate-context</span> candidate
+
+<span class="t-dim">Regression gate:</span> <span class="t-failband"><span class="t-red">FAIL</span></span>
+<span class="t-dim">  severity: </span><span class="t-amber">high</span><span class="t-faint"> (strength 0.86); max allowed: none</span>
+<span class="t-faint">  fingerprint: differs (b4f8d2a91c04… vs 7e30c5f6d218…)</span>
+<span class="t-dim">  per-step changes:</span>
+<span class="t-redline">    removed: Verify Claims</span>
+<span class="t-redline">    added: Search Web, Search Web, Search Web</span>
+
+<span class="t-red">✗</span> <span class="t-dim">regression detected — exit code 1</span>
+<span class="t-redline">Error: Process completed with exit code 1.</span></pre>
+      <div class="term-note">Illustrative log, not a captured run — the <code>gate</code> CLI, its flags, and the report format are real; the fingerprint hashes and strength value are invented for display.</div>
+    </div>
+    <div class="checks" role="group" aria-label="Mocked-up pull request status checks">
+      <div class="check"><span class="ic ok">✓</span><span class="what">tests <span class="t-faint">(pull_request)</span></span><span class="status">Successful in 41s</span></div>
+      <div class="check failrow"><span class="ic no">✗</span><span class="what">reasoning-regression <span class="t-faint">(pull_request)</span></span><span class="status">Failing after 12s</span></div>
+      <div class="check-note">Mockup of GitHub's PR checks UI — these rows and their durations are illustrative, not a screenshot of a real CI run.</div>
+    </div>
+    <p class="hero-cap"><b>Unit tests passed. The reasoning gate didn't.</b> The candidate run dropped its <b>verify</b> step and looped its <b>search</b> tool — the diff against the golden run blocked the merge.</p>
+
+    <div class="loop" role="group" aria-label="Core loop">
+      <span class="step">run</span><span class="arr">→</span>
+      <span class="step">record</span><span class="arr">→</span>
+      <span class="step">query</span><span class="arr">→</span>
+      <span class="step">diff</span><span class="arr">→</span>
+      <span class="step hot">detect regressions</span><span class="arr">→</span>
+      <span class="step go">gate in CI</span>
+    </div>
+  </div>
+
+  <section id="record">
+    <div class="wrap">
+      <p class="sec-kicker"><span class="no"># 01</span> · record → explain → diff</p>
+      <h2>One import. Traces you can diff, not logs you can grep.</h2>
+      <p class="lede">LLM tracing without the ceremony: wrap your steps in <code>trace(…)</code>, save a golden run, and diff any later run against it. This is the whole loop — straight from the README, unedited:</p>
+      <div class="code">
+        <div class="code-bar"><span>five_minute_wow.py</span><span>python</span></div>
+        <pre><span class="kw">from</span> dprovenancekit <span class="kw">import</span> trace
+
+<span class="cm"># 1. Record an execution</span>
+<span class="kw">with</span> trace(<span class="st">"Agent Workflow"</span>):
+    <span class="kw">with</span> trace(<span class="st">"Retrieve Documents"</span>):
+        <span class="cm"># your retrieval code here</span>
+        <span class="kw">pass</span>
+    <span class="kw">with</span> trace(<span class="st">"Verify Claims"</span>):
+        <span class="cm"># your verification code here</span>
+        <span class="kw">pass</span>
+
+<span class="cm"># 2. Save the trace</span>
+trace.save(<span class="st">"golden_run.sqlite"</span>)
+
+<span class="cm"># 3. Print a structural explanation</span>
+trace.explain()
+<span class="out"># --- Execution Trace (b4f8d2…) ---</span>
+<span class="out"># ▶ Started Agent Workflow</span>
+<span class="out">#   ▶ Started Retrieve Documents</span>
+<span class="out">#   <span class="ok">✔</span> Finished Retrieve Documents</span>
+<span class="out">#   ▶ Started Verify Claims</span>
+<span class="out">#   <span class="ok">✔</span> Finished Verify Claims</span>
+<span class="out"># <span class="ok">✔</span> Finished Agent Workflow</span>
+
+<span class="cm"># 4. Catch regressions when the logic changes: rerun the (now buggy) workflow,</span>
+<span class="cm">#    then diff the current run against the saved golden baseline</span>
+trace.diff(<span class="st">"golden_run.sqlite"</span>)
+<span class="out"># --- Trace Diff (Golden vs Current) ---</span>
+<span class="er-band"><span class="er"># ❌ Missing step: Verify Claims</span></span></pre>
+      </div>
+      <p class="caption">Under the hood this powers anomaly detection, CI gating, and visual trace analysis. Works with your stack via adapters, or plain Python.</p>
+    </div>
+  </section>
+
+  <section id="demo">
+    <div class="wrap">
+      <p class="sec-kicker"><span class="no"># 02</span> · watch the catch</p>
+      <h2>Two runs of the same agent. One dropped its verify step.</h2>
+      <p class="lede">A research agent, recorded twice. The candidate run silently dropped <em>Verify Claims</em> and looped its search tool. The gate diffed it against the golden run, printed the failure, and failed CI.</p>
+      <div class="gif-frame">
+        <img loading="lazy" src="https://raw.githubusercontent.com/Therealdk8890/DProvenanceKitPython/main/assets/demo.gif" alt="Terminal recording: DProvenanceKit records two runs of a research agent, gates the candidate against the golden run, and blocks the PR when the agent drops its verify step and loops its search tool" width="820" height="460">
+      </div>
+    </div>
+  </section>
+
+  <section id="ci">
+    <div class="wrap">
+      <p class="sec-kicker"><span class="no"># 03</span> · gate in ci</p>
+      <h2>A CI gate for AI agents. Server-less. Exit code 1.</h2>
+      <p class="lede">The <code>dprovenancekit gate</code> CLI runs fully local — no hosted backend. Wire it into any pipeline, or drop in the <a href="https://github.com/marketplace/actions/dprovenancekit-regression-gate">GitHub Action from the Marketplace</a> (a GitLab CI template ships too). On regression it fails the job and posts a sticky PR comment with the diff.</p>
+      <div class="code">
+        <div class="code-bar"><span>.github/workflows/reasoning-regression.yml</span><span>yaml</span></div>
+        <pre><span class="yk">name:</span> <span class="st">reasoning-regression</span>
+<span class="yk">on:</span> <span class="st">pull_request</span>
+
+<span class="yk">permissions:</span>
+  <span class="yk">contents:</span> <span class="st">read</span>
+  <span class="yk">pull-requests:</span> <span class="st">write</span>   <span class="cm"># required for the PR comment</span>
+
+<span class="yk">jobs:</span>
+  <span class="yk">gate:</span>
+    <span class="yk">runs-on:</span> <span class="st">ubuntu-latest</span>
+    <span class="yk">steps:</span>
+      - <span class="yk">uses:</span> <span class="st">actions/checkout@v4</span>
+
+      <span class="cm"># Produce a SQLite trace database with your golden + candidate runs.</span>
+      - <span class="yk">name:</span> <span class="st">Record traces</span>
+        <span class="yk">run:</span> <span class="st">python scripts/record_traces.py</span>   <span class="cm"># your script; writes traces.sqlite</span>
+
+      - <span class="yk">name:</span> <span class="st">Regression gate</span>
+        <span class="yk">uses:</span> <span class="st">Therealdk8890/dprovenancekit-action@v1</span>
+        <span class="yk">with:</span>
+          <span class="yk">db-path:</span> <span class="st">traces.sqlite</span>
+          <span class="yk">golden-context:</span> <span class="st">golden</span>        <span class="cm"># newest run recorded with this context id</span>
+          <span class="yk">candidate-context:</span> <span class="st">candidate</span>
+          <span class="yk">max-level:</span> <span class="st">none</span>               <span class="cm"># strict: any divergence fails</span></pre>
+      </div>
+      <p class="caption">Built-in anomaly rules — <b>Tool Drop</b> and <b>Looping</b> — run from a JSON rule registry, locally or on every PR:</p>
+      <div class="code" style="margin-top:12px">
+        <div class="code-bar"><span>.github/dprov-rules.json</span><span>json</span></div>
+        <pre>{
+  <span class="st">"rules"</span>: [
+    { <span class="st">"type"</span>: <span class="st">"tool_drop"</span>, <span class="st">"required_step"</span>: <span class="st">"safety_check"</span> },
+    { <span class="st">"type"</span>: <span class="st">"looping"</span>, <span class="st">"step"</span>: <span class="st">"web_search"</span>, <span class="st">"max_repeats"</span>: <span class="yk">5</span> }
+  ]
+}</pre>
+      </div>
+      <p class="caption"><span class="t-dollar">$</span> <code>dprovenancekit anomalies --db traces.sqlite --rules rules.json</code> — same rules, no Action required.</p>
+    </div>
+  </section>
+
+  <section id="surfaces">
+    <div class="wrap">
+      <p class="sec-kicker"><span class="no"># 04</span> · what ships in the box</p>
+      <h2>Not just a library — the surfaces that make regressions actionable.</h2>
+      <div class="grid">
+        <div class="card"><h3><span class="tick">✓</span>Server-less gate CLI</h3><p><code>dprovenancekit gate</code> diffs candidate vs golden from local SQLite and exits non-zero on drift. No backend, no account.</p></div>
+        <div class="card"><h3><span class="tick">✓</span>GitHub Action + GitLab CI</h3><p>A drop-in <a href="https://github.com/marketplace/actions/dprovenancekit-regression-gate">Marketplace Action</a> and a GitLab CI template that fail the PR/MR and comment the diff.</p></div>
+        <div class="card"><h3><span class="tick">✓</span>Anomaly rules</h3><p>Tool Drop and Looping detection out of the box, configured through a JSON rule registry.</p></div>
+        <div class="card"><h3><span class="tick">✓</span>pytest plugin</h3><p>Prompt and agent regression testing inside the test suite you already run — gate reasoning like any other assertion.</p></div>
+        <div class="card"><h3><span class="tick">✓</span>Shareable HTML reports</h3><p>Regression reports you can attach to a PR or hand to a teammate — no server needed to open them.</p></div>
+        <div class="card"><h3><span class="tick">✓</span>Zero-dependency core</h3><p>Python 3.9+, zero third-party dependencies in the core, Apache-2.0. <code>pip install dprovenancekit</code> and go.</p></div>
+      </div>
+      <div class="tags" aria-label="Framework adapters">
+        <span class="lbl">adapters:</span>
+        <span class="tag">LangChain / LangGraph</span>
+        <span class="tag">OpenAI Agents SDK</span>
+        <span class="tag">LlamaIndex</span>
+        <span class="tag">CrewAI</span>
+        <span class="tag">Google GenAI</span>
+        <span class="tag">FastAPI</span>
+        <span class="tag">MCP</span>
+        <span class="tag">plain Python</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="benchmark">
+    <div class="wrap">
+      <p class="sec-kicker"><span class="no"># 05</span> · benchmark</p>
+      <h2>Perfect score on the shipped validation corpus.</h2>
+      <div class="bench">
+        <div class="metric"><div class="v">1.000</div><div class="k">precision</div></div>
+        <div class="metric"><div class="v">1.000</div><div class="k">recall</div></div>
+        <div class="metric"><div class="v">1.000</div><div class="k">f1</div></div>
+      </div>
+      <p class="lede" style="margin-bottom:12px">Across <strong>8 standard + 5 adversarial</strong> regression-detection scenarios — matching the <a href="https://github.com/Therealdk8890/DProvenanceKit">original Swift implementation</a> case-for-case. The corpus ships with the library; run it yourself:</p>
+      <div class="code">
+        <div class="code-bar"><span>headless benchmark CLI</span><span>sh</span></div>
+        <pre><span class="t-dollar">$</span> dprovenancekit evaluate     <span class="cm"># precision/recall/F1 over the standard + adversarial corpora</span>
+<span class="t-dollar">$</span> dprovenancekit diagnose     <span class="cm"># causal ranking of failure modes</span>
+<span class="t-dollar">$</span> dprovenancekit stability    <span class="cm"># determinism boundary: isolated vs perturbed F1 variance</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <section id="dashboard">
+    <div class="wrap">
+      <div class="dash">
+        <span class="pill">commercial · early access</span>
+        <h2>The hosted dashboard: see the drift, not just fail on it.</h2>
+        <p class="lede">A web dashboard backed by a regression-gate API, for teams that want agent observability with a UI on top of the open-source gate:</p>
+        <ul>
+          <li>Single-run span tree</li>
+          <li>JSON payload inspector</li>
+          <li>Side-by-side semantic diff</li>
+          <li>Shareable HTML reports</li>
+        </ul>
+        <p class="ctas" style="margin-bottom:0">
+          <a class="btn primary" href="mailto:therealdk8890@gmail.com?subject=DProvenanceKit%20hosted%20dashboard">Request early access</a>
+          <a class="btn" href="https://dprov-frontend.onrender.com">Open the live demo →</a>
+        </p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <span>Apache-2.0 · © 2026 DProvenanceKit</span>
+    <a href="https://github.com/Therealdk8890/DProvenanceKitPython">GitHub</a>
+    <a href="https://pypi.org/project/dprovenancekit/">PyPI</a>
+    <a href="https://github.com/marketplace/actions/dprovenancekit-regression-gate">GitHub Action</a>
+    <a href="https://github.com/Therealdk8890/DProvenanceKit">Swift original</a>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var btn = document.getElementById('copy-btn');
+  if (!btn) return;
+  var CMD = 'pip install dprovenancekit';
+  function done(ok) {
+    btn.textContent = ok ? 'copied ✓' : 'copy failed';
+    setTimeout(function () { btn.textContent = 'copy'; }, 1600);
+  }
+  function fallback() {
+    var ta = document.createElement('textarea');
+    ta.value = CMD;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+    done(ok);
+  }
+  btn.addEventListener('click', function () {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(CMD).then(function () { done(true); }, fallback);
+    } else {
+      fallback();
+    }
+  });
+})();
+</script>
+</body>
+</html>

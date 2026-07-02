@@ -4,6 +4,12 @@ A composite action that fails a pull request when an agent's reasoning regresses
 golden run, and posts a sticky summary comment with the diff. It wraps the server-less
 `dprovenancekit gate` CLI, so it runs fully local — no hosted backend required.
 
+> **Published on the GitHub Marketplace** as
+> [DProvenanceKit regression gate](https://github.com/marketplace/actions/dprovenancekit-regression-gate).
+> The canonical path is `uses: Therealdk8890/dprovenancekit-action@v1` (a dedicated repo with the
+> same files); the subdirectory path `Therealdk8890/DProvenanceKitPython/action@v1` shown below
+> continues to work.
+
 ## Usage
 
 ```yaml

@@ -22,7 +22,10 @@ Publishing on a GitHub Release is wired up in
 Publishing** (OIDC — no stored token). One-time PyPI setup: add a trusted publisher for the
 project (owner/repo, workflow `publish-pypi.yml`, environment `pypi`). Then:
 
-1. Bump `version` in `pyproject.toml`.
+1. Bump `version` in `pyproject.toml` **and** the `__version__` fallback in
+   `dprovenancekit/__init__.py` (installed copies read the version from package
+   metadata; the fallback only applies when running from a source checkout, but
+   it must not drift).
 2. Commit, tag (`git tag v0.1.0 && git push --tags`), and publish a GitHub Release.
 3. The workflow builds, `twine check`s, and uploads.
 

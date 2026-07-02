@@ -16,6 +16,9 @@ Regressions.
 
 from __future__ import annotations
 
+from importlib.metadata import PackageNotFoundError as _PackageNotFoundError
+from importlib.metadata import version as _distribution_version
+
 # Core event model
 from .priority import TracePriority
 from .event import (
@@ -204,7 +207,11 @@ from .instrument import TracedEvent, traced, traced_run, record_event
 # High-level Facade API
 from .facade import trace
 
-__version__ = "0.2.0"
+try:
+    __version__ = _distribution_version("dprovenancekit")
+except _PackageNotFoundError:
+    # Source checkout without installed metadata; keep in sync with pyproject.toml.
+    __version__ = "0.3.0"
 
 
 

@@ -156,9 +156,14 @@
   .yk{color:#79c0ff}
   .caption{font-size:13px;color:var(--faint);margin-top:12px}
 
-  /* demo gif */
-  .gif-frame{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#0b0d10;box-shadow:0 20px 60px rgba(0,0,0,.5)}
-  .gif-frame img{display:block;width:100%;height:auto}
+  /* demo replay */
+  .term-replay{font:inherit;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);background:none;border:1px solid var(--border2);border-radius:999px;padding:1px 10px;cursor:pointer;white-space:nowrap}
+  .term-replay:hover{color:var(--text);border-color:var(--dim)}
+  .term-badge.ok{color:var(--green-hi);border-color:var(--green)}
+  .demo-playing .dl{visibility:hidden}
+  .demo-playing .dl.on{visibility:visible}
+  .demo-cursor{display:inline-block;width:.55em;height:1em;background:var(--green);vertical-align:-.18em;margin-left:2px;animation:blink 1.2s steps(1) infinite}
+  @media (prefers-reduced-motion:reduce){.demo-cursor{animation:none}}
 
   /* grids */
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:8px}
@@ -309,9 +314,34 @@ trace.diff(<span class="st">"golden_run.sqlite"</span>)
     <div class="wrap">
       <p class="sec-kicker"><span class="no"># 02</span> · watch the catch</p>
       <h2>Two runs of the same agent. One dropped its verify step.</h2>
-      <p class="lede">A research agent, recorded twice. The candidate run silently dropped <em>Verify Claims</em> and looped its search tool. The gate diffed it against the golden run, printed the failure, and failed CI.</p>
-      <div class="gif-frame">
-        <img loading="lazy" src="https://raw.githubusercontent.com/Therealdk8890/DProvenanceKitPython/main/assets/demo.gif" alt="Terminal recording: DProvenanceKit records two runs of a research agent, gates the candidate against the golden run, and blocks the PR when the agent drops its verify step and loops its search tool" width="820" height="460">
+      <p class="lede">A research agent, recorded twice. The candidate silently dropped <em>verify.claims</em> and looped its search tool. Watch the gate catch it — <strong>the failure below is real output</strong>, captured from an actual run and replayed.</p>
+      <div class="term" id="demo-term">
+        <div class="term-bar">
+          <span class="dot r" aria-hidden="true"></span><span class="dot y" aria-hidden="true"></span><span class="dot g" aria-hidden="true"></span>
+          <span class="term-title">research-agent · golden vs candidate · dprovenancekit 0.4.0</span>
+          <span class="term-badge ok">real output</span>
+          <button type="button" class="term-replay" id="demo-replay">↻ replay</button>
+        </div>
+        <pre class="term-body" id="demo-body" aria-label="Terminal transcript: two agent runs are recorded; the regression gate diffs them, reports that verify.claims was removed and search.web was repeated, and exits with code 1."><span class="dl" data-d="700"><span class="t-dollar">$</span> <span class="t-cmd">python research_agent.py --record golden</span></span>
+<span class="dl" data-d="900"><span class="t-dim">  recorded </span><span class="t-green">golden</span><span class="t-dim">     plan → search.web → rank → </span><span class="t-green">verify.claims</span><span class="t-dim"> → decide</span></span>
+<span class="dl" data-d="250"></span>
+<span class="dl" data-d="700"><span class="t-dollar">$</span> <span class="t-cmd">python research_agent.py --record candidate</span>  <span class="t-faint"># PR-42</span></span>
+<span class="dl" data-d="1100"><span class="t-dim">  recorded </span><span class="t-amber">candidate</span><span class="t-dim">  plan → search.web </span><span class="t-amber">×3</span><span class="t-dim"> → rank → decide</span></span>
+<span class="dl" data-d="250"></span>
+<span class="dl" data-d="350"><span class="t-dollar">$</span> <span class="t-cmd">dprovenancekit gate</span> <span class="t-flag">--db</span> traces.sqlite <span class="t-faint">\</span></span>
+<span class="dl" data-d="900"><span class="t-cmd">    </span><span class="t-flag">--golden-context</span> golden <span class="t-flag">--candidate-context</span> candidate</span>
+<span class="dl" data-d="250"></span>
+<span class="dl" data-d="300"><span class="t-failband"><span class="t-dim">Regression gate: </span><span class="t-red">FAIL</span></span></span>
+<span class="dl" data-d="160"><span class="t-dim">  severity: </span><span class="t-amber">high</span><span class="t-faint"> (strength 0.95); max allowed: none</span></span>
+<span class="dl" data-d="160"><span class="t-faint">  fingerprint: differs (5e616565a219… vs b6e1023b183b…)</span></span>
+<span class="dl" data-d="160"><span class="t-dim">  per-step changes:</span></span>
+<span class="dl" data-d="160"><span class="t-redline">    added: search.web, search.web</span></span>
+<span class="dl" data-d="220"><span class="t-redline">    removed: verify.claims</span></span>
+<span class="dl" data-d="500"><span class="t-dim">  engine: </span><span class="t-amber">Critical reasoning steps removed: verify.claims</span></span>
+<span class="dl" data-d="250"></span>
+<span class="dl" data-d="450"><span class="t-dollar">$</span> <span class="t-cmd">echo $?</span></span>
+<span class="dl" data-d="400"><span class="t-red">1</span></span></pre>
+        <div class="term-note">The gate block is <strong>verbatim real output</strong> — captured from <code>dprovenancekit gate</code> (v0.4.0) run against two actually-recorded traces; the fingerprints are the real hashes. The two <code>recorded …</code> summary lines are a stylized rendering of the recorded steps.</div>
       </div>
     </div>
   </section>
@@ -439,6 +469,52 @@ trace.diff(<span class="st">"golden_run.sqlite"</span>)
 </footer>
 
 <script>
+(function () {
+  var body = document.getElementById('demo-body');
+  if (!body || !('IntersectionObserver' in window)) return;
+  if (body.dataset.demoInit) return; // idempotent: never bind twice
+  body.dataset.demoInit = '1';
+  var lines = [].slice.call(body.querySelectorAll('.dl'));
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var replayBtn = document.getElementById('demo-replay');
+  var cursor = document.createElement('span');
+  cursor.className = 'demo-cursor';
+  var timer = null, playing = false, visible = false;
+
+  function play() {
+    if (reduced) return; // transcript stays fully visible, no animation
+    clearTimeout(timer);
+    playing = true;
+    body.classList.add('demo-playing');
+    lines.forEach(function (l) { l.classList.remove('on'); });
+    var i = 0;
+    function step() {
+      if (i >= lines.length) {
+        playing = false;
+        cursor.remove();
+        timer = setTimeout(function () {
+          if (visible && !document.hidden) play();
+        }, 6000);
+        return;
+      }
+      var line = lines[i];
+      line.classList.add('on');
+      line.appendChild(cursor);
+      i++;
+      timer = setTimeout(step, parseInt(line.getAttribute('data-d') || '160', 10));
+    }
+    step();
+  }
+
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      visible = entry.isIntersecting;
+      if (visible && !playing) play();
+    });
+  }, { threshold: 0.35 });
+  io.observe(body);
+  if (replayBtn) replayBtn.addEventListener('click', play);
+})();
 (function () {
   var btn = document.getElementById('copy-btn');
   if (!btn) return;

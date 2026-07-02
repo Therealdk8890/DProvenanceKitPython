@@ -313,6 +313,28 @@ the default linear profile treats a pure reorder as still-matching. Complements
 `AlignmentSnapshotValidator` (an exact output-hash snapshot): the gate works on two runs and reasons
 about regression severity.
 
+### Pin a golden baseline in pytest
+
+The bundled pytest plugin turns the gate into snapshot testing for reasoning traces — no run ids,
+no store plumbing:
+
+```python
+def test_research_agent(golden_trace):
+    with golden_trace("research-agent"):
+        run_my_agent()   # anything using @traced / record_event / an adapter
+```
+
+```bash
+pytest --dprov-update-golden   # record (or intentionally update) the baseline, then commit it
+pytest                         # every run after gates against tests/goldens/research-agent.sqlite
+```
+
+The baseline is a SQLite file you commit next to your tests; the fixture records the block as a
+candidate run and fails the test when its reasoning drifts. Configure the directory with the
+`dprov_golden_dir` ini option, pass gate options per test
+(`golden_trace("name", max_regression_level="high")`), and use the context manager's `.run` to
+wire a framework adapter inside the block.
+
 ---
 
 ## Example: regression testing

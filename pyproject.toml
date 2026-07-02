@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dprovenancekit"
-version = "0.3.0"
+version = "0.3.1"
 description = "Reasoning observability and regression testing for AI systems — a Python port of DProvenanceKit."
 readme = "README.md"
 requires-python = ">=3.9"

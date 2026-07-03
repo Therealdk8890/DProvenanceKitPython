@@ -62,6 +62,8 @@
   h1 .fail{color:var(--red)}
   .sub{font-family:var(--sans);color:var(--dim);max-width:64ch;margin:20px 0 8px;font-size:16px}
   .sub strong{color:var(--text);font-weight:600}
+  .official{font-family:var(--sans);font-size:13.5px;color:var(--dim);margin:6px 0 0}
+  .official .ok{color:var(--green);font-weight:700}
 
   /* sections */
   section{padding:44px 0}
@@ -124,6 +126,7 @@
     <p class="crumb"><a href="https://dprovenance.dev/">dprovenance.dev</a> / integrations / openai-agents</p>
     <h1>OpenAI Agents SDK tracing<br>that <span class="fail">fails the PR</span>.</h1>
     <p class="sub">DProvenanceKit ships a drop-in <strong>tracing processor</strong> for the OpenAI Agents SDK: register it once and <strong>every agent run is recorded as a queryable, diffable trace</strong>. Then diff a candidate run against a golden baseline and gate CI when the reasoning drifts — a dropped tool call, a looping step, a changed execution path. Agent regression testing, two lines of setup.</p>
+    <p class="official"><span class="ok" aria-hidden="true">✓</span> Listed in the <a href="https://github.com/openai/openai-agents-python/blob/main/docs/tracing.md#external-tracing-processors-list">OpenAI Agents SDK's official docs</a> as an external tracing processor (<a href="https://github.com/openai/openai-agents-python/pull/3726">merged upstream</a>).</p>
   </div>
 
   <section id="install">

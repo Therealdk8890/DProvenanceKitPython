@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/Therealdk8890/DProvenanceKitPython/actions/workflows/ci.yml/badge.svg)](https://github.com/Therealdk8890/DProvenanceKitPython/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/dprovenancekit)](https://pypi.org/project/dprovenancekit/)
+[![Listed in the official OpenAI Agents SDK docs](https://img.shields.io/badge/OpenAI%20Agents%20SDK-listed%20in%20the%20official%20docs-412991)](https://github.com/openai/openai-agents-python/blob/main/docs/tracing.md#external-tracing-processors-list)
+
 **Regression testing and reasoning observability for AI agents — catch the run where your agent
 silently dropped a step, and fail the PR that caused it.**
 
@@ -213,6 +215,10 @@ retrieval step skipped) produce different fingerprints — a cheap regression si
 (LCEL/LangGraph chain noise).
 
 ### OpenAI Agents SDK
+
+> **Officially listed** — this adapter appears in the OpenAI Agents SDK's own docs, in the
+> [external tracing processors list](https://github.com/openai/openai-agents-python/blob/main/docs/tracing.md#external-tracing-processors-list)
+> (merged upstream in [openai/openai-agents-python#3726](https://github.com/openai/openai-agents-python/pull/3726)).
 
 ```bash
 pip install "dprovenancekit[openai-agents]"

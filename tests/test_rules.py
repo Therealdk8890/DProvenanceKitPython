@@ -213,6 +213,84 @@ def test_build_rule_constructs_unregistered_tool():
     assert rule.name == "unregistered_tool:tool_call"
 
 
+# ── UnusedToolResultRule ─────────────────────────────────────────────────────────
+
+
+def test_unused_tool_result_rule_flags_orphan_result():
+    from dprovenancekit.rules import UnusedToolResultRule
+
+    store = InMemoryTraceStore()
+    orphan = _record(store, "orphan", ["tool_result"])  # never used
+    trailing = _record(store, "trailing", ["tool_result", "respond", "tool_result"])
+    used = _record(store, "used", ["tool_result", "respond"])
+
+    rule = UnusedToolResultRule("tool_result", "respond")
+    flagged = {a.run_id for a in AnomalyDetector(store).detect_anomalies([rule])}
+    assert orphan in flagged
+    assert trailing in flagged  # second result has no follow-up before end
+    assert used not in flagged
+
+
+def test_unused_tool_result_rule_silent_when_each_result_used():
+    from dprovenancekit.rules import UnusedToolResultRule
+
+    store = InMemoryTraceStore()
+    _record(store, "ok", ["tool_result", "respond", "tool_result", "respond"])
+    rule = UnusedToolResultRule("tool_result", "respond")
+    assert AnomalyDetector(store).detect_anomalies([rule]) == []
+
+
+def test_unused_tool_result_rule_validates_args():
+    from dprovenancekit.rules import UnusedToolResultRule
+
+    with pytest.raises(ValueError):
+        UnusedToolResultRule("", "respond")
+    with pytest.raises(ValueError):
+        UnusedToolResultRule("tool_result", "")
+
+
+def test_build_rule_constructs_unused_tool_result():
+    from dprovenancekit.rules import UnusedToolResultRule
+
+    rule = build_rule(
+        {
+            "type": "unused_tool_result",
+            "step": "tool_result",
+            "required_followup_step": "reasoning_or_response",
+        }
+    )
+    assert isinstance(rule, UnusedToolResultRule)
+    assert rule.name == "unused_tool_result:tool_result"
+
+
+def test_build_rule_carries_id_severity_and_message_onto_anomaly():
+    store = InMemoryTraceStore()
+    dropped = _record(store, "dropped", ["plan", "act"])  # missing safety_check
+
+    rule = build_rule(
+        {
+            "id": "agent.safety",
+            "type": "tool_drop",
+            "required_step": "safety_check",
+            "severity": "error",
+            "message": "safety check skipped",
+        }
+    )
+    assert rule.name == "agent.safety"  # id used as the name
+    assert rule.severity == "error"
+
+    (anomaly,) = AnomalyDetector(store).detect_anomalies([rule])
+    assert anomaly.run_id == dropped
+    assert anomaly.severity == "error"
+    assert anomaly.message == "safety check skipped"
+
+
+def test_build_rule_defaults_severity_when_absent():
+    rule = build_rule({"type": "looping", "step": "x", "max_repeats": 2})
+    assert rule.severity == "warning"
+    assert rule.message is None
+
+
 # ── registry (build_rule / build_rules) ──────────────────────────────────────────
 
 

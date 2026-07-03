@@ -170,6 +170,60 @@ class UnregisteredToolRule(AnomalyRule):
         return f"unregistered tool called in step '{self._step}' (not in '{self._registry_field}')"
 
 
+class UnusedToolResultRule(AnomalyRule):
+    """Flag runs where a tool result is produced but never used downstream.
+
+    *Unused tool result* — an agent receives a tool result and then finishes (or moves
+    straight to the next tool) without a reasoning/response step consuming it. A run is
+    anomalous iff some ``step`` occurrence is not followed by a ``required_followup_step``
+    before the next ``step`` occurrence or the end of the run.
+
+    Args:
+        step: the ``type_identifier`` of the tool-result step.
+        required_followup_step: the ``type_identifier`` that must follow it (e.g. a
+            reasoning or response step).
+        name: optional rule-name override (default ``"unused_tool_result:<step>"``).
+    """
+
+    def __init__(
+        self, step: str, required_followup_step: str, *, name: Optional[str] = None
+    ) -> None:
+        if not isinstance(step, str) or not step:
+            raise ValueError("step must be a non-empty string")
+        if not isinstance(required_followup_step, str) or not required_followup_step:
+            raise ValueError("required_followup_step must be a non-empty string")
+        self._step = step
+        self._followup = required_followup_step
+        self._name = name or f"unused_tool_result:{step}"
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def anomaly_query(self) -> TraceQueryDSL:
+        # Pre-filter to runs that contain the tool-result step; is_anomalous refines.
+        return TraceQueryDSL().requiring_step(self._step)
+
+    def is_anomalous(self, run: TraceRun) -> bool:
+        pending = False  # a tool result awaiting a followup
+        for e in sorted(run.events, key=lambda ev: ev.sequence):
+            kind = e.payload.type_identifier
+            if kind == self._step:
+                if pending:
+                    return True  # a prior result was never followed up
+                pending = True
+            elif kind == self._followup and pending:
+                pending = False
+        return pending  # a trailing result with no followup
+
+    def describe(self, run: TraceRun) -> str:
+        return (
+            f"tool result '{self._step}' was not followed by '{self._followup}' "
+            f"in run {run.run_id} (context '{run.context_id}')"
+        )
+
+
 # MARK: - Registry --------------------------------------------------------------
 #
 # Maps a ``type`` string to a builder that constructs the rule from a plain dict spec, so a
@@ -180,15 +234,29 @@ class UnregisteredToolRule(AnomalyRule):
 #         {"type": "looping", "step": "web_search", "max_repeats": 5}
 #     ]}
 
+# Each builder takes the spec dict. ``name`` falls back to ``id`` so a ruleset can label
+# rules with either key.
+def _rule_name(s: Dict[str, Any]) -> Optional[str]:
+    return s.get("name") or s.get("id")
+
+
 _RULE_BUILDERS = {
-    "tool_drop": lambda s: ToolDropRule(s["required_step"], name=s.get("name")),
-    "looping": lambda s: LoopingRule(s["step"], s["max_repeats"], name=s.get("name")),
-    "unregistered_tool": lambda s: UnregisteredToolRule(s["step"], s["registry_field"], name=s.get("name")),
+    "tool_drop": lambda s: ToolDropRule(s["required_step"], name=_rule_name(s)),
+    "looping": lambda s: LoopingRule(s["step"], s["max_repeats"], name=_rule_name(s)),
+    "unregistered_tool": lambda s: UnregisteredToolRule(
+        s["step"], s["registry_field"], name=_rule_name(s)
+    ),
+    "unused_tool_result": lambda s: UnusedToolResultRule(
+        s["step"], s["required_followup_step"], name=_rule_name(s)
+    ),
 }
 
 
 def build_rule(spec: Dict[str, Any]) -> AnomalyRule:
     """Construct an :class:`AnomalyRule` from a plain dict spec (e.g. parsed from JSON).
+
+    Recognizes the optional presentation fields ``severity`` and ``message`` and carries
+    them onto the rule (surfaced on each :class:`~dprovenancekit.anomaly.Anomaly`).
 
     Raises :class:`ValueError` for a missing/unknown ``type`` or a missing required field.
     """
@@ -202,9 +270,15 @@ def build_rule(spec: Dict[str, Any]) -> AnomalyRule:
             f"unknown rule type {rule_type!r}; known types: {sorted(_RULE_BUILDERS)}"
         )
     try:
-        return builder(spec)
+        rule = builder(spec)
     except KeyError as exc:
         raise ValueError(f"rule {rule_type!r} is missing required field {exc}")
+    if isinstance(spec, dict):
+        if spec.get("severity"):
+            rule.severity = str(spec["severity"])
+        if spec.get("message"):
+            rule.message = str(spec["message"])
+    return rule
 
 
 def build_rules(specs: Iterable[Dict[str, Any]]) -> List[AnomalyRule]:
@@ -212,4 +286,11 @@ def build_rules(specs: Iterable[Dict[str, Any]]) -> List[AnomalyRule]:
     return [build_rule(spec) for spec in specs]
 
 
-__all__ = ["ToolDropRule", "LoopingRule", "UnregisteredToolRule", "build_rule", "build_rules"]
+__all__ = [
+    "ToolDropRule",
+    "LoopingRule",
+    "UnregisteredToolRule",
+    "UnusedToolResultRule",
+    "build_rule",
+    "build_rules",
+]

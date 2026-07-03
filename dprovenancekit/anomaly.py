@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from .live_engine import TraceQuerySubscription
 from .query import TraceQueryDSL, TraceRun
@@ -16,9 +16,17 @@ class Anomaly:
     run_id: uuid.UUID
     rule_name: str
     description: str
+    # Optional presentation metadata carried from a ruleset spec (severity/message).
+    severity: str = "warning"
+    message: Optional[str] = None
 
 
 class AnomalyRule(ABC):
+    # Optional metadata a ruleset spec may attach (see rules.build_rule); read via
+    # make_anomaly. Defaults keep hand-constructed rules unchanged.
+    severity: str = "warning"
+    message: Optional[str] = None
+
     @property
     @abstractmethod
     def name(self) -> str: ...
@@ -37,7 +45,11 @@ class AnomalyRule(ABC):
 
     def make_anomaly(self, run: TraceRun) -> Anomaly:
         return Anomaly(
-            run_id=run.run_id, rule_name=self.name, description=self.describe(run)
+            run_id=run.run_id,
+            rule_name=self.name,
+            description=self.describe(run),
+            severity=getattr(self, "severity", "warning"),
+            message=getattr(self, "message", None),
         )
 
 

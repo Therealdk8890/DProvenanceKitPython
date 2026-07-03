@@ -214,6 +214,7 @@
       <a href="#record">record</a>
       <a href="#ci">gate</a>
       <a href="#benchmark">benchmark</a>
+      <a href="https://dprovenance.dev/guides/regression-testing-for-ai-agents/">guides</a>
       <a href="https://github.com/Therealdk8890/DProvenanceKitPython">GitHub</a>
       <a href="https://pypi.org/project/dprovenancekit/">PyPI</a>
     </nav>
@@ -230,7 +231,7 @@
     <h1>Your agent silently dropped a step.<br><span class="fail">This build just caught it.</span></h1>
     <p class="sub">DProvenanceKit is <strong>open source regression testing and reasoning observability for AI agents</strong>. Every run becomes a queryable, diffable trace, and CI fails when the reasoning drifts — a dropped tool call, a looping step, a changed execution path.</p>
     <p class="sub" style="margin-top:-12px">Observability tools show you what happened. <strong>DProvenanceKit fails the PR that caused it.</strong> Think pytest for agent reasoning.</p>
-    <p class="proof"><span class="ok" aria-hidden="true">✓</span> Listed in the official <a href="https://github.com/openai/openai-agents-python/blob/main/docs/tracing.md#external-tracing-processors-list">OpenAI Agents SDK docs</a> as an external tracing processor.</p>
+    <p class="proof"><span class="ok" aria-hidden="true">✓</span> Listed in the official <a href="https://github.com/openai/openai-agents-python/blob/main/docs/tracing.md#external-tracing-processors-list">OpenAI Agents SDK docs</a> as an external tracing processor · <a href="https://dprovenance.dev/openai-agents/">integration guide</a></p>
     <p class="ctas">
       <a class="btn primary" href="https://github.com/Therealdk8890/DProvenanceKitPython">View on GitHub →</a>
       <span class="cta-links"><a href="https://pypi.org/project/dprovenancekit/">PyPI</a> · <a href="https://github.com/marketplace/actions/dprovenancekit-regression-gate">GitHub Action</a></span>
@@ -310,7 +311,7 @@ trace.diff(<span class="st">"golden_run.sqlite"</span>)
 <span class="out"># --- Trace Diff (Golden vs Current) ---</span>
 <span class="er-band"><span class="er"># ❌ Missing step: Verify Claims</span></span></pre>
       </div>
-      <p class="caption">Under the hood this powers anomaly detection, CI gating, and visual trace analysis. Works with your stack via adapters, or plain Python.</p>
+      <p class="caption">Under the hood this powers anomaly detection, CI gating, and visual trace analysis. Works with your stack via adapters, or plain Python. Full walkthrough: <a href="https://dprovenance.dev/guides/regression-testing-for-ai-agents/">regression testing for AI agents</a>.</p>
     </div>
   </section>
 
@@ -354,7 +355,7 @@ trace.diff(<span class="st">"golden_run.sqlite"</span>)
     <div class="wrap">
       <p class="sec-kicker"><span class="no"># 03</span> · gate in ci</p>
       <h2>A CI gate for AI agents. Server-less. Exit code 1.</h2>
-      <p class="lede">The <code>dprovenancekit gate</code> CLI runs fully local — no hosted backend. Wire it into any pipeline, or drop in the <a href="https://github.com/marketplace/actions/dprovenancekit-regression-gate">GitHub Action from the Marketplace</a> (a GitLab CI template ships too). On regression it fails the job and posts a sticky PR comment with the diff.</p>
+      <p class="lede">The <code>dprovenancekit gate</code> CLI runs fully local — no hosted backend. Wire it into any pipeline, or drop in the <a href="https://github.com/marketplace/actions/dprovenancekit-regression-gate">GitHub Action from the Marketplace</a> (a GitLab CI template ships too). On regression it fails the job and posts a sticky PR comment with the diff. Step-by-step setup: <a href="https://dprovenance.dev/guides/ci-gate-for-llm-agents/">a CI gate for LLM agents</a>.</p>
       <div class="code">
         <div class="code-bar"><span>.github/workflows/reasoning-regression.yml</span><span>yaml</span></div>
         <pre><span class="yk">name:</span> <span class="st">reasoning-regression</span>
@@ -469,6 +470,10 @@ trace.diff(<span class="st">"golden_run.sqlite"</span>)
     <a href="https://pypi.org/project/dprovenancekit/">PyPI</a>
     <a href="https://github.com/marketplace/actions/dprovenancekit-regression-gate">GitHub Action</a>
     <a href="https://github.com/Therealdk8890/DProvenanceKit">Swift original</a>
+    <a href="https://dprovenance.dev/guides/regression-testing-for-ai-agents/">Regression-testing guide</a>
+    <a href="https://dprovenance.dev/guides/ci-gate-for-llm-agents/">CI-gate guide</a>
+    <a href="https://dprovenance.dev/compare/dprovenancekit-vs-langsmith/">vs LangSmith</a>
+    <a href="https://dprovenance.dev/openai-agents/">OpenAI Agents SDK</a>
   </div>
 </footer>
 

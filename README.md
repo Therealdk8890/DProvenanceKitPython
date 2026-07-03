@@ -20,6 +20,11 @@ zero third-party dependencies.
 
 <p align="center"><em>Two runs of the same agent. The candidate dropped its <code>verify</code> step and looped <code>search</code> — the gate caught it and failed CI. <a href="demo/demo_gif.py">(regenerate)</a></em></p>
 
+**Guides:** [Regression testing for AI agents](https://dprovenance.dev/guides/regression-testing-for-ai-agents/) ·
+[A CI gate for LLM agents](https://dprovenance.dev/guides/ci-gate-for-llm-agents/) ·
+[DProvenanceKit vs LangSmith](https://dprovenance.dev/compare/dprovenancekit-vs-langsmith/) ·
+[OpenAI Agents SDK integration](https://dprovenance.dev/openai-agents/)
+
 **It's not just the library** — it ships the surfaces that make reasoning regressions actionable:
 
 - **Gate in CI** — a server-less `dprovenancekit gate` CLI, plus a drop-in [GitHub Action](action/README.md) ([on the GitHub Marketplace](https://github.com/marketplace/actions/dprovenancekit-regression-gate)) and [GitLab CI template](gitlab/README.md) that fail a PR/MR when an agent's reasoning drifts from a golden baseline, and comment the diff.
@@ -407,7 +412,7 @@ fingerprint / diff / align / the regression gate all apply.
 python -m pytest
 ```
 
-251 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress +
+284 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress +
 drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, …),
 28 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain
 integration tests, 16 OpenAI Agents SDK integration tests, 16 instrumentation-layer tests, 13

@@ -409,6 +409,129 @@ def _run_ui(argv) -> int:
     return 0
 
 
+def _run_ingest(argv) -> int:
+    """``dprovenancekit ingest`` — import OpenTelemetry (OTLP JSON) traces as runs.
+
+    Ingests traces exported by any OTel-instrumented agent stack (official ``gen_ai.*``
+    conventions, OpenInference, or OpenLLMetry) so they can be queried, diffed, and
+    gated like natively recorded runs. Exit codes::
+
+        0  ingested at least one run
+        1  nothing ingested (no GenAI spans, or every trace already in the database)
+        2  usage / unreadable input
+    """
+    import argparse
+    import json
+    import sqlite3
+    import uuid
+
+    from .event import AnyTraceableEvent  # noqa: F401 — parity with other subcommands
+    from .otel_ingest import OTelSpanEvent, ingest_otlp
+    from .sqlite_store import SQLiteTraceStore
+
+    ap = argparse.ArgumentParser(
+        prog="dprovenancekit ingest",
+        description="Import OpenTelemetry traces (OTLP/HTTP JSON) as DProvenanceKit runs.",
+    )
+    ap.add_argument(
+        "files",
+        nargs="+",
+        help="OTLP JSON trace files (a request object, an array, or JSON-lines)",
+    )
+    ap.add_argument("--db", required=True, help="SQLite trace database to write into")
+    ap.add_argument(
+        "--context", help="override the context id for all ingested runs"
+    )
+    ap.add_argument(
+        "--include-unclassified",
+        action="store_true",
+        help="also keep non-GenAI spans as telemetry events",
+    )
+    ap.add_argument(
+        "--no-payloads",
+        action="store_true",
+        help="omit input/output previews from event attributes",
+    )
+    ap.add_argument("--json", action="store_true", help="emit ingested runs as JSON")
+    args = ap.parse_args(argv)
+
+    # Run ids derive deterministically from OTel trace ids, so traces already in the
+    # database are detected up front and skipped instead of duplicated.
+    existing = set()
+    try:
+        conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)
+        try:
+            for (run_id_text,) in conn.execute("SELECT run_id FROM runs"):
+                try:
+                    existing.add(uuid.UUID(str(run_id_text)))
+                except ValueError:
+                    continue
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        pass  # missing/new database — nothing to skip
+
+    try:
+        store = SQLiteTraceStore(OTelSpanEvent, args.db)
+    except sqlite3.DatabaseError as exc:
+        print(f"error: --db {args.db!r} is not a usable SQLite database: {exc}", file=sys.stderr)
+        return 2
+
+    ingested = []
+    try:
+        for path in args.files:
+            try:
+                new_runs = ingest_otlp(
+                    path,
+                    store,
+                    context_id=args.context,
+                    include_unclassified=args.include_unclassified,
+                    capture_payloads=not args.no_payloads,
+                    skip_run_ids=frozenset(existing),
+                )
+            except ValueError as exc:
+                print(f"error: {path}: {exc}", file=sys.stderr)
+                return 2
+            ingested.extend(new_runs)
+            # Fold this file's run ids into the skip set so a trace repeated across
+            # files (overlapping globs, a file listed twice) is written only once.
+            existing.update(run.run_id for run in new_runs)
+    finally:
+        store.close()
+
+    if args.json:
+        print(
+            json.dumps(
+                [
+                    {
+                        "run_id": str(run.run_id),
+                        "trace_id": run.trace_id,
+                        "context_id": run.context_id,
+                        "event_count": run.event_count,
+                    }
+                    for run in ingested
+                ],
+                indent=2,
+            )
+        )
+    else:
+        for run in ingested:
+            print(
+                f"{run.run_id}  context='{run.context_id}'  "
+                f"events={run.event_count}  (trace {run.trace_id})"
+            )
+
+    if not ingested:
+        hint = (
+            " (all traces already present in the database?)"
+            if existing
+            else " (no GenAI spans found — try --include-unclassified to inspect)"
+        )
+        print(f"error: nothing ingested{hint}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def _run_sync(argv) -> int:
     """``dprovenancekit sync`` — push/pull traces to/from the SaaS backend."""
     import argparse
@@ -465,6 +588,8 @@ def main(argv=None) -> int:
         return _run_runs(argv[1:])
     if argv and argv[0] == "ui":
         return _run_ui(argv[1:])
+    if argv and argv[0] == "ingest":
+        return _run_ingest(argv[1:])
     if argv and argv[0] == "sync":
         return _run_sync(argv[1:])
 
@@ -474,7 +599,7 @@ def main(argv=None) -> int:
     mode = argv[0] if argv else "evaluate"
     if mode not in ("evaluate", "diagnose", "stability"):
         print(
-            "Usage: dprovenancekit <gate|anomalies|runs|ui|sync|evaluate|diagnose|stability>"
+            "Usage: dprovenancekit <gate|anomalies|runs|ui|ingest|sync|evaluate|diagnose|stability>"
         )
         return 0
 

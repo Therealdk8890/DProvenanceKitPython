@@ -1,0 +1,134 @@
+# examples/ci/agent-regression-gate.yml
+#
+# On every pull request, records a CANDIDATE run, restores the GOLDEN baseline
+# recorded on main, and gates the PR on:
+#   1. regression severity (golden vs candidate diff), and
+#   2. out-of-the-box anomaly rules run over the candidate.
+#
+# DB ROUTING (the critical gotcha, verified against the action source):
+#   - The gate step reads golden-db AND candidate-db separately.
+#   - The anomaly step reads ONLY db-path. candidate-context is resolved
+#     against db-path, NOT candidate-db. So the CANDIDATE run must live in
+#     db-path for the anomaly rules to find it.
+#   => db-path      = candidate.sqlite  (the candidate db)
+#      golden-db     = baseline.sqlite   (the restored baseline db)
+#      candidate-db  = <unset>           (defaults to db-path = candidate.sqlite)
+#   Both sides use the SAME context id (production-agent); the action resolves
+#   golden-context against golden-db and candidate-context against db-path.
+name: Agent regression gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# contents: read       -> checkout
+# pull-requests: write -> action posts the sticky PR comment (comment: "true")
+# actions: read        -> gh lists/downloads another workflow run's artifact
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+concurrency:
+  # Supersede an in-flight gate when the PR gets new commits.
+  group: agent-regression-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install dprovenancekit
+        run: python -m pip install --disable-pip-version-check dprovenancekit
+
+      # PLACEHOLDER for your own recording code (see record-baseline.yml).
+      # Same script, same context_id ("production-agent"), different db file:
+      # here it writes the CANDIDATE run into candidate.sqlite.
+      # ASSUMPTION: record_agent.py honors the DPROV_DB env var (or pass a
+      # --db candidate.sqlite flag if your script uses one instead).
+      - name: Record candidate run
+        env:
+          DPROV_DB: candidate.sqlite   # write the candidate run here
+        run: python record_agent.py
+
+      - name: Verify candidate was written
+        run: test -s candidate.sqlite
+
+      # Restore the GOLDEN baseline from the most recent successful
+      # record-baseline run on main. A different workflow run's artifact is
+      # NOT visible to actions/download-artifact, so we use the first-party
+      # GitHub CLI (preinstalled on runners) with the job token.
+      #
+      # FIRST-PR CASE: on the very first PR no baseline has been recorded yet.
+      # We detect the empty run list, emit a warning, and continue WITHOUT a
+      # baseline.sqlite instead of hard-failing with a cryptic gh error. The
+      # gate step below is then skipped, so the PR is not blocked on a missing
+      # baseline it could not possibly have.
+      - name: Restore baseline from main
+        id: restore
+        env:
+          GH_TOKEN: ${{ github.token }}   # gh auth for run list/download
+        run: |
+          set -euo pipefail
+          # databaseId of the latest successful baseline run on main (or empty).
+          run_id="$(gh run list \
+            --workflow record-baseline.yml \
+            --branch main \
+            --status success \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId // empty')"
+          if [ -z "$run_id" ]; then
+            echo "::warning title=DProvenanceKit::No successful record-baseline run found on main yet — skipping the regression gate for this PR. Merge this PR (or run the 'Record agent baseline' workflow) to establish the baseline; subsequent PRs will be gated."
+            echo "baseline-available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Restoring baseline from record-baseline run $run_id"
+          gh run download "$run_id" --name agent-baseline-db --dir .
+          # Guard against an empty/partial artifact restoring successfully.
+          if [ ! -s baseline.sqlite ]; then
+            echo "::warning title=DProvenanceKit::Baseline artifact restored but baseline.sqlite is missing/empty — skipping the gate for this PR."
+            echo "baseline-available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "baseline-available=true" >> "$GITHUB_OUTPUT"
+
+      # The gate itself. Runs only when a baseline was actually restored.
+      # Pinned to @v0.5.0 for reproducibility (it is a SUBFOLDER action).
+      - name: DProvenanceKit regression gate
+        if: ${{ steps.restore.outputs.baseline-available == 'true' }}
+        uses: Therealdk8890/DProvenanceKitPython/action@v0.5.0
+        with:
+          # db-path is REQUIRED. It is the CANDIDATE db, because the anomaly
+          # step reads ONLY db-path and resolves candidate-context against it.
+          db-path: candidate.sqlite
+          # golden-db is the restored baseline; gate resolves golden-context
+          # against it. candidate-db is intentionally left UNSET so it
+          # defaults to db-path (candidate.sqlite).
+          golden-db: baseline.sqlite
+          # Same context id on both sides; recorded via context_id in the code.
+          golden-context: production-agent
+          candidate-context: production-agent
+          # Severity gate: allow up to 'low' regressions to pass. Tighten to
+          # 'none' once the baseline is trusted (see the README best-practices).
+          max-level: low
+          # Tolerate per-step divergence; gate on severity only. Flip to
+          # "false" to also fail on any structural change. Strings, so quoted.
+          allow-divergent: "true"
+          # Complementary single-run checks over the candidate.
+          anomaly-rules: .github/dprov-rules.json
+          fail-on-anomaly: "true"
+          # Sticky PR comment; needs pull-requests: write (declared above).
+          comment: "true"
+          # NOTE: dprov-api-key is deliberately NOT set. This is the local
+          # artifact-baseline pattern; setting the api key would force the
+          # cloud-sync path, which requires golden-run-id and hard-errors
+          # when you rely on golden-context.

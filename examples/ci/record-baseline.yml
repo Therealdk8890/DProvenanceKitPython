@@ -1,0 +1,76 @@
+# examples/ci/record-baseline.yml
+#
+# Produces the GOLDEN baseline the PR gate compares against.
+# It records ONE known-good run of the agent into baseline.sqlite with
+# context_id "production-agent", then uploads that db as an artifact.
+#
+# The PR gate (agent-regression-gate.yml) restores this artifact via the
+# GitHub CLI, because a DIFFERENT workflow run cannot be reached with plain
+# actions/download-artifact (that only sees the current run's artifacts).
+name: Record agent baseline
+
+on:
+  push:
+    branches: [main]        # every merge to main refreshes the golden baseline
+  workflow_dispatch: {}     # allow re-recording the baseline on demand
+
+# Recording only reads the repo; no write scopes are needed here.
+permissions:
+  contents: read
+
+concurrency:
+  # One baseline build at a time; a newer push supersedes an in-flight one.
+  group: record-baseline
+  cancel-in-progress: true
+
+jobs:
+  record-baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install dprovenancekit
+        run: python -m pip install --disable-pip-version-check dprovenancekit
+
+      # PLACEHOLDER for your own recording code.
+      #
+      # ASSUMPTION: record_agent.py records exactly one run and honors the
+      # DPROV_DB env var to choose the sqlite file it writes into, i.e. its
+      # code does something equivalent to:
+      #
+      #     import os
+      #     from dprovenancekit import DProvenanceKit, SQLiteTraceStore
+      #     # MyEvent is your TraceableEvent subclass
+      #     store = SQLiteTraceStore(MyEvent, os.environ["DPROV_DB"])  # -> baseline.sqlite
+      #     kit = DProvenanceKit(MyEvent)
+      #     with kit.run(context_id="production-agent", store=store):
+      #         ...                                        # exercise the agent
+      #
+      # The context_id MUST be "production-agent" and MUST match the value the
+      # PR job records with, or the gate cannot pair the two runs. There is no
+      # CLI flag or env var for context_id; it is set at record time in code.
+      # If your script takes a --db flag instead of reading DPROV_DB, pass it
+      # explicitly (e.g. `python record_agent.py --db baseline.sqlite`).
+      - name: Record golden baseline run
+        env:
+          DPROV_DB: baseline.sqlite   # write the golden run here
+        run: python record_agent.py
+
+      - name: Verify baseline was written
+        # Fail loudly if the recording script produced no db, rather than
+        # uploading an empty/absent artifact that breaks every future PR gate.
+        run: test -s baseline.sqlite
+
+      - name: Upload baseline database
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-baseline-db   # the PR gate downloads this exact name
+          path: baseline.sqlite
+          if-no-files-found: error
+          retention-days: 90        # keep baselines available for ~3 months

@@ -1,0 +1,27 @@
+{
+  "rules": [
+    {
+      "type": "tool_drop",
+      "name": "must-verify-claims",
+      "required_step": "verify_claims",
+      "severity": "high",
+      "message": "Candidate run never performed verify_claims; the agent dropped its fact-check step."
+    },
+    {
+      "type": "looping",
+      "name": "web-search-runaway",
+      "step": "web_search",
+      "max_repeats": 5,
+      "severity": "medium",
+      "message": "web_search repeated more than 5 times; the agent may be stuck in a search loop."
+    },
+    {
+      "type": "unused_tool_result",
+      "name": "search-result-must-be-used",
+      "step": "web_search",
+      "required_followup_step": "summarize",
+      "severity": "low",
+      "message": "web_search ran but its result was never consumed by a summarize step."
+    }
+  ]
+}

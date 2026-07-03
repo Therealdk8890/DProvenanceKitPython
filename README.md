@@ -284,21 +284,45 @@ store.flush()
 pip install "dprovenancekit[crewai]"
 ```
 
+Modern CrewAI (0.85+, which dropped LangChain) emits its own lifecycle events on a global
+event bus. DProvenanceKit hooks that bus with a `BaseEventListener` — **constructing the
+listener registers it**, and every `crew.kickoff()` after that is recorded as a run. The
+engine is the agent's role, the tool's name, or the model:
+
 ```python
-from dprovenancekit import DProvenanceKit, InMemoryTraceStore
-from dprovenancekit.integrations.crewai import CrewAITracer
+from crewai import Agent, Crew, Task
+from dprovenancekit import SQLiteTraceStore
+from dprovenancekit.integrations.crewai import (
+    CrewAITraceEvent,
+    DProvenanceKitEventListener,
+)
 
-# CrewAI runs on LangChain under the hood; the tracer is a LangChain callback
-# handler that records each agent's chain start/end as typed events. Start events
-# record under the agent's role (from callback metadata) as the engine name.
-kit = DProvenanceKit(MyEvent)  # your TraceableEvent subclass
-tracer = CrewAITracer(kit, MyEvent.agent_start, MyEvent.agent_end)
+store = SQLiteTraceStore(CrewAITraceEvent, "traces.sqlite")
+DProvenanceKitEventListener(store)          # registers on crewai's event bus
 
-store = InMemoryTraceStore()
-with kit.run(context_id="crew-run", store=store):
-    # ... attach `tracer` as a LangChain callback and kick off your crew ...
-    result = crew.kickoff()
+researcher = Agent(
+    role="Researcher",
+    goal="Find accurate information",
+    backstory="A meticulous researcher",
+)
+task = Task(
+    description="Summarize the latest developments in AI agent testing",
+    expected_output="A short summary",
+    agent=researcher,
+)
+crew = Crew(agents=[researcher], tasks=[task])
+
+crew.kickoff()                              # recorded: crew / task / agent / tool / llm events
+store.flush()                              # make the run durable before the process exits
 ```
+
+Each kickoff becomes one diffable run — `crew.start`/`.end`, `task.*`, `agent.*`,
+`tool.*`, and `llm.*` events in a span tree, with `DERIVED_FROM` / `INFORMED` edges.
+Events are ordered by CrewAI's own `emission_sequence` (its handler bus is multithreaded,
+so arrival order isn't emission order), which keeps the run — and its **fingerprint** —
+stable. Two runs of the same crew therefore share a fingerprint, so the
+`fingerprint` / diff / gate tooling flags a dropped task, a skipped tool, or a looping
+agent.
 
 ### OpenTelemetry (any instrumented stack)
 

@@ -30,15 +30,20 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-# langchain-core is included so CI exercises the LangChain + CrewAI integration
-# tests instead of silently skipping them.
+# langchain-core is included so CI exercises the LangChain integration tests instead of
+# silently skipping them. The CrewAI integration test needs `crewai`, which is heavy
+# (chromadb, onnxruntime, …) and requires Python >=3.10, so it is intentionally left out
+# of `dev` and runs only where crewai is installed (importorskip skips it otherwise).
 dev = ["pytest>=7.0", "fastapi", "httpx", "IPython", "pytest-asyncio", "langchain-core>=0.2"]
 # Framework adapters. The core package stays pure standard library; these extras are only
 # needed to wire DProvenanceKit into the corresponding framework.
 langchain = ["langchain-core>=0.2"]
 openai-agents = ["openai-agents>=0.1"]
 llama-index = ["llama-index-core"]
-crewai = ["crewai"]
+# The adapter is a crewai event-bus listener (crewai.events.BaseEventListener), verified
+# against the public `crewai.events` API stabilized in the 1.x line. It does NOT use
+# langchain — CrewAI dropped that dependency in 0.85.0.
+crewai = ["crewai>=1.0.0"]
 google-genai = ["google-genai"]
 fastapi = ["fastapi", "starlette"]
 jupyter = ["ipython"]

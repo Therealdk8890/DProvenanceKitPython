@@ -291,6 +291,37 @@ def test_build_rule_defaults_severity_when_absent():
     assert rule.message is None
 
 
+def test_bundled_agent_preset_loads_and_fires_on_normalized_events():
+    # The shipped preset must load and its rules must fire against the vendor-neutral
+    # event names it targets (tool_call.start/.end, llm_call.start — what OTel ingestion
+    # normalizes traces to). Uses synthetic events so it holds regardless of which
+    # branch produces those names.
+    import json
+    from importlib.resources import files
+
+    config = json.loads(
+        files("dprovenancekit").joinpath("rulesets/agent.json").read_text(encoding="utf-8")
+    )
+    rules = build_rules(config["rules"])
+    assert {r.name for r in rules} == {
+        "agent.runaway_tool_use",
+        "agent.unused_tool_result",
+    }
+
+    store = InMemoryTraceStore()
+    runaway = _record(store, "runaway", ["tool_call.start"] * 11)  # > 10 tool calls
+    unused = _record(store, "unused", ["tool_call.start", "tool_call.end"])  # no llm follow-up
+    healthy = _record(
+        store, "healthy", ["tool_call.start", "tool_call.end", "llm_call.start"]
+    )
+
+    anomalies = AnomalyDetector(store).detect_anomalies(rules)
+    flagged = {(a.run_id, a.rule_name) for a in anomalies}
+    assert (runaway, "agent.runaway_tool_use") in flagged
+    assert (unused, "agent.unused_tool_result") in flagged
+    assert healthy not in {a.run_id for a in anomalies}
+
+
 # ── registry (build_rule / build_rules) ──────────────────────────────────────────
 
 

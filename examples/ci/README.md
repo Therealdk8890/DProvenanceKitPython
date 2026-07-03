@@ -94,8 +94,8 @@ and `summarize` to match your agent's actual steps. Supported rule types:
   pin it to `@v1.1.1` or a commit SHA for reproducibility.
 - **SDK version for `unused_tool_result` / `unregistered_tool`.** The action
   `pip install`s the latest published `dprovenancekit` by default. When a run is
-  scoped to a single candidate (as it is here), these two rules require the fix in
-  `dprovenancekit` **> 0.5.0** — older versions can false-positive on any run that
-  merely contains the step. Pin the SDK with the action's `install-spec` input
-  (e.g. `install-spec: "dprovenancekit>=0.5.1"`) once that release is out, or stick
-  to `tool_drop` / `looping` (correct on every version) until then.
+  scoped to a single candidate (as it is here), these two rules require the scoped-run
+  fix that shipped in `dprovenancekit` **0.6.0** — older versions can false-positive on
+  any run that merely contains the step. Pin the SDK with the action's `install-spec`
+  input (e.g. `install-spec: "dprovenancekit>=0.6.0"`), or stick to `tool_drop` /
+  `looping` (correct on every version).

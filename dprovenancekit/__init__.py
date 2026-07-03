@@ -66,7 +66,14 @@ from .otel_ingest import IngestedRun, OTelSpanEvent, ingest_otlp, run_id_for_tra
 # Live querying + anomalies
 from .live_engine import LiveTraceQueryEngine, TraceQuerySubscription, QueryState
 from .anomaly import Anomaly, AnomalyRule, AnomalyDetector, LiveAnomalySubscription
-from .rules import ToolDropRule, LoopingRule, build_rule, build_rules
+from .rules import (
+    ToolDropRule,
+    LoopingRule,
+    UnregisteredToolRule,
+    UnusedToolResultRule,
+    build_rule,
+    build_rules,
+)
 
 # Diff + replay
 from .diff import TraceDiffEngine, TraceDiffResult, Change, ChangeKind
@@ -214,7 +221,7 @@ try:
     __version__ = _distribution_version("dprovenancekit")
 except _PackageNotFoundError:
     # Source checkout without installed metadata; keep in sync with pyproject.toml.
-    __version__ = "0.4.0"
+    __version__ = "0.5.0"
 
 
 
@@ -268,6 +275,8 @@ __all__ = [
     "LiveAnomalySubscription",
     "ToolDropRule",
     "LoopingRule",
+    "UnregisteredToolRule",
+    "UnusedToolResultRule",
     "build_rule",
     "build_rules",
     "IngestedRun",

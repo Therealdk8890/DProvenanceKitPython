@@ -76,6 +76,10 @@ inputs:
     description: "Optional URL for a custom DProvenanceKit SaaS backend."
     required: false
     default: "https://api.dprovenance.dev"
+  dashboard-url:
+    description: "Optional URL to link to a hosted dashboard in the PR comment."
+    required: false
+    default: ""
 
 outputs:
   passed:
@@ -155,6 +159,7 @@ runs:
       env:
         DPROV_REPORT_JSON: ${{ steps.gate.outputs.report-json }}
         GITHUB_TOKEN: ${{ inputs.github-token }}
+        DPROV_DASHBOARD_URL: ${{ inputs.dashboard-url }}
 
     - name: Enforce gate
       if: ${{ inputs.fail-on-regression == 'true' && steps.gate.outputs.passed != 'true' }}

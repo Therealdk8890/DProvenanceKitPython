@@ -135,6 +135,84 @@ def test_rules_reject_non_string_step(bad):
         LoopingRule(bad, 2)
 
 
+# ── UnregisteredToolRule ─────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class ToolCallStep(TraceableEvent):
+    """A typed event carrying a tool name and the registry it should belong to.
+
+    Its default ``to_dict()`` reflects these fields — importantly it has NO
+    ``raw_json`` attribute, so it exercises the typed-store path the rule must handle.
+    """
+
+    name: str
+    registered_tools: tuple = ()
+
+    @property
+    def type_identifier(self) -> str:
+        return "tool_call"
+
+    @property
+    def priority(self) -> TracePriority:
+        return TracePriority.STRUCTURAL
+
+
+def _record_tool_calls(store, context_id, calls):
+    kit = DProvenanceKit(ToolCallStep)
+    with kit.run(context_id=context_id, store=store) as run:
+        for name, registry in calls:
+            kit.record(ToolCallStep(name=name, registered_tools=tuple(registry)))
+        return run.run_id
+
+
+def test_unregistered_tool_rule_flags_call_outside_registry():
+    from dprovenancekit.rules import UnregisteredToolRule
+
+    store = InMemoryTraceStore()
+    registry = ["search", "verify"]
+    rogue = _record_tool_calls(store, "rogue", [("search", registry), ("exfiltrate", registry)])
+    clean = _record_tool_calls(store, "clean", [("search", registry), ("verify", registry)])
+
+    rule = UnregisteredToolRule("tool_call", "registered_tools")
+    anomalies = AnomalyDetector(store).detect_anomalies([rule])
+
+    flagged = {a.run_id for a in anomalies}
+    # The key regression: typed events (no raw_json) must still be inspected via
+    # to_dict(). The old raw_json read silently returned False here.
+    assert rogue in flagged
+    assert clean not in flagged
+    assert anomalies[0].rule_name == "unregistered_tool:tool_call"
+
+
+def test_unregistered_tool_rule_silent_when_all_calls_registered():
+    from dprovenancekit.rules import UnregisteredToolRule
+
+    store = InMemoryTraceStore()
+    _record_tool_calls(store, "ok", [("search", ["search", "verify"])])
+    rule = UnregisteredToolRule("tool_call", "registered_tools")
+    assert AnomalyDetector(store).detect_anomalies([rule]) == []
+
+
+def test_unregistered_tool_rule_validates_args():
+    from dprovenancekit.rules import UnregisteredToolRule
+
+    with pytest.raises(ValueError):
+        UnregisteredToolRule("", "registered_tools")
+    with pytest.raises(ValueError):
+        UnregisteredToolRule("tool_call", "")
+
+
+def test_build_rule_constructs_unregistered_tool():
+    from dprovenancekit.rules import UnregisteredToolRule
+
+    rule = build_rule(
+        {"type": "unregistered_tool", "step": "tool_call", "registry_field": "registered_tools"}
+    )
+    assert isinstance(rule, UnregisteredToolRule)
+    assert rule.name == "unregistered_tool:tool_call"
+
+
 # ── registry (build_rule / build_rules) ──────────────────────────────────────────
 
 

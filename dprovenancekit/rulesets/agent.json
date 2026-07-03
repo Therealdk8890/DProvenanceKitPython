@@ -1,0 +1,18 @@
+{
+  "rules": [
+    {
+      "type": "looping",
+      "step": "tool_call",
+      "max_repeats": 3
+    },
+    {
+      "type": "tool_drop",
+      "required_step": "tool_call_with_args"
+    },
+    {
+      "type": "unregistered_tool",
+      "step": "tool_call",
+      "registry_field": "registered_tools"
+    }
+  ]
+}

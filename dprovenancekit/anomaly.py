@@ -31,6 +31,10 @@ class AnomalyRule(ABC):
     @abstractmethod
     def describe(self, run: TraceRun) -> str: ...
 
+    def is_anomalous(self, run: TraceRun) -> bool:
+        """Additional in-memory check to confirm the anomaly after the SQL query."""
+        return True
+
     def make_anomaly(self, run: TraceRun) -> Anomaly:
         return Anomaly(
             run_id=run.run_id, rule_name=self.name, description=self.describe(run)
@@ -46,7 +50,8 @@ class AnomalyDetector:
         for rule in rules:
             anomalous_runs = self.store.query_runs(rule.anomaly_query)
             for run in anomalous_runs:
-                anomalies.append(rule.make_anomaly(run))
+                if rule.is_anomalous(run):
+                    anomalies.append(rule.make_anomaly(run))
         return anomalies
 
     def register_live(self, rules: List[AnomalyRule], live_engine) -> None:
@@ -64,6 +69,8 @@ class LiveAnomalySubscription(TraceQuerySubscription):
         return self.rule.anomaly_query
 
     def on_match(self, run: TraceRun) -> None:
+        if not self.rule.is_anomalous(run):
+            return
         anomaly = self.rule.make_anomaly(run)
         print(
             f"🚨 LIVE ANOMALY DETECTED: [{anomaly.rule_name}] "

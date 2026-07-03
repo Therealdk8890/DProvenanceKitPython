@@ -120,6 +120,56 @@ class LoopingRule(AnomalyRule):
         )
 
 
+class UnregisteredToolRule(AnomalyRule):
+    """Flag runs where an agent calls a tool not in the registry field.
+    
+    Args:
+        step: the ``type_identifier`` of the tool call step.
+        registry_field: the payload field containing the list of registered tools.
+        name: optional rule-name override.
+    """
+
+    def __init__(self, step: str, registry_field: str, *, name: Optional[str] = None) -> None:
+        if not isinstance(step, str) or not step:
+            raise ValueError("step must be a non-empty string")
+        if not isinstance(registry_field, str) or not registry_field:
+            raise ValueError("registry_field must be a non-empty string")
+        self._step = step
+        self._registry_field = registry_field
+        self._name = name or f"unregistered_tool:{step}"
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def anomaly_query(self) -> TraceQueryDSL:
+        return TraceQueryDSL().requiring_step(self._step)
+
+    def is_anomalous(self, run: TraceRun) -> bool:
+        # Use to_dict(), implemented by every TraceableEvent, so the rule works on
+        # typed event stores (OpenAIAgentsTraceEvent, LangChainTraceEvent, user
+        # dataclasses) as well as the type-erased AnyTraceableEvent — reading raw_json
+        # directly would AttributeError (and silently return False) on typed payloads.
+        for e in run.events:
+            if e.payload.type_identifier != self._step:
+                continue
+            try:
+                payload = e.payload.to_dict()
+            except Exception:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            tool_name = payload.get("tool_name") or payload.get("name")
+            registry = payload.get(self._registry_field) or []
+            if tool_name and tool_name not in registry:
+                return True
+        return False
+
+    def describe(self, run: TraceRun) -> str:
+        return f"unregistered tool called in step '{self._step}' (not in '{self._registry_field}')"
+
+
 # MARK: - Registry --------------------------------------------------------------
 #
 # Maps a ``type`` string to a builder that constructs the rule from a plain dict spec, so a
@@ -133,6 +183,7 @@ class LoopingRule(AnomalyRule):
 _RULE_BUILDERS = {
     "tool_drop": lambda s: ToolDropRule(s["required_step"], name=s.get("name")),
     "looping": lambda s: LoopingRule(s["step"], s["max_repeats"], name=s.get("name")),
+    "unregistered_tool": lambda s: UnregisteredToolRule(s["step"], s["registry_field"], name=s.get("name")),
 }
 
 
@@ -161,4 +212,4 @@ def build_rules(specs: Iterable[Dict[str, Any]]) -> List[AnomalyRule]:
     return [build_rule(spec) for spec in specs]
 
 
-__all__ = ["ToolDropRule", "LoopingRule", "build_rule", "build_rules"]
+__all__ = ["ToolDropRule", "LoopingRule", "UnregisteredToolRule", "build_rule", "build_rules"]

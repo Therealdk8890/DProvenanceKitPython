@@ -467,8 +467,10 @@ def register(
     Set ``canonical=True`` to record the vendor-neutral vocabulary
     (:mod:`dprovenancekit.canonical`) — ``tool_call.*`` / ``llm_call.*`` /
     ``agent_invocation.*`` in place of ``function.*`` / ``generation.*`` / ``agent.*`` —
-    so these runs diff against LangChain or OTel-ingested traces and the bundled
-    ``agent.json`` ruleset fires on them.
+    so these runs share one step-type vocabulary with LangChain and OTel-ingested traces
+    and the bundled ``agent.json`` ruleset fires on them. (This unifies event *types*,
+    not engine/component names, so it makes runs comparable across frameworks, not
+    byte-identical — see :mod:`dprovenancekit.canonical`.)
     """
     from agents import add_trace_processor  # requires openai-agents
 

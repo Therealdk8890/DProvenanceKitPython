@@ -53,10 +53,31 @@ def test_canonical_kinds_match_otel_ingest():
         ("response.end", "llm_call.end"),
         ("agent.start", "agent_invocation.start"),
         ("guardrail.end", "guardrail.end"),
+        # Formerly-unmapped SDK span kinds — a hole here leaves a native event in an
+        # otherwise-canonical stream and breaks cross-integration diffs/fingerprints.
+        ("turn.start", "chain.start"),
+        ("turn.end", "chain.end"),
+        ("mcp_tools.start", "chain.start"),
+        ("speech_group.start", "llm_call.start"),
     ],
 )
 def test_canonicalize_openai_agents(native, expected):
     assert canonicalize_openai_agents(native) == expected
+
+
+def test_canonical_map_covers_all_openai_agents_span_types():
+    # Pin the full set of span `.type` values the openai-agents SDK's span_data module
+    # defines, so a canonical-mode run never emits a native hole. If the SDK adds a kind,
+    # this test should be updated deliberately (with a mapping), not silently.
+    from dprovenancekit.canonical import _OPENAI_AGENTS_KINDS
+
+    sdk_span_types = {
+        "agent", "function", "generation", "response", "handoff", "custom",
+        "guardrail", "transcription", "speech_group", "speech", "mcp_tools",
+        "task", "turn",
+    }
+    unmapped = sdk_span_types - set(_OPENAI_AGENTS_KINDS)
+    assert not unmapped, f"unmapped openai-agents span types: {unmapped}"
 
 
 def test_canonicalize_openai_agents_unknown_returns_none():

@@ -3,11 +3,20 @@
 Each live integration emits its framework's own event names (openai-agents
 ``function.start``, LangChain ``toolStarted``, …), and :mod:`dprovenancekit.otel_ingest`
 normalizes OTLP spans to a third set. This module is the single source of truth for the
-vendor-neutral vocabulary those all map onto, so that:
+vendor-neutral vocabulary those all map onto, so that runs from different frameworks
+speak one *step-type* language:
 
-* a run recorded from openai-agents diffs against the *same* agent recorded from
-  LangChain (they carry the same ``type_identifier`` stream), and
-* one ruleset — e.g. the bundled ``agent.json`` — fires on runs from any of them.
+* one ruleset — e.g. the bundled ``agent.json`` — fires on runs from any of them
+  (anomaly rules key on the step type), and
+* runs become **comparable** across frameworks instead of using disjoint event names.
+
+Note what canonical mode does **not** do: it rewrites the event ``type_identifier`` only,
+not the ``engine`` (component name). A diff signature is ``type::engine`` and a run
+fingerprint is ``type:engine|`` — so a byte-identical cross-framework diff or an equal
+fingerprint additionally requires the *same* engine names and structural wrappers, which
+the frameworks do not naturally produce (an LLM step's engine is ``gpt-4o`` under
+openai-agents vs ``ChatOpenAI`` under LangChain; the run wrapper is ``agent_invocation``
+vs ``chain``). Canonical mode makes the vocabularies match; it is not an equivalence oracle.
 
 Canonical emission is **opt-in** per integration (``canonical=True``); the native event
 names remain the default so existing golden baselines and diffs are unaffected. When it
@@ -51,7 +60,10 @@ def event_name(kind: str, lifecycle: str) -> str:
 
 # ── openai-agents: span kind → canonical kind ────────────────────────────────────
 # openai-agents events are already ``<spanType>.<lifecycle>`` (e.g. ``function.end``);
-# only the base needs mapping.
+# only the base needs mapping. This covers every span ``.type`` the SDK's
+# ``agents.tracing.span_data`` defines — an unmapped kind would stay framework-native
+# even in canonical mode, leaving a hole in the stream that breaks cross-integration
+# diffs and fingerprints, so ``tests/test_canonical.py`` pins this set.
 _OPENAI_AGENTS_KINDS = {
     "agent": AGENT_INVOCATION,
     "generation": LLM_CALL,
@@ -60,9 +72,16 @@ _OPENAI_AGENTS_KINDS = {
     "handoff": AGENT_INVOCATION,
     "guardrail": GUARDRAIL,
     "speech": LLM_CALL,
+    "speech_group": LLM_CALL,
     "transcription": LLM_CALL,
-    "custom": CHAIN,
+    # A turn is the Runner loop's per-turn wrapper (emitted on every turn since SDK
+    # 0.14); like ``task`` and ``custom`` it is loop/structure, so → CHAIN.
+    "turn": CHAIN,
     "task": CHAIN,
+    "custom": CHAIN,
+    # ``mcp_tools`` is a *list-tools* operation, not a tool invocation — mapping it to
+    # CHAIN (not TOOL_CALL) keeps it from inflating tool-call counts / runaway rules.
+    "mcp_tools": CHAIN,
 }
 _LIFECYCLES = {START, END, ERROR}
 

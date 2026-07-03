@@ -333,10 +333,14 @@ register(store, canonical=True)                       # OpenAI Agents SDK
 DProvenanceTracer(store).trace("case-1", canonical=True)   # LangChain
 ```
 
-Now a run recorded from OpenAI Agents diffs against the *same* agent recorded from
-LangChain, and the bundled [`agent.json`](dprovenancekit/rulesets/agent.json) ruleset
-(`dprovenancekit anomalies --rules agent`) fires on both. It's opt-in so existing golden
-baselines — keyed on the native names — are unaffected.
+Now runs recorded from OpenAI Agents, LangChain, and OTel ingestion speak one step-type
+vocabulary, so the bundled [`agent.json`](dprovenancekit/rulesets/agent.json) ruleset
+(`dprovenancekit anomalies --rules agent`) fires on all of them, and a run from one
+framework is *comparable* to the same agent recorded under another. (Canonical mode
+rewrites event types, not engine/component names — so cross-framework runs become
+comparable, not byte-identical: an LLM step's engine is `gpt-4o` under OpenAI Agents but
+`ChatOpenAI` under LangChain.) It's opt-in, so existing golden baselines — keyed on the
+native names — are unaffected.
 
 ---
 

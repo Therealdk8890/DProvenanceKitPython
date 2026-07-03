@@ -252,9 +252,11 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
             of these; turn off to keep traces focused on models, tools, and retrievers.
         canonical: record the vendor-neutral vocabulary (:mod:`dprovenancekit.canonical`)
             — ``tool_call.*`` / ``llm_call.*`` / ``retrieval.*`` in place of
-            ``toolStarted`` / ``llmStarted`` / ``retrieverStarted`` — so these runs diff
-            against openai-agents or OTel-ingested traces and the bundled ``agent.json``
-            ruleset fires on them. Off by default (native names preserve existing goldens).
+            ``toolStarted`` / ``llmStarted`` / ``retrieverStarted`` — so these runs share
+            one step-type vocabulary with openai-agents and OTel-ingested traces and the
+            bundled ``agent.json`` ruleset fires on them. Unifies event *types*, not
+            engine names (see :mod:`dprovenancekit.canonical`). Off by default (native
+            names preserve existing goldens).
     """
 
     # Ask LangChain to dispatch us synchronously and in order, so per-run sequence

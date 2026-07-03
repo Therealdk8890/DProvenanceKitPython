@@ -479,6 +479,118 @@ def test_cli_ingest_reports_nothing_found(tmp_path, capsys):
     assert "nothing ingested" in capsys.readouterr().err
 
 
+def test_deeply_nested_trace_does_not_recurse(tmp_path):
+    # A long chain of nested spans must not exhaust the Python recursion limit.
+    spans = []
+    for i in range(2000):
+        span = _span(
+            f"{i:016x}",
+            f"execute_tool t{i}",
+            1000 + i,
+            9000 - i,
+            parent=f"{i - 1:016x}" if i else None,
+            attrs={"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": f"t{i}"},
+        )
+        spans.append(span)
+    store = InMemoryTraceStore()
+    (run,) = ingest_otlp(_request(spans), store)
+    assert run.event_count == 4000  # 2000 spans × start/end
+
+
+def test_within_command_duplicate_files_ingest_once(tmp_path):
+    from dprovenancekit.cli import main
+
+    f = tmp_path / "run.json"
+    f.write_text(json.dumps(_agent_run(TRACE_A)))
+    db = str(tmp_path / "t.sqlite")
+    # The same file listed twice must not double-write the run.
+    assert main(["ingest", str(f), str(f), "--db", db]) == 0
+
+    import sqlite3
+
+    conn = sqlite3.connect(db)
+    (count,) = conn.execute(
+        "SELECT event_count FROM runs WHERE run_id = ?",
+        (str(run_id_for_trace(TRACE_A)),),
+    ).fetchone()
+    (rows,) = conn.execute(
+        "SELECT COUNT(*) FROM trace_events WHERE run_id = ?",
+        (str(run_id_for_trace(TRACE_A)),),
+    ).fetchone()
+    conn.close()
+    assert count == 8 and rows == 8  # not 16
+
+
+def test_base64_trace_id_matches_hex_form():
+    import base64
+
+    hex_id = "0af7651916cd43dd8448eb211c80319c"
+    b64_id = base64.b64encode(bytes.fromhex(hex_id)).decode()
+    span = _span(
+        "aaaaaaaaaaaaaaa1",
+        "execute_tool search",
+        1,
+        2,
+        trace=b64_id,
+        attrs={"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "search"},
+    )
+    store = InMemoryTraceStore()
+    (run,) = ingest_otlp(_request([span]), store)
+    # A base64 trace id (protobuf json_format) must not crash and must derive the same
+    # run id as the hex encoding of the same bytes.
+    assert run.run_id == run_id_for_trace(hex_id)
+
+
+def test_odd_length_trace_id_does_not_crash():
+    span = _span(
+        "aaaaaaaaaaaaaaa1",
+        "execute_tool search",
+        1,
+        2,
+        trace="abc",  # 3 hex chars — zfill path
+        attrs={"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "search"},
+    )
+    store = InMemoryTraceStore()
+    (run,) = ingest_otlp(_request([span]), store)
+    assert run.run_id == uuid.UUID("00000000-0000-0000-0000-000000000abc")
+
+
+def test_duplicate_span_delivery_is_deduplicated():
+    # OTLP allows at-least-once delivery; a re-sent span must not duplicate events.
+    run = _agent_run(TRACE_A, tools=("search",))
+    spans = run["resourceSpans"][0]["scopeSpans"][0]["spans"]
+    dupped = _request(spans + spans)  # every span delivered twice
+    store = InMemoryTraceStore()
+    (ingested,) = ingest_otlp(dupped, store)
+    clean = InMemoryTraceStore()
+    (baseline,) = ingest_otlp(run, clean)
+    assert ingested.event_count == baseline.event_count
+
+
+def test_cli_ingest_rejects_non_sqlite_db(tmp_path, capsys):
+    from dprovenancekit.cli import main
+
+    junk = tmp_path / "notdb.txt"
+    junk.write_text("this is not a database")
+    src = tmp_path / "run.json"
+    src.write_text(json.dumps(_agent_run(TRACE_A)))
+    assert main(["ingest", str(src), "--db", str(junk)]) == 2
+    assert "not a usable SQLite database" in capsys.readouterr().err
+
+
+def test_rerank_and_guardrail_key_on_model_identity():
+    rerank = _span(
+        "aaaaaaaaaaaaaaa1",
+        "CohereRerank",  # instrumentor span name — must NOT be the engine
+        1,
+        2,
+        attrs={"openinference.span.kind": "RERANKER", "reranker.model_name": "rerank-v3"},
+    )
+    store = InMemoryTraceStore()
+    (run,) = ingest_otlp(_request([rerank]), store)
+    assert _signatures(store, run.run_id)[0] == "rerank.start::rerank-v3"
+
+
 def test_event_payload_roundtrips_via_any_traceable_event():
     from dprovenancekit.event import AnyTraceableEvent
 

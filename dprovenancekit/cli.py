@@ -471,24 +471,31 @@ def _run_ingest(argv) -> int:
     except sqlite3.Error:
         pass  # missing/new database — nothing to skip
 
-    store = SQLiteTraceStore(OTelSpanEvent, args.db)
+    try:
+        store = SQLiteTraceStore(OTelSpanEvent, args.db)
+    except sqlite3.DatabaseError as exc:
+        print(f"error: --db {args.db!r} is not a usable SQLite database: {exc}", file=sys.stderr)
+        return 2
+
     ingested = []
     try:
         for path in args.files:
             try:
-                ingested.extend(
-                    ingest_otlp(
-                        path,
-                        store,
-                        context_id=args.context,
-                        include_unclassified=args.include_unclassified,
-                        capture_payloads=not args.no_payloads,
-                        skip_run_ids=frozenset(existing),
-                    )
+                new_runs = ingest_otlp(
+                    path,
+                    store,
+                    context_id=args.context,
+                    include_unclassified=args.include_unclassified,
+                    capture_payloads=not args.no_payloads,
+                    skip_run_ids=frozenset(existing),
                 )
             except ValueError as exc:
                 print(f"error: {path}: {exc}", file=sys.stderr)
                 return 2
+            ingested.extend(new_runs)
+            # Fold this file's run ids into the skip set so a trace repeated across
+            # files (overlapping globs, a file listed twice) is written only once.
+            existing.update(run.run_id for run in new_runs)
     finally:
         store.close()
 

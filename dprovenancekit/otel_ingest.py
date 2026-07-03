@@ -236,11 +236,15 @@ def _decode_spans(request: Mapping[str, Any]) -> List[_OTelSpan]:
                 status_code = (
                     status.get("code") if isinstance(status, Mapping) else None
                 )
+                # Keep ids verbatim: a hex id is case-normalized downstream by
+                # run_id_for_trace, but a base64 id (protobuf json_format output) is
+                # case-sensitive and must not be lowercased. Casing is consistent within
+                # one exporter's file, so span/parent matching is unaffected.
                 spans.append(
                     _OTelSpan(
-                        trace_id=trace_id.lower(),
-                        span_id=span_id.lower(),
-                        parent_span_id=parent.lower() if parent else None,
+                        trace_id=trace_id,
+                        span_id=span_id,
+                        parent_span_id=parent or None,
                         name=str(span.get("name", "") or ""),
                         start_ns=_decode_nanos(
                             _field(span, "startTimeUnixNano", "start_time_unix_nano")
@@ -292,11 +296,13 @@ def _parse_otlp_text(text: str) -> List[Mapping[str, Any]]:
 
 # ── Classification ─────────────────────────────────────────────────────────────
 #
-# Dialect detection is ordered by specificity: an explicit OpenInference span kind wins,
-# then the official ``gen_ai.operation.name``, then Traceloop's workflow markers, then a
-# best-effort sniff of well-known ``gen_ai.*`` attributes. Each classifier returns a
-# vendor-neutral step kind plus the "engine" — the stable component identity (model,
-# tool, or agent name) that diff signatures and fingerprints key on.
+# Dialect detection is ordered by specificity (see _classify for the exact sequence): an
+# explicit OpenInference span kind wins, then Traceloop's workflow markers, then the
+# official ``gen_ai.operation.name``, then legacy ``llm.request.type``, then the Vercel AI
+# SDK operation id, then a best-effort sniff of well-known ``gen_ai.*`` attributes, and
+# finally the SHOULD-level span-name prefix. Each classifier returns a vendor-neutral step
+# kind plus the "engine" — the stable component identity (model, tool, or agent name) that
+# diff signatures and fingerprints key on.
 
 LLM_CALL = "llm_call"
 TOOL_CALL = "tool_call"
@@ -396,7 +402,9 @@ _ENGINE_KEYS: Dict[str, Tuple[str, ...]] = {
     AGENT_INVOCATION: ("gen_ai.agent.name", "agent.name", "traceloop.entity.name"),
     AGENT_CREATION: ("gen_ai.agent.name", "agent.name"),
     CHAIN: ("gen_ai.workflow.name", "traceloop.entity.name", "graph.node.name"),
-    RETRIEVAL: ("gen_ai.data_source.id",),
+    RETRIEVAL: ("gen_ai.data_source.id", "embedding.model_name"),
+    RERANK: ("reranker.model_name", "gen_ai.request.model", "llm.model_name"),
+    GUARDRAIL: ("guardrail.name", "gen_ai.tool.name", "tool.name"),
 }
 
 # Operation-name prefixes the official conventions put in span names ("execute_tool
@@ -601,8 +609,25 @@ def _result_attributes(span: _OTelSpan, capture_payloads: bool) -> Dict[str, Any
 # ── Tree reconstruction and run assembly ─────────────────────────────────────────
 
 
+def _dedupe_spans(spans: List[_OTelSpan]) -> List[_OTelSpan]:
+    """Collapse spans re-delivered under the same span id (OTLP allows at-least-once
+    delivery; deduplication is the receiver's job). The instance with the greatest
+    end time wins — the most-complete copy — with input order breaking ties."""
+    best: Dict[str, Tuple[int, int, _OTelSpan]] = {}
+    for index, span in enumerate(spans):
+        key = span.span_id
+        rank = (span.end_ns, index)
+        existing = best.get(key)
+        if existing is None or rank > existing[:2]:
+            best[key] = (rank[0], rank[1], span)
+    if len(best) == len(spans):
+        return spans  # no duplicates — preserve identity/order exactly
+    return [entry[2] for entry in best.values()]
+
+
 def _build_forest(spans: List[_OTelSpan]) -> List[_OTelSpan]:
     """Arrange one trace's spans as a forest; orphans (missing parents) become roots."""
+    spans = _dedupe_spans(spans)
     by_id = {span.span_id: span for span in spans}
     roots: List[_OTelSpan] = []
     for span in spans:
@@ -619,8 +644,49 @@ def _build_forest(spans: List[_OTelSpan]) -> List[_OTelSpan]:
 
 
 def run_id_for_trace(trace_id: str) -> uuid.UUID:
-    """The deterministic DProvenanceKit run id for a 128-bit OTel trace id (hex)."""
-    return uuid.UUID(hex=trace_id.lower().zfill(32))
+    """The deterministic DProvenanceKit run id for an OTel trace id.
+
+    Total by construction — never raises, so one malformed id cannot abort a whole
+    file. A spec-compliant 32-hex id maps to the matching UUID. A base64-encoded id
+    (what ``protobuf`` ``json_format`` emits for the bytes-typed ``traceId``, rather
+    than the hex the OTLP/JSON spec mandates) is decoded to its 16 bytes so it yields
+    the *same* run id as the hex form of those bytes. Anything else is hashed with a
+    fixed namespace, keeping ingestion deterministic per exporter.
+    """
+    raw = (trace_id or "").strip()
+    lowered = raw.lower()
+    hex_only = lowered.lstrip("0123456789abcdef")
+    if raw and not hex_only and len(lowered) <= 32:
+        return uuid.UUID(hex=lowered.zfill(32))
+    for decoder in (_b64_std, _b64_url):
+        decoded = decoder(raw)
+        if decoded is not None and len(decoded) == 16:
+            return uuid.UUID(bytes=decoded)
+    return uuid.uuid5(_TRACE_ID_NAMESPACE, raw)
+
+
+# Fixed namespace so non-hex, non-16-byte trace ids still map deterministically.
+_TRACE_ID_NAMESPACE = uuid.UUID("6f1a0f2e-2b8c-5e3a-9d47-0e10a1b2c3d4")
+
+
+def _b64_std(text: str) -> Optional[bytes]:
+    import base64
+    import binascii
+
+    try:
+        return base64.b64decode(text, validate=True)
+    except (binascii.Error, ValueError):
+        return None
+
+
+def _b64_url(text: str) -> Optional[bytes]:
+    import base64
+    import binascii
+
+    try:
+        return base64.urlsafe_b64decode(text)
+    except (binascii.Error, ValueError):
+        return None
 
 
 @dataclass(frozen=True)
@@ -633,8 +699,8 @@ class IngestedRun:
     event_count: int
 
 
-def _emit_span_events(
-    span: _OTelSpan,
+def _emit_forest_events(
+    roots: List[_OTelSpan],
     *,
     run_id: uuid.UUID,
     context_id: str,
@@ -642,18 +708,16 @@ def _emit_span_events(
     capture_payloads: bool,
     schema_version: int,
     sink: List[TraceEvent],
-    seen: FrozenSet[str] = frozenset(),
 ) -> None:
-    """Depth-first walk: parent.start, children (by start time), parent.end."""
-    if span.span_id in seen:
-        return  # malformed parent cycle — never recurse twice through one span
-    kind = _classify(span)
-    include = kind is not None or include_unclassified
-    step = kind or UNCLASSIFIED
-    engine = _engine_for(span, step) if kind is not None else (span.name or step)
-    priority = TracePriority.STRUCTURAL if kind is not None else TracePriority.TELEMETRY
+    """Depth-first walk of a whole forest: for each span emit ``<kind>.start``, then
+    its children (already sorted by start time), then ``<kind>.end`` / ``.error``.
 
-    def _append(type_name: str, prio: TracePriority, attrs: Dict[str, Any], t_ns: int):
+    Iterative (explicit stack) rather than recursive so that deep span trees — a long
+    chain of nested tool/agent calls — cannot exhaust Python's recursion limit. A
+    ``visited`` set makes a malformed parent cycle terminate instead of looping.
+    """
+
+    def _append(span, type_name, prio, attrs, engine, t_ns):
         sink.append(
             TraceEvent(
                 run_id=run_id,
@@ -668,7 +732,7 @@ def _emit_span_events(
             )
         )
 
-    if include:
+    def _emit_start(span, step, engine, priority):
         start_attrs = _identity_attributes(span)
         if capture_payloads:
             input_preview = _preview(
@@ -676,22 +740,9 @@ def _emit_span_events(
             )
             if input_preview is not None:
                 start_attrs["input"] = _truncate(input_preview)
-        _append(f"{step}.start", priority, start_attrs, span.start_ns)
+        _append(span, f"{step}.start", priority, start_attrs, engine, span.start_ns)
 
-    child_seen = seen | {span.span_id}
-    for child in span.children:
-        _emit_span_events(
-            child,
-            run_id=run_id,
-            context_id=context_id,
-            include_unclassified=include_unclassified,
-            capture_payloads=capture_payloads,
-            schema_version=schema_version,
-            sink=sink,
-            seen=child_seen,
-        )
-
-    if include:
+    def _emit_end(span, step, engine, priority):
         if span.is_error:
             error_attrs = _identity_attributes(span)
             error_type = span.attributes.get("error.type")
@@ -699,14 +750,42 @@ def _emit_span_events(
                 error_attrs["error_type"] = str(error_type)
             if span.status_message:
                 error_attrs["message"] = _truncate(span.status_message)
-            _append(f"{step}.error", TracePriority.CRITICAL, error_attrs, span.end_ns)
+            _append(span, f"{step}.error", TracePriority.CRITICAL, error_attrs, engine, span.end_ns)
         else:
             _append(
+                span,
                 f"{step}.end",
                 priority,
                 _result_attributes(span, capture_payloads),
+                engine,
                 span.end_ns,
             )
+
+    visited: set = set()
+    # Stack entries: (span, is_closing). Push a span's close marker before its children
+    # so it fires after them; reverse children so the first child is processed first.
+    stack: List[Tuple[_OTelSpan, bool]] = [(root, False) for root in reversed(roots)]
+    while stack:
+        span, closing = stack.pop()
+        kind = _classify(span)
+        include = kind is not None or include_unclassified
+        if not include:
+            continue
+        step = kind or UNCLASSIFIED
+        engine = _engine_for(span, step) if kind is not None else (span.name or step)
+        priority = (
+            TracePriority.STRUCTURAL if kind is not None else TracePriority.TELEMETRY
+        )
+        if closing:
+            _emit_end(span, step, engine, priority)
+            continue
+        if span.span_id in visited:
+            continue  # cycle / re-entry guard
+        visited.add(span.span_id)
+        _emit_start(span, step, engine, priority)
+        stack.append((span, True))
+        for child in reversed(span.children):
+            stack.append((child, False))
 
 
 def ingest_otlp(
@@ -785,16 +864,15 @@ def ingest_otlp(
             run_context = service or trace_id
 
         events: List[TraceEvent] = []
-        for root in roots:
-            _emit_span_events(
-                root,
-                run_id=run_id,
-                context_id=run_context,
-                include_unclassified=include_unclassified,
-                capture_payloads=capture_payloads,
-                schema_version=schema_version,
-                sink=events,
-            )
+        _emit_forest_events(
+            roots,
+            run_id=run_id,
+            context_id=run_context,
+            include_unclassified=include_unclassified,
+            capture_payloads=capture_payloads,
+            schema_version=schema_version,
+            sink=events,
+        )
         if not events:
             continue
         for event in events:

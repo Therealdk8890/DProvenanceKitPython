@@ -60,6 +60,9 @@ from .store import (
 from .sqlite_store import SQLiteTraceStore, SQLiteConnection, SQLiteWriter
 from .raw_store import RawTraceStore, RawTraceRun, RawTraceEvent
 
+# OpenTelemetry ingestion
+from .otel_ingest import IngestedRun, OTelSpanEvent, ingest_otlp, run_id_for_trace
+
 # Live querying + anomalies
 from .live_engine import LiveTraceQueryEngine, TraceQuerySubscription, QueryState
 from .anomaly import Anomaly, AnomalyRule, AnomalyDetector, LiveAnomalySubscription
@@ -267,6 +270,10 @@ __all__ = [
     "LoopingRule",
     "build_rule",
     "build_rules",
+    "IngestedRun",
+    "OTelSpanEvent",
+    "ingest_otlp",
+    "run_id_for_trace",
     "TraceDiffEngine",
     "TraceDiffResult",
     "Change",

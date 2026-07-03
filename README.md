@@ -9,7 +9,8 @@ silently dropped a step, and fail the PR that caused it.**
 
 When an agent's reasoning drifts between runs, DProvenanceKit turns each execution into a queryable,
 diffable trace so you can see *what changed and why* — not just *what happened*. It works with
-LangChain/LangGraph, the OpenAI Agents SDK, LlamaIndex, CrewAI, or plain Python, and the core has
+LangChain/LangGraph, the OpenAI Agents SDK, LlamaIndex, CrewAI, plain Python — or any
+OpenTelemetry-instrumented stack, via built-in OTLP trace ingestion — and the core has
 zero third-party dependencies.
 
 > Run → Record → Query → Diff → Detect regressions → Gate in CI
@@ -298,6 +299,26 @@ with kit.run(context_id="crew-run", store=store):
     # ... attach `tracer` as a LangChain callback and kick off your crew ...
     result = crew.kickoff()
 ```
+
+### OpenTelemetry (any instrumented stack)
+
+If your agent is already instrumented for OpenTelemetry — the official GenAI semantic
+conventions (`gen_ai.*`), OpenInference (everything Arize Phoenix instruments: LangChain,
+LlamaIndex, CrewAI, the OpenAI Agents SDK, DSPy, …), OpenLLMetry/Traceloop, or the Vercel
+AI SDK — you don't need to re-instrument anything. Export the traces as OTLP JSON (the
+OTel Collector's file exporter, or any OTLP/HTTP JSON export) and ingest them:
+
+```bash
+dprovenancekit ingest golden.json candidate.json --db traces.sqlite
+dprovenancekit gate --db traces.sqlite --golden <run-id> --candidate <run-id>
+```
+
+Each OTel trace becomes a run; spans are normalized to vendor-neutral steps
+(`llm_call`, `tool_call`, `agent_invocation`, …) with the model/tool/agent name as the
+engine, so runs recorded by *different* instrumentation dialects diff cleanly against
+each other. Run ids derive deterministically from OTel trace ids, so re-ingesting a file
+never duplicates runs. Zero new dependencies — the parser is stdlib-only, like the rest
+of the core. Python API: `dprovenancekit.otel_ingest.ingest_otlp`.
 
 ---
 

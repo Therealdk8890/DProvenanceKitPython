@@ -19,6 +19,10 @@ htmlcov/
 .venv/
 venv/
 env/
+test_env/
+
+# Hosted server lives in the private dprovenancekit-server repo — never track it here
+server/
 
 # Local tooling / editor state
 .claude/

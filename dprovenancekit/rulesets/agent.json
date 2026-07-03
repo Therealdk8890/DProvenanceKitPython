@@ -1,0 +1,24 @@
+{
+  "id": "agent.default",
+  "name": "Default Agent Failure Rules",
+  "description": "Common agent-trace anomalies over DProvenanceKit's vendor-neutral event vocabulary. These are the names produced by `dprovenancekit ingest` (OTel/OTLP traces normalized to tool_call.*, llm_call.*, agent_invocation.*). Native integration traces (openai-agents `function.*`, LangChain `toolStarted`/`toolEnded`) emit different names — ingest them, or write a preset targeting those types. Rules whose signal needs data no emitter yet produces (a registered-tool list, a distinct tool-result-vs-reasoning event) are intentionally omitted until the emitters carry it.",
+  "version": "0.2.0",
+  "rules": [
+    {
+      "id": "agent.runaway_tool_use",
+      "type": "looping",
+      "step": "tool_call.start",
+      "max_repeats": 10,
+      "severity": "warning",
+      "message": "Runaway tool use: the agent made more than 10 tool calls in a single run."
+    },
+    {
+      "id": "agent.unused_tool_result",
+      "type": "unused_tool_result",
+      "step": "tool_call.end",
+      "required_followup_step": "llm_call.start",
+      "severity": "warning",
+      "message": "A tool call completed but was not followed by a model step that could use its result."
+    }
+  ]
+}

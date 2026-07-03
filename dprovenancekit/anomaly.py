@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from .live_engine import TraceQuerySubscription
 from .query import TraceQueryDSL, TraceRun
@@ -16,9 +16,17 @@ class Anomaly:
     run_id: uuid.UUID
     rule_name: str
     description: str
+    # Optional presentation metadata carried from a ruleset spec (severity/message).
+    severity: str = "warning"
+    message: Optional[str] = None
 
 
 class AnomalyRule(ABC):
+    # Optional metadata a ruleset spec may attach (see rules.build_rule); read via
+    # make_anomaly. Defaults keep hand-constructed rules unchanged.
+    severity: str = "warning"
+    message: Optional[str] = None
+
     @property
     @abstractmethod
     def name(self) -> str: ...
@@ -31,9 +39,17 @@ class AnomalyRule(ABC):
     @abstractmethod
     def describe(self, run: TraceRun) -> str: ...
 
+    def is_anomalous(self, run: TraceRun) -> bool:
+        """Additional in-memory check to confirm the anomaly after the SQL query."""
+        return True
+
     def make_anomaly(self, run: TraceRun) -> Anomaly:
         return Anomaly(
-            run_id=run.run_id, rule_name=self.name, description=self.describe(run)
+            run_id=run.run_id,
+            rule_name=self.name,
+            description=self.describe(run),
+            severity=getattr(self, "severity", "warning"),
+            message=getattr(self, "message", None),
         )
 
 
@@ -46,7 +62,8 @@ class AnomalyDetector:
         for rule in rules:
             anomalous_runs = self.store.query_runs(rule.anomaly_query)
             for run in anomalous_runs:
-                anomalies.append(rule.make_anomaly(run))
+                if rule.is_anomalous(run):
+                    anomalies.append(rule.make_anomaly(run))
         return anomalies
 
     def register_live(self, rules: List[AnomalyRule], live_engine) -> None:
@@ -64,6 +81,8 @@ class LiveAnomalySubscription(TraceQuerySubscription):
         return self.rule.anomaly_query
 
     def on_match(self, run: TraceRun) -> None:
+        if not self.rule.is_anomalous(run):
+            return
         anomaly = self.rule.make_anomaly(run)
         print(
             f"🚨 LIVE ANOMALY DETECTED: [{anomaly.rule_name}] "

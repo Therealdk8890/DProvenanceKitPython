@@ -250,8 +250,17 @@ def _run_anomalies(argv) -> int:
     args = ap.parse_args(argv)
 
     try:
-        with open(args.rules, encoding="utf-8") as fh:
-            config = json.load(fh)
+        import os
+        if not os.path.exists(args.rules):
+            from importlib.resources import files
+            try:
+                rules_path = files("dprovenancekit").joinpath(f"rulesets/{args.rules}.json")
+                config = json.loads(rules_path.read_text(encoding="utf-8"))
+            except Exception:
+                raise OSError(f"No such file or preset: {args.rules}")
+        else:
+            with open(args.rules, encoding="utf-8") as fh:
+                config = json.load(fh)
         specs = config["rules"] if isinstance(config, dict) else config
         rules = build_rules(specs)
     except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -533,11 +542,24 @@ def _run_ingest(argv) -> int:
 
 
 def _run_sync(argv) -> int:
-    """``dprovenancekit sync`` — push/pull traces to/from the SaaS backend."""
+    """``dprovenancekit sync`` — push/pull traces to/from the hosted DProvenance service."""
     import argparse
     import uuid
     import sys
-    from .sync_client import CloudSyncClient
+
+    try:
+        from .sync_client import CloudSyncClient
+    except ImportError:
+        print(
+            "dprovenancekit sync requires the hosted DProvenance service client,\n"
+            "which is not part of the open-source package. Everything else —\n"
+            "recording, diffing, and the CI gate — works fully offline without it.\n"
+            "For the hosted dashboard and cloud sync (early access), see\n"
+            "https://dprovenance.dev",
+            file=sys.stderr,
+        )
+        return 2
+
     from .sqlite_store import SQLiteTraceStore
     from .event import AnyTraceableEvent
 
@@ -576,10 +598,117 @@ def _run_sync(argv) -> int:
     return 0
 
 
+def _run_export(argv) -> int:
+    """``dprovenancekit export`` — export recorded runs to standard formats.
+
+    Extracts a run from the local SQLite database and emits it to stdout. Exit codes::
+
+        0  exported successfully
+        2  usage / database error / run not found
+    """
+    import argparse
+    import json
+    import os
+    import sqlite3
+    import uuid
+    import sys
+
+    from .event import AnyTraceableEvent
+    from .sqlite_store import SQLiteTraceStore
+
+    ap = argparse.ArgumentParser(
+        prog="dprovenancekit export",
+        description="Export a trace run to JSON Lines (for Datadog, Splunk, etc).",
+    )
+    ap.add_argument("--db", required=True, help="path to the SQLite trace database")
+    ap.add_argument("--run", required=True, help="run ID to export")
+    ap.add_argument(
+        "--format",
+        choices=["jsonl"],
+        default="jsonl",
+        help="output format (default: jsonl)",
+    )
+    args = ap.parse_args(argv)
+
+    try:
+        run_id = uuid.UUID(args.run)
+    except ValueError:
+        print("error: --run must be a valid run id (UUID)", file=sys.stderr)
+        return 2
+
+    # sqlite3.connect() creates the file if absent; guard first so a typo'd path
+    # reports a clean error for this read-only command instead of leaving an empty db.
+    if not os.path.exists(args.db):
+        print(f"error: no such database: {args.db}", file=sys.stderr)
+        return 2
+
+    try:
+        store = SQLiteTraceStore(AnyTraceableEvent, args.db, start_writer=False)
+    except (sqlite3.Error, OSError) as exc:
+        print(f"error: could not open database {args.db}: {exc}", file=sys.stderr)
+        return 2
+
+    try:
+        run = store.get_run(run_id)
+        if run is None:
+            print(f"error: run not found in {args.db}: {args.run}", file=sys.stderr)
+            return 2
+
+        if args.format == "jsonl":
+            for event in sorted(run.events, key=lambda e: e.sequence):
+                # Try to parse the raw JSON payload if possible, else use it as a string
+                try:
+                    payload_data = json.loads(event.payload.raw_json)
+                except Exception:
+                    payload_data = event.payload.raw_json
+
+                row = {
+                    "schema_version": "dprov.export.v1",
+                    "run_id": str(event.run_id),
+                    "context_id": event.context_id,
+                    "event_id": str(event.id),
+                    "timestamp": event.timestamp,
+                    "sequence": event.sequence,
+                    "span_id": event.span_id,
+                    "parent_span_id": event.parent_span_id,
+                    "engine": event.engine_name,
+                    "type": event.payload.type_identifier,
+                    "priority": event.payload.priority.value,
+                    "data": payload_data,
+                }
+                # allow_nan=False: never emit NaN/Infinity — they are invalid JSON and
+                # break jq / Datadog / Splunk ingestion. Fall back to a sanitized row.
+                try:
+                    print(json.dumps(row, allow_nan=False))
+                except ValueError:
+                    row["data"] = _finite_only(payload_data)
+                    print(json.dumps(row, allow_nan=False))
+    finally:
+        store.close()
+
+    return 0
+
+
+def _finite_only(value):
+    """Recursively replace non-finite floats (NaN/Infinity) with None so the row is
+    valid JSON. Everything else is returned unchanged."""
+    import math
+
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {k: _finite_only(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_finite_only(v) for v in value]
+    return value
+
+
 def main(argv=None) -> int:
     if argv is None:
         argv = sys.argv[1:]
 
+    if argv and argv[0] == "export":
+        return _run_export(argv[1:])
     if argv and argv[0] == "gate":
         return _run_gate(argv[1:])
     if argv and argv[0] == "anomalies":
@@ -599,7 +728,7 @@ def main(argv=None) -> int:
     mode = argv[0] if argv else "evaluate"
     if mode not in ("evaluate", "diagnose", "stability"):
         print(
-            "Usage: dprovenancekit <gate|anomalies|runs|ui|ingest|sync|evaluate|diagnose|stability>"
+            "Usage: dprovenancekit <gate|anomalies|runs|ui|ingest|export|sync|evaluate|diagnose|stability>"
         )
         return 0
 

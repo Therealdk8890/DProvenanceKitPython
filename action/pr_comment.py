@@ -24,7 +24,7 @@ _MARKER = "<!-- dprovenancekit-regression-gate -->"
 _CHANGE_ORDER = ("removed", "added", "reordered", "ambiguous")
 
 
-def render_comment(report):
+def render_comment(report, dashboard_url=None):
     """Render the gate report dict as a sticky PR-comment markdown body (pure function)."""
     passed = bool(report.get("passed"))
     badge = "✅ **Regression gate passed**" if passed else "❌ **Regression gate failed**"
@@ -34,14 +34,31 @@ def render_comment(report):
 
     lines = [
         _MARKER,
-        "## DProvenanceKit",
+        "## DProvenanceKit Regression Gate",
         "",
         badge,
-        "",
+        ""
+    ]
+
+    if not passed:
+        lines.extend([
+            "> [!WARNING]",
+            f"> **Regression Detected** (Severity: {level})",
+            "> Review the agent reasoning changes below.",
+            ""
+        ])
+
+    lines.extend([
         f"- **Severity:** {level} (strength {strength:.2f}); "
         f"max allowed: {report.get('max_regression_level', 'none')}",
         f"- **Fingerprint:** {'match' if fp_match else 'differs'}",
-    ]
+    ])
+
+    if dashboard_url:
+        lines.extend([
+            "",
+            f"🔍 [**View full trace in DProvenanceKit Dashboard**]({dashboard_url})",
+        ])
 
     changes = report.get("steps_by_change") or {}
     rows = [(kind, changes[kind]) for kind in _CHANGE_ORDER if changes.get(kind)]
@@ -81,7 +98,8 @@ def post_comment(report, env, api=_api):
     Returns the PR number on success, or ``None`` when posting was skipped (no token, not a
     pull_request event, or insufficient permissions).
     """
-    body = render_comment(report)
+    dashboard_url = env.get("DPROV_DASHBOARD_URL")
+    body = render_comment(report, dashboard_url=dashboard_url)
     token = env.get("GITHUB_TOKEN")
     event_path = env.get("GITHUB_EVENT_PATH")
     repo = env.get("GITHUB_REPOSITORY")

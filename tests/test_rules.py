@@ -135,6 +135,193 @@ def test_rules_reject_non_string_step(bad):
         LoopingRule(bad, 2)
 
 
+# ── UnregisteredToolRule ─────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class ToolCallStep(TraceableEvent):
+    """A typed event carrying a tool name and the registry it should belong to.
+
+    Its default ``to_dict()`` reflects these fields — importantly it has NO
+    ``raw_json`` attribute, so it exercises the typed-store path the rule must handle.
+    """
+
+    name: str
+    registered_tools: tuple = ()
+
+    @property
+    def type_identifier(self) -> str:
+        return "tool_call"
+
+    @property
+    def priority(self) -> TracePriority:
+        return TracePriority.STRUCTURAL
+
+
+def _record_tool_calls(store, context_id, calls):
+    kit = DProvenanceKit(ToolCallStep)
+    with kit.run(context_id=context_id, store=store) as run:
+        for name, registry in calls:
+            kit.record(ToolCallStep(name=name, registered_tools=tuple(registry)))
+        return run.run_id
+
+
+def test_unregistered_tool_rule_flags_call_outside_registry():
+    from dprovenancekit.rules import UnregisteredToolRule
+
+    store = InMemoryTraceStore()
+    registry = ["search", "verify"]
+    rogue = _record_tool_calls(store, "rogue", [("search", registry), ("exfiltrate", registry)])
+    clean = _record_tool_calls(store, "clean", [("search", registry), ("verify", registry)])
+
+    rule = UnregisteredToolRule("tool_call", "registered_tools")
+    anomalies = AnomalyDetector(store).detect_anomalies([rule])
+
+    flagged = {a.run_id for a in anomalies}
+    # The key regression: typed events (no raw_json) must still be inspected via
+    # to_dict(). The old raw_json read silently returned False here.
+    assert rogue in flagged
+    assert clean not in flagged
+    assert anomalies[0].rule_name == "unregistered_tool:tool_call"
+
+
+def test_unregistered_tool_rule_silent_when_all_calls_registered():
+    from dprovenancekit.rules import UnregisteredToolRule
+
+    store = InMemoryTraceStore()
+    _record_tool_calls(store, "ok", [("search", ["search", "verify"])])
+    rule = UnregisteredToolRule("tool_call", "registered_tools")
+    assert AnomalyDetector(store).detect_anomalies([rule]) == []
+
+
+def test_unregistered_tool_rule_validates_args():
+    from dprovenancekit.rules import UnregisteredToolRule
+
+    with pytest.raises(ValueError):
+        UnregisteredToolRule("", "registered_tools")
+    with pytest.raises(ValueError):
+        UnregisteredToolRule("tool_call", "")
+
+
+def test_build_rule_constructs_unregistered_tool():
+    from dprovenancekit.rules import UnregisteredToolRule
+
+    rule = build_rule(
+        {"type": "unregistered_tool", "step": "tool_call", "registry_field": "registered_tools"}
+    )
+    assert isinstance(rule, UnregisteredToolRule)
+    assert rule.name == "unregistered_tool:tool_call"
+
+
+# ── UnusedToolResultRule ─────────────────────────────────────────────────────────
+
+
+def test_unused_tool_result_rule_flags_orphan_result():
+    from dprovenancekit.rules import UnusedToolResultRule
+
+    store = InMemoryTraceStore()
+    orphan = _record(store, "orphan", ["tool_result"])  # never used
+    trailing = _record(store, "trailing", ["tool_result", "respond", "tool_result"])
+    used = _record(store, "used", ["tool_result", "respond"])
+
+    rule = UnusedToolResultRule("tool_result", "respond")
+    flagged = {a.run_id for a in AnomalyDetector(store).detect_anomalies([rule])}
+    assert orphan in flagged
+    assert trailing in flagged  # second result has no follow-up before end
+    assert used not in flagged
+
+
+def test_unused_tool_result_rule_silent_when_each_result_used():
+    from dprovenancekit.rules import UnusedToolResultRule
+
+    store = InMemoryTraceStore()
+    _record(store, "ok", ["tool_result", "respond", "tool_result", "respond"])
+    rule = UnusedToolResultRule("tool_result", "respond")
+    assert AnomalyDetector(store).detect_anomalies([rule]) == []
+
+
+def test_unused_tool_result_rule_validates_args():
+    from dprovenancekit.rules import UnusedToolResultRule
+
+    with pytest.raises(ValueError):
+        UnusedToolResultRule("", "respond")
+    with pytest.raises(ValueError):
+        UnusedToolResultRule("tool_result", "")
+
+
+def test_build_rule_constructs_unused_tool_result():
+    from dprovenancekit.rules import UnusedToolResultRule
+
+    rule = build_rule(
+        {
+            "type": "unused_tool_result",
+            "step": "tool_result",
+            "required_followup_step": "reasoning_or_response",
+        }
+    )
+    assert isinstance(rule, UnusedToolResultRule)
+    assert rule.name == "unused_tool_result:tool_result"
+
+
+def test_build_rule_carries_id_severity_and_message_onto_anomaly():
+    store = InMemoryTraceStore()
+    dropped = _record(store, "dropped", ["plan", "act"])  # missing safety_check
+
+    rule = build_rule(
+        {
+            "id": "agent.safety",
+            "type": "tool_drop",
+            "required_step": "safety_check",
+            "severity": "error",
+            "message": "safety check skipped",
+        }
+    )
+    assert rule.name == "agent.safety"  # id used as the name
+    assert rule.severity == "error"
+
+    (anomaly,) = AnomalyDetector(store).detect_anomalies([rule])
+    assert anomaly.run_id == dropped
+    assert anomaly.severity == "error"
+    assert anomaly.message == "safety check skipped"
+
+
+def test_build_rule_defaults_severity_when_absent():
+    rule = build_rule({"type": "looping", "step": "x", "max_repeats": 2})
+    assert rule.severity == "warning"
+    assert rule.message is None
+
+
+def test_bundled_agent_preset_loads_and_fires_on_normalized_events():
+    # The shipped preset must load and its rules must fire against the vendor-neutral
+    # event names it targets (tool_call.start/.end, llm_call.start — what OTel ingestion
+    # normalizes traces to). Uses synthetic events so it holds regardless of which
+    # branch produces those names.
+    import json
+    from importlib.resources import files
+
+    config = json.loads(
+        files("dprovenancekit").joinpath("rulesets/agent.json").read_text(encoding="utf-8")
+    )
+    rules = build_rules(config["rules"])
+    assert {r.name for r in rules} == {
+        "agent.runaway_tool_use",
+        "agent.unused_tool_result",
+    }
+
+    store = InMemoryTraceStore()
+    runaway = _record(store, "runaway", ["tool_call.start"] * 11)  # > 10 tool calls
+    unused = _record(store, "unused", ["tool_call.start", "tool_call.end"])  # no llm follow-up
+    healthy = _record(
+        store, "healthy", ["tool_call.start", "tool_call.end", "llm_call.start"]
+    )
+
+    anomalies = AnomalyDetector(store).detect_anomalies(rules)
+    flagged = {(a.run_id, a.rule_name) for a in anomalies}
+    assert (runaway, "agent.runaway_tool_use") in flagged
+    assert (unused, "agent.unused_tool_result") in flagged
+    assert healthy not in {a.run_id for a in anomalies}
+
+
 # ── registry (build_rule / build_rules) ──────────────────────────────────────────
 
 

@@ -115,7 +115,9 @@ dprovenancekit stability    # determinism boundary: isolated vs perturbed F1 var
 Both corpora score **Precision 1.000 / Recall 1.000 / F1 1.000** — 8 standard scenarios (reordering,
 semantic evolution, noise injection, branch collapse, …) and 5 adversarial robustness traps
 (dependency inversion, partial truncation, semantic substitution, …) — matching the Swift
-implementation case-for-case.
+implementation case-for-case. These are the project's own bundled validation vectors, held at
+parity with the Swift reference implementation: an internal regression/parity check, not an
+external benchmark or third-party evaluation.
 
 ---
 

@@ -286,8 +286,15 @@ def _run_anomalies(argv) -> int:
             if run is None:
                 print(f"error: run not found in {args.db}: {args.run}", file=sys.stderr)
                 return 2
+            # Mirror AnomalyDetector.detect_anomalies: the query is only a
+            # pre-filter; is_anomalous() is the refinement. Rules whose
+            # anomaly_query is a bare requiring_step() pre-filter
+            # (unused_tool_result, unregistered_tool) would otherwise
+            # false-positive on any run that merely contains the step.
             found = [
-                r.make_anomaly(run) for r in rules if r.anomaly_query.ast.evaluate(run)
+                r.make_anomaly(run)
+                for r in rules
+                if r.anomaly_query.ast.evaluate(run) and r.is_anomalous(run)
             ]
         else:
             found = AnomalyDetector(store).detect_anomalies(rules)

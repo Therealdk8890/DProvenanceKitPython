@@ -102,6 +102,60 @@ def test_anomalies_clean_run_text_output(db_and_rules, capsys):
     assert "No anomalies detected." in capsys.readouterr().out
 
 
+def test_scoped_run_applies_is_anomalous_refinement(tmp_path, capsys):
+    """Regression: ``anomalies --run <id>`` must apply ``is_anomalous()``, not just
+    the pre-filter query. ``unused_tool_result``'s ``anomaly_query`` is a bare
+    ``requiring_step()`` filter, so a run that contains web_search but *does* follow
+    it with summarize must NOT be flagged. (This is the exact path the GitHub Action
+    uses when it scopes anomaly rules to the candidate run.)"""
+    db = str(tmp_path / "u.sqlite")
+    store = SQLiteTraceStore(AnyTraceableEvent, db, start_writer=False)
+    ids = {
+        # web_search IS consumed by a later summarize -> passes the pre-filter but
+        # is NOT anomalous.
+        "consumed": _record(store, "consumed", ["web_search", "verify", "summarize"]),
+        # web_search never followed by summarize -> genuinely anomalous.
+        "dangling": _record(store, "dangling", ["web_search", "decide"]),
+    }
+    store.flush()
+    store._db.close()
+
+    rules = tmp_path / "rules.json"
+    rules.write_text(
+        json.dumps(
+            {
+                "rules": [
+                    {
+                        "type": "unused_tool_result",
+                        "step": "web_search",
+                        "required_followup_step": "summarize",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    # Consumed run: passes requiring_step() but is_anomalous() is False -> no anomaly.
+    code = main(
+        ["anomalies", "--db", db, "--rules", str(rules),
+         "--run", str(ids["consumed"]), "--json"]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert payload["count"] == 0
+
+    # Dangling run: the rule still fires when it genuinely should.
+    code = main(
+        ["anomalies", "--db", db, "--rules", str(rules),
+         "--run", str(ids["dangling"]), "--json"]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 1
+    assert payload["count"] == 1
+    assert payload["anomalies"][0]["rule"] == "unused_tool_result:web_search"
+
+
 def test_anomalies_bad_config_is_usage_error(db_and_rules, tmp_path, capsys):
     db, _, _ = db_and_rules
     bad = tmp_path / "bad.json"

@@ -47,6 +47,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Set
 
+from ..canonical import NATIVE_TYPE_ATTR, canonicalize_openai_agents
 from ..context import TraceContext
 from ..edge import TraceEdgeType
 from ..event import TraceableEvent
@@ -297,11 +298,13 @@ class DProvenanceTracingProcessor(_TracingProcessor):  # type: ignore[misc,valid
         schema_version: int = 1,
         capture_payloads: bool = True,
         link_lifecycle: bool = True,
+        canonical: bool = False,
     ) -> None:
         self._store = store
         self._schema_version = schema_version
         self._capture = capture_payloads
         self._link = link_lifecycle
+        self._canonical = canonical
         self._lock = threading.Lock()
         self._traces: Dict[str, _TraceState] = {}  # trace_id -> per-trace state
 
@@ -431,6 +434,11 @@ class DProvenanceTracingProcessor(_TracingProcessor):  # type: ignore[misc,valid
         span_id: Any,
         parent_id: Any,
     ) -> uuid.UUID:
+        if self._canonical:
+            canon = canonicalize_openai_agents(type_name)
+            if canon is not None:
+                attributes = {**attributes, NATIVE_TYPE_ATTR: type_name}
+                type_name = canon
         payload = OpenAIAgentsTraceEvent.make(type_name, priority, attributes)
         span = str(span_id) if span_id is not None else None
         parent = str(parent_id) if parent_id is not None else None
@@ -449,11 +457,18 @@ def register(
     schema_version: int = 1,
     capture_payloads: bool = True,
     link_lifecycle: bool = True,
+    canonical: bool = False,
 ) -> DProvenanceTracingProcessor:
     """Build a processor and register it with the Agents SDK (``add_trace_processor``).
 
     Requires ``openai-agents``. Returns the processor so callers can flush it or remove it
     later. Every trace produced while it is registered is recorded into ``store``.
+
+    Set ``canonical=True`` to record the vendor-neutral vocabulary
+    (:mod:`dprovenancekit.canonical`) — ``tool_call.*`` / ``llm_call.*`` /
+    ``agent_invocation.*`` in place of ``function.*`` / ``generation.*`` / ``agent.*`` —
+    so these runs diff against LangChain or OTel-ingested traces and the bundled
+    ``agent.json`` ruleset fires on them.
     """
     from agents import add_trace_processor  # requires openai-agents
 
@@ -462,6 +477,7 @@ def register(
         schema_version=schema_version,
         capture_payloads=capture_payloads,
         link_lifecycle=link_lifecycle,
+        canonical=canonical,
     )
     add_trace_processor(processor)
     return processor

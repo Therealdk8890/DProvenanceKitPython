@@ -320,6 +320,24 @@ each other. Run ids derive deterministically from OTel trace ids, so re-ingestin
 never duplicates runs. Zero new dependencies — the parser is stdlib-only, like the rest
 of the core. Python API: `dprovenancekit.otel_ingest.ingest_otlp`.
 
+### One vocabulary across integrations (`canonical=True`)
+
+The live LangChain and OpenAI Agents integrations emit framework-native event names by
+default (`toolStarted`, `function.start`, …). Pass `canonical=True` and they instead
+record the same **vendor-neutral vocabulary** OTel ingestion produces
+(`tool_call.*`, `llm_call.*`, `agent_invocation.*`), keeping the original name in a
+`native_type` attribute:
+
+```python
+register(store, canonical=True)                       # OpenAI Agents SDK
+DProvenanceTracer(store).trace("case-1", canonical=True)   # LangChain
+```
+
+Now a run recorded from OpenAI Agents diffs against the *same* agent recorded from
+LangChain, and the bundled [`agent.json`](dprovenancekit/rulesets/agent.json) ruleset
+(`dprovenancekit anomalies --rules agent`) fires on both. It's opt-in so existing golden
+baselines — keyed on the native names — are unaffected.
+
 ---
 
 ## Regression gate

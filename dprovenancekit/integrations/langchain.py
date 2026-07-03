@@ -45,6 +45,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence
 
+from ..canonical import NATIVE_TYPE_ATTR, canonicalize_langchain
 from ..context import TraceContext
 from ..edge import TraceEdgeType
 from ..event import TraceableEvent
@@ -249,6 +250,11 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
             parent→child). Turn off to record events without edges.
         record_chains: record chain (Runnable) start/end events. LCEL/LangGraph emit many
             of these; turn off to keep traces focused on models, tools, and retrievers.
+        canonical: record the vendor-neutral vocabulary (:mod:`dprovenancekit.canonical`)
+            — ``tool_call.*`` / ``llm_call.*`` / ``retrieval.*`` in place of
+            ``toolStarted`` / ``llmStarted`` / ``retrieverStarted`` — so these runs diff
+            against openai-agents or OTel-ingested traces and the bundled ``agent.json``
+            ruleset fires on them. Off by default (native names preserve existing goldens).
     """
 
     # Ask LangChain to dispatch us synchronously and in order, so per-run sequence
@@ -262,11 +268,13 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
         capture_payloads: bool = True,
         link_lifecycle: bool = True,
         record_chains: bool = True,
+        canonical: bool = False,
     ) -> None:
         self._run = active_run
         self._capture = capture_payloads
         self._link = link_lifecycle
         self._record_chains = record_chains
+        self._canonical = canonical
         # LangChain run_id (str) -> the trace event id recorded for that node's *start*.
         self._start_event: Dict[str, uuid.UUID] = {}
 
@@ -293,6 +301,11 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
         run_id: Any,
         parent_run_id: Any,
     ) -> uuid.UUID:
+        if self._canonical:
+            canon = canonicalize_langchain(type_name)
+            if canon is not None:
+                attributes = {**attributes, NATIVE_TYPE_ATTR: type_name}
+                type_name = canon
         payload = LangChainTraceEvent.make(type_name, priority, attributes)
         span = str(run_id) if run_id is not None else None
         parent = str(parent_run_id) if parent_run_id is not None else None
@@ -677,6 +690,7 @@ class DProvenanceTracer:
         capture_payloads: bool = True,
         link_lifecycle: bool = True,
         record_chains: bool = True,
+        canonical: bool = False,
     ) -> Iterator[DProvenanceCallbackHandler]:
         active = ActiveTraceRun(
             context_id=context_id,
@@ -689,6 +703,7 @@ class DProvenanceTracer:
             capture_payloads=capture_payloads,
             link_lifecycle=link_lifecycle,
             record_chains=record_chains,
+            canonical=canonical,
         )
         try:
             yield handler

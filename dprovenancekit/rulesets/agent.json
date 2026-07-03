@@ -1,8 +1,8 @@
 {
   "id": "agent.default",
   "name": "Default Agent Failure Rules",
-  "description": "Common agent-trace anomalies over DProvenanceKit's vendor-neutral event vocabulary. These are the names produced by `dprovenancekit ingest` (OTel/OTLP traces normalized to tool_call.*, llm_call.*, agent_invocation.*). Native integration traces (openai-agents `function.*`, LangChain `toolStarted`/`toolEnded`) emit different names — ingest them, or write a preset targeting those types. Rules whose signal needs data no emitter yet produces (a registered-tool list, a distinct tool-result-vs-reasoning event) are intentionally omitted until the emitters carry it.",
-  "version": "0.2.0",
+  "description": "Common agent-trace anomalies over DProvenanceKit's vendor-neutral event vocabulary (tool_call.*, llm_call.*, agent_invocation.*). These names are produced by `dprovenancekit ingest` (OTel/OTLP traces) and by the live integrations in canonical mode: openai-agents `register(store, canonical=True)`, LangChain `DProvenanceTracer.trace(..., canonical=True)`. Without canonical mode the integrations emit framework-native names (openai-agents `function.*`, LangChain `toolStarted`) that this preset won't match — enable canonical mode, ingest via OTel, or write a preset targeting the native types. Rules whose signal needs data no emitter yet produces (a registered-tool list, a distinct tool-result-vs-reasoning event) are intentionally omitted until the emitters carry it.",
+  "version": "0.3.0",
   "rules": [
     {
       "id": "agent.runaway_tool_use",

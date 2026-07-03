@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dprovenancekit"
 version = "0.6.0"
-description = "Reasoning observability and regression testing for AI systems — a Python port of DProvenanceKit."
+description = "Regression testing for AI agents — fail the PR when your agent skips a step, even when the answer still looks right."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "Apache-2.0" }

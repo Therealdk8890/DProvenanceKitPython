@@ -4,14 +4,20 @@
 [![PyPI](https://img.shields.io/pypi/v/dprovenancekit)](https://pypi.org/project/dprovenancekit/)
 [![Listed in the official OpenAI Agents SDK docs](https://img.shields.io/badge/OpenAI%20Agents%20SDK-listed%20in%20the%20official%20docs-412991)](https://github.com/openai/openai-agents-python/blob/main/docs/tracing.md#external-tracing-processors-list)
 
-**Regression testing and reasoning observability for AI agents — catch the run where your agent
-silently dropped a step, and fail the PR that caused it.**
+**A PR broke the agent. The final answer still looked fine. DProvenanceKit caught that it had
+silently skipped its verification step — and failed the PR before it merged.**
 
-When an agent's reasoning drifts between runs, DProvenanceKit turns each execution into a queryable,
-diffable trace so you can see *what changed and why* — not just *what happened*. It works with
-LangChain/LangGraph, the OpenAI Agents SDK, LlamaIndex, CrewAI, plain Python — or any
-OpenTelemetry-instrumented stack, via built-in OTLP trace ingestion — and the core has
-zero third-party dependencies.
+Your eval and snapshot tests pass because the *answer* didn't change; the *reasoning path* did.
+DProvenanceKit records every agent run as a diffable trace, compares each run against a known-good
+baseline, and fails CI when a step is dropped, a tool loops, or the execution path changes — the
+regressions output-level checks can't see. It works with LangChain/LangGraph, the OpenAI Agents SDK,
+LlamaIndex, CrewAI, plain Python — or any OpenTelemetry-instrumented stack, via built-in OTLP trace
+ingestion — and the core has zero third-party dependencies.
+
+**See the catch in ~150 runnable lines:**
+[`python examples/regression_testing.py`](examples/regression_testing.py) records a fact-checking
+agent (retrieve → verify → decide), then catches a later run that drops verification — flagged a
+**HIGH-severity regression (strength 0.95)** even though the final decision is byte-identical.
 
 > Run → Record → Query → Diff → Detect regressions → Gate in CI
 

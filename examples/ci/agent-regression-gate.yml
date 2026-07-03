@@ -102,10 +102,11 @@ jobs:
           echo "baseline-available=true" >> "$GITHUB_OUTPUT"
 
       # The gate itself. Runs only when a baseline was actually restored.
-      # Pinned to @v0.5.0 for reproducibility (it is a SUBFOLDER action).
+      # Canonical Marketplace ref; pin to @v1.1.1 (or a commit SHA) for stricter
+      # reproducibility. The in-repo copy is Therealdk8890/DProvenanceKitPython/action@main.
       - name: DProvenanceKit regression gate
         if: ${{ steps.restore.outputs.baseline-available == 'true' }}
-        uses: Therealdk8890/DProvenanceKitPython/action@v0.5.0
+        uses: Therealdk8890/dprovenancekit-action@v1
         with:
           # db-path is REQUIRED. It is the CANDIDATE db, because the anomaly
           # step reads ONLY db-path and resolves candidate-context against it.

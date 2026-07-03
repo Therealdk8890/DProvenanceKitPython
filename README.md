@@ -423,6 +423,15 @@ that context, so CI scripts never extract run UUIDs:
 dprovenancekit gate --db traces.sqlite --golden-context golden --candidate-context candidate
 ```
 
+Copy-paste CI setups live in [`examples/ci/`](examples/ci/): a cloud-sync
+[`github-workflow.yml`](examples/ci/github-workflow.yml), a zero-dependency
+**artifact-baseline** pair ([`record-baseline.yml`](examples/ci/record-baseline.yml) +
+[`agent-regression-gate.yml`](examples/ci/agent-regression-gate.yml)) with an
+[anomaly ruleset](examples/ci/dprov-rules.json), and a
+[GitLab template](examples/ci/gitlab-workflow.yml) — see the
+[examples/ci README](examples/ci/README.md) for the baseline-management and
+`db-path` routing notes.
+
 ---
 
 ## Example: regression testing

@@ -121,6 +121,12 @@ A context with no matching run fails the gate step loudly (exit 2) instead of si
 For explicit id selection, `dprovenancekit runs --db <db> [--context <id>] [--latest]
 [--format id | --json]` still lists or selects runs.
 
+For a complete, copy-paste setup — a `main` job that records and uploads the golden baseline as
+an artifact, plus a PR job that restores it and gates — see
+[`examples/ci/`](../examples/ci/) (`record-baseline.yml` + `agent-regression-gate.yml`). Note
+the `db-path` routing rule there: the anomaly step reads **only** `db-path`, so the candidate
+run must live in `db-path` (with the restored baseline in `golden-db`).
+
 ## Notes
 
 - **Fork PRs:** `GITHUB_TOKEN` is read-only on pull requests from forks, so the comment step

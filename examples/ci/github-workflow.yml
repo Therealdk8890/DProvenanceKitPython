@@ -31,7 +31,7 @@ jobs:
           pytest
 
       - name: DProvenanceKit Regression Gate
-        uses: Therealdk8890/DProvenanceKitPython/action@main
+        uses: Therealdk8890/dprovenancekit-action@v1
         with:
           db-path: traces.sqlite
           golden-run-id: "YOUR-GOLDEN-RUN-UUID-HERE"

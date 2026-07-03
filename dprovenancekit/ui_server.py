@@ -133,7 +133,7 @@ def create_handler(db_path: str):
                 from urllib.parse import parse_qs
                 from .testing import exact_equality_evaluator
                 from .alignment_engine import TraceAlignmentEngine
-                from .alignment_models import AlignmentConfiguration, AlignmentProfile
+                from .alignment_config import AlignmentConfiguration, AlignmentProfile
 
                 query_params = parse_qs(query_string)
                 golden_id_str = query_params.get("golden", [""])[0]

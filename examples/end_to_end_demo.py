@@ -22,8 +22,8 @@ import os
 import sys
 from dataclasses import dataclass
 
-# Run from a checkout without installing: make src/ importable.
-_SRC = os.path.join(os.path.dirname(__file__), "..", "src")
+# Run from a checkout without installing: make the repo root importable.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dprovenancekit import (  # noqa: E402
     AnomalyDetector,

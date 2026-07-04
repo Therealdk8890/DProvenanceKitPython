@@ -4,9 +4,9 @@
 [![PyPI](https://img.shields.io/pypi/v/dprovenancekit)](https://pypi.org/project/dprovenancekit/)
 [![Listed in the official OpenAI Agents SDK docs](https://img.shields.io/badge/OpenAI%20Agents%20SDK-listed%20in%20the%20official%20docs-412991)](https://github.com/openai/openai-agents-python/blob/main/docs/tracing.md#external-tracing-processors-list)
 
-**Your agent skips its verification step. The final answer still looks right, so every eval and
-snapshot test passes. DProvenanceKit — regression testing for AI agents — catches the skipped
-step and fails the PR that caused it.**
+**Your agent skipped its verification step. The final answer still looked right, so every eval and
+snapshot test passed. DProvenanceKit — regression testing for AI agents — caught the skipped
+step and failed the PR that caused it.**
 
 Output-level checks can't see this class of regression: the *answer* didn't change, the *reasoning
 path* did. DProvenanceKit records every agent run as a queryable, diffable trace, compares each run
@@ -19,7 +19,7 @@ has zero third-party dependencies.
 [`python examples/regression_testing.py`](examples/regression_testing.py) records a fact-checking
 agent (retrieve → verify → decide), then catches a later run that drops verification — flagged as a
 HIGH-severity regression even though the final decision is byte-identical. Run it and the output
-shows `claimVerified removed` at strength 0.95.
+reads `regression: HIGH  (strength 0.95)` with `claimVerified` marked `removed`.
 
 > Run → Record → Query → Diff → Detect regressions → Gate in CI
 
@@ -40,8 +40,8 @@ shows `claimVerified removed` at strength 0.95.
 - **Out-of-the-box anomaly rules** — Tool Drop and Looping detection with a JSON rule registry, runnable locally or on every PR.
 - **A hosted visualizer** — a web dashboard (single-run span tree, JSON payload inspector, side-by-side structural diff, shareable HTML reports) backed by a regression-gate API and multi-tenant control plane. Available as a separate commercial service — see [dprovenance.dev](https://dprovenance.dev).
 
-See it all in one runnable script: [`python
-examples/end_to_end_demo.py`](examples/end_to_end_demo.py).
+Prefer the full tour? [`python examples/end_to_end_demo.py`](examples/end_to_end_demo.py)
+walks every feature.
 
 ---
 

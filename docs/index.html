@@ -4,18 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DProvenanceKit — Regression Testing &amp; CI Gates for AI Agents</title>
-<meta name="description" content="Open-source regression testing and CI gates for AI agents — record runs as diffable traces, diff against a golden baseline, fail the PR when reasoning drifts.">
+<meta name="description" content="Open-source regression testing for AI agents — diff runs against a golden baseline and fail the PR when a step is dropped, even when the answer looks right.">
 <link rel="canonical" href="https://dprovenance.dev/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="DProvenanceKit">
 <meta property="og:title" content="DProvenanceKit — Regression Testing &amp; CI Gates for AI Agents">
-<meta property="og:description" content="Catch the run where your agent silently dropped a step, and fail the PR that caused it. Open-source LLM tracing, trace diffing, and a CI regression gate.">
+<meta property="og:description" content="Your agent skipped a step. The answer still looked right. This build caught it. Open-source regression testing for AI agents — LLM tracing, trace diffing, and a CI gate that fails the offending PR.">
 <meta property="og:url" content="https://dprovenance.dev/">
 <meta property="og:image" content="https://raw.githubusercontent.com/Therealdk8890/DProvenanceKitPython/main/assets/demo.gif">
 <meta property="og:image:alt" content="Terminal demo: DProvenanceKit diffs two runs of a research agent and fails CI when the candidate drops its verify step and loops its search tool">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="DProvenanceKit — Regression Testing &amp; CI Gates for AI Agents">
-<meta name="twitter:description" content="Catch the run where your agent silently dropped a step, and fail the PR that caused it. Open-source LLM tracing, trace diffing, and a CI regression gate.">
+<meta name="twitter:description" content="Your agent skipped a step. The answer still looked right. This build caught it. Open-source regression testing for AI agents — LLM tracing, trace diffing, and a CI gate that fails the offending PR.">
 <meta name="twitter:image" content="https://raw.githubusercontent.com/Therealdk8890/DProvenanceKitPython/main/assets/demo.gif">
 <meta name="twitter:image:alt" content="Terminal demo: DProvenanceKit diffs two runs of a research agent and fails CI when the candidate drops its verify step and loops its search tool">
 <script type="application/ld+json">
@@ -23,7 +23,7 @@
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "DProvenanceKit",
-  "description": "Regression testing and reasoning observability for AI agents. Records each agent execution as a queryable, diffable trace, diffs a candidate run against a golden baseline, and fails CI when reasoning drifts.",
+  "description": "Regression testing for AI agents. Records each agent execution as a queryable, diffable trace, compares a candidate run against a golden baseline, and fails CI when a step is dropped, a tool loops, or the execution path changes.",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "Cross-platform",
   "url": "https://dprovenance.dev/",
@@ -228,8 +228,8 @@
       <button type="button" id="copy-btn" aria-label="Copy install command">copy</button>
       <span class="meta">Python 3.9+ · zero third-party deps in the core · Apache-2.0</span>
     </p>
-    <h1>Your agent silently dropped a step.<br><span class="fail">This build just caught it.</span></h1>
-    <p class="sub">DProvenanceKit is <strong>open source regression testing and reasoning observability for AI agents</strong>. Every run becomes a queryable, diffable trace, and CI fails when the reasoning drifts — a dropped tool call, a looping step, a changed execution path.</p>
+    <h1>Your agent skipped a step.<br>The answer still looked right.<br><span class="fail">This build caught it.</span></h1>
+    <p class="sub">DProvenanceKit is <strong>open-source regression testing for AI agents</strong>. It records every run as a diffable trace, compares each one against a known-good baseline, and fails CI when a step is dropped, a tool loops, or the execution path changes — the regressions your evals and snapshot tests miss because the final output didn't change.</p>
     <p class="sub" style="margin-top:-12px">Observability tools show you what happened. <strong>DProvenanceKit fails the PR that caused it.</strong> Think pytest for agent reasoning.</p>
     <p class="proof"><span class="ok" aria-hidden="true">✓</span> Listed in the official <a href="https://github.com/openai/openai-agents-python/blob/main/docs/tracing.md#external-tracing-processors-list">OpenAI Agents SDK docs</a> as an external tracing processor · <a href="https://dprovenance.dev/openai-agents/">integration guide</a></p>
     <p class="ctas">
@@ -451,7 +451,7 @@ trace.diff(<span class="st">"golden_run.sqlite"</span>)
         <ul>
           <li>Single-run span tree</li>
           <li>JSON payload inspector</li>
-          <li>Side-by-side semantic diff</li>
+          <li>Side-by-side structural diff</li>
           <li>Shareable HTML reports</li>
         </ul>
         <p class="ctas" style="margin-bottom:0">

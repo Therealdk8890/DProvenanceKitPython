@@ -4,20 +4,22 @@
 [![PyPI](https://img.shields.io/pypi/v/dprovenancekit)](https://pypi.org/project/dprovenancekit/)
 [![Listed in the official OpenAI Agents SDK docs](https://img.shields.io/badge/OpenAI%20Agents%20SDK-listed%20in%20the%20official%20docs-412991)](https://github.com/openai/openai-agents-python/blob/main/docs/tracing.md#external-tracing-processors-list)
 
-**A PR broke the agent. The final answer still looked fine. DProvenanceKit caught that it had
-silently skipped its verification step — and failed the PR before it merged.**
+**Your agent skips its verification step. The final answer still looks right, so every eval and
+snapshot test passes. DProvenanceKit — regression testing for AI agents — catches the skipped
+step and fails the PR that caused it.**
 
-Your eval and snapshot tests pass because the *answer* didn't change; the *reasoning path* did.
-DProvenanceKit records every agent run as a diffable trace, compares each run against a known-good
-baseline, and fails CI when a step is dropped, a tool loops, or the execution path changes — the
-regressions output-level checks can't see. It works with LangChain/LangGraph, the OpenAI Agents SDK,
-LlamaIndex, CrewAI, plain Python — or any OpenTelemetry-instrumented stack, via built-in OTLP trace
-ingestion — and the core has zero third-party dependencies.
+Output-level checks can't see this class of regression: the *answer* didn't change, the *reasoning
+path* did. DProvenanceKit records every agent run as a queryable, diffable trace, compares each run
+against a known-good baseline, and fails CI when a step is dropped, a tool loops, or the execution
+path changes. It works with LangChain/LangGraph, the OpenAI Agents SDK, LlamaIndex, CrewAI, plain
+Python — or any OpenTelemetry-instrumented stack, via built-in OTLP trace ingestion — and the core
+has zero third-party dependencies.
 
-**See the catch in ~150 runnable lines:**
+**See the catch in one runnable file:**
 [`python examples/regression_testing.py`](examples/regression_testing.py) records a fact-checking
-agent (retrieve → verify → decide), then catches a later run that drops verification — flagged a
-**HIGH-severity regression (strength 0.95)** even though the final decision is byte-identical.
+agent (retrieve → verify → decide), then catches a later run that drops verification — flagged as a
+HIGH-severity regression even though the final decision is byte-identical. Run it and the output
+shows `claimVerified removed` at strength 0.95.
 
 > Run → Record → Query → Diff → Detect regressions → Gate in CI
 
@@ -34,9 +36,9 @@ agent (retrieve → verify → decide), then catches a later run that drops veri
 
 **It's not just the library** — it ships the surfaces that make reasoning regressions actionable:
 
-- **Gate in CI** — a server-less `dprovenancekit gate` CLI, plus a drop-in [GitHub Action](action/README.md) ([on the GitHub Marketplace](https://github.com/marketplace/actions/dprovenancekit-regression-gate)) and [GitLab CI template](gitlab/README.md) that fail a PR/MR when an agent's reasoning drifts from a golden baseline, and comment the diff.
+- **Gate in CI** — a server-less `dprovenancekit gate` CLI, plus a drop-in [GitHub Action](action/README.md) ([on the GitHub Marketplace](https://github.com/marketplace/actions/dprovenancekit-regression-gate)) and [GitLab CI template](gitlab/README.md) that fail a PR/MR when a run structurally diverges from its golden baseline — a dropped, added, or reordered step — and comment the diff.
 - **Out-of-the-box anomaly rules** — Tool Drop and Looping detection with a JSON rule registry, runnable locally or on every PR.
-- **A hosted visualizer** — a web dashboard (single-run span tree, JSON payload inspector, side-by-side semantic diff, shareable HTML reports) backed by a regression-gate API and multi-tenant control plane. Available as a separate commercial service — see [dprovenance.dev](https://dprovenance.dev).
+- **A hosted visualizer** — a web dashboard (single-run span tree, JSON payload inspector, side-by-side structural diff, shareable HTML reports) backed by a regression-gate API and multi-tenant control plane. Available as a separate commercial service — see [dprovenance.dev](https://dprovenance.dev).
 
 See it all in one runnable script: [`python
 examples/end_to_end_demo.py`](examples/end_to_end_demo.py).
@@ -120,7 +122,9 @@ dprovenancekit stability    # determinism boundary: isolated vs perturbed F1 var
 Both corpora score **Precision 1.000 / Recall 1.000 / F1 1.000** — 8 standard scenarios (reordering,
 semantic evolution, noise injection, branch collapse, …) and 5 adversarial robustness traps
 (dependency inversion, partial truncation, semantic substitution, …) — matching the Swift
-implementation case-for-case.
+implementation case-for-case. These are the project's own bundled validation vectors, held at
+parity with the Swift reference implementation: an internal regression/parity check, not an
+external benchmark or third-party evaluation.
 
 ---
 
@@ -414,7 +418,7 @@ pytest                         # every run after gates against tests/goldens/res
 ```
 
 The baseline is a SQLite file you commit next to your tests; the fixture records the block as a
-candidate run and fails the test when its reasoning drifts. Configure the directory with the
+candidate run and fails the test when its execution diverges from the baseline. Configure the directory with the
 `dprov_golden_dir` ini option, pass gate options per test
 (`golden_trace("name", max_regression_level="high")`), and use the context manager's `.run` to
 wire a framework adapter inside the block.
@@ -428,6 +432,15 @@ that context, so CI scripts never extract run UUIDs:
 ```bash
 dprovenancekit gate --db traces.sqlite --golden-context golden --candidate-context candidate
 ```
+
+Copy-paste CI setups live in [`examples/ci/`](examples/ci/): a cloud-sync
+[`github-workflow.yml`](examples/ci/github-workflow.yml), a zero-dependency
+**artifact-baseline** pair ([`record-baseline.yml`](examples/ci/record-baseline.yml) +
+[`agent-regression-gate.yml`](examples/ci/agent-regression-gate.yml)) with an
+[anomaly ruleset](examples/ci/dprov-rules.json), and a
+[GitLab template](examples/ci/gitlab-workflow.yml) — see the
+[examples/ci README](examples/ci/README.md) for the baseline-management and
+`db-path` routing notes.
 
 ---
 
@@ -485,13 +498,13 @@ fingerprint / diff / align / the regression gate all apply.
 python -m pytest
 ```
 
-284 tests: 80 ported from the Swift suite (query parity, write-buffer backpressure, SQLite stress +
-drop accounting, alignment, replay, snapshot diff, explainability fidelity, benchmark scoring, …),
-28 cross-language conformance checks against the frozen Trace Specification v1 vectors, 14 LangChain
-integration tests, 16 OpenAI Agents SDK integration tests, 16 instrumentation-layer tests, 13
-regression-gate tests, facade tests, ecosystem integration tests (FastAPI, Jupyter, MCP, CrewAI),
-visualizer tests, and the regression-testing example run as a self-asserting test. (The
-real-framework tests run only when the integrations are installed, otherwise skipped.)
+380+ tests. A default run (core plus whichever adapters you have installed) is ~380; CI's full
+matrix is higher. Coverage spans Swift-parity tests ported from the original suite, cross-language
+conformance checks against the frozen Trace Specification v1 vectors, per-adapter integration tests
+(LangChain, OpenAI Agents SDK, LlamaIndex, CrewAI), instrumentation-layer tests, regression-gate
+tests, facade and visualizer tests, ecosystem integration tests (FastAPI, Jupyter, MCP), and the
+regression-testing example run as a self-asserting test. (Real-framework tests run only when the
+integrations are installed, otherwise skipped.)
 
 ---
 

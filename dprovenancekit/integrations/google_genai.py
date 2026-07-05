@@ -11,6 +11,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, Mapping, Optional
 
+from ..context import TraceContext
 from ..edge import TraceEdgeType
 from ..event import TraceableEvent
 from ..kit import ActiveTraceRun
@@ -96,23 +97,36 @@ class _ModelsWrapper:
         self.link_lifecycle = link_lifecycle
 
     def generate_content(self, *args, **kwargs):
-        start_span = uuid.uuid4()
         model_name = kwargs.get("model") or (args[0] if args else "unknown")
-
-        # Capture Start
-        start_event = GoogleGenAITraceEvent.make(
-            type_name="generateContentStarted",
-            priority=TracePriority.STRUCTURAL,
-            attributes={"model": model_name},
-        )
-        self.trace_run.append(
-            event=start_event, engine_name="google_genai", span_id=start_span
-        )
-
+        # Start and end of one generate_content call share a single span so the
+        # pair reads as one node in the span tree. `record()` reads the span from
+        # the contextvar (there is no span_id kwarg), so set it for the call.
+        call_span = str(uuid.uuid4())
+        span_token = TraceContext.current_span_id.set(call_span)
         try:
-            response = self._models_client.generate_content(*args, **kwargs)
+            # Capture Start
+            start_event = GoogleGenAITraceEvent.make(
+                type_name="generateContentStarted",
+                priority=TracePriority.STRUCTURAL,
+                attributes={"model": model_name},
+            )
+            start_id = self.trace_run.record(start_event, "google_genai")
 
-            end_span = uuid.uuid4()
+            try:
+                response = self._models_client.generate_content(*args, **kwargs)
+            except Exception as e:
+                err_event = GoogleGenAITraceEvent.make(
+                    type_name="generateContentError",
+                    priority=TracePriority.STRUCTURAL,
+                    attributes={"error": str(e)},
+                )
+                err_id = self.trace_run.record(err_event, "google_genai")
+                if self.link_lifecycle:
+                    self.trace_run.link(
+                        start_id, err_id, TraceEdgeType.DERIVED_FROM
+                    )
+                raise
+
             end_event = GoogleGenAITraceEvent.make(
                 type_name="generateContentEnded",
                 priority=TracePriority.STRUCTURAL,
@@ -123,24 +137,10 @@ class _ModelsWrapper:
                     ),
                 },
             )
-            self.trace_run.append(
-                event=end_event, engine_name="google_genai", span_id=end_span
-            )
+            end_id = self.trace_run.record(end_event, "google_genai")
             if self.link_lifecycle:
-                self.trace_run.link(end_span, start_span, TraceEdgeType.DERIVED_FROM)
+                self.trace_run.link(start_id, end_id, TraceEdgeType.DERIVED_FROM)
 
             return response
-
-        except Exception as e:
-            err_span = uuid.uuid4()
-            err_event = GoogleGenAITraceEvent.make(
-                type_name="generateContentError",
-                priority=TracePriority.STRUCTURAL,
-                attributes={"error": str(e)},
-            )
-            self.trace_run.append(
-                event=err_event, engine_name="google_genai", span_id=err_span
-            )
-            if self.link_lifecycle:
-                self.trace_run.link(err_span, start_span, TraceEdgeType.DERIVED_FROM)
-            raise e
+        finally:
+            TraceContext.current_span_id.reset(span_token)

@@ -227,7 +227,6 @@ except _PackageNotFoundError:
 
 
 __all__ = [
-    "annotations",
     "TracePriority",
     "TraceableEvent",
     "TraceEvent",

@@ -316,7 +316,7 @@ trace.diff(<span class="st">"golden_run.sqlite"</span>)
       <div class="term">
         <div class="term-bar">
           <span class="dot r" aria-hidden="true"></span><span class="dot y" aria-hidden="true"></span><span class="dot g" aria-hidden="true"></span>
-          <span class="term-title">research-agent · golden vs candidate · dprovenancekit 0.4.0</span>
+          <span class="term-title">research-agent · golden vs candidate · dprovenancekit</span>
           <span class="term-badge ok">real output</span>
         </div>
         <pre class="term-body" aria-label="Terminal transcript: the regression gate diffs a golden and a candidate run, reports that verify.claims was removed and search.web was repeated, and exits with code 1."><span class="t-dollar">$</span> <span class="t-cmd">dprovenancekit gate</span> <span class="t-flag">--db</span> traces.sqlite <span class="t-faint">\</span>
@@ -332,7 +332,7 @@ trace.diff(<span class="st">"golden_run.sqlite"</span>)
 
 <span class="t-dollar">$</span> <span class="t-cmd">echo $?</span>
 <span class="t-red">1</span></pre>
-        <div class="term-note">Verbatim real output — captured from <code>dprovenancekit gate</code> (v0.4.0) run against two actually-recorded traces; the fingerprints are the real hashes.</div>
+        <div class="term-note">Verbatim real output — captured from <code>dprovenancekit gate</code> run against two actually-recorded traces; the fingerprints are the real hashes.</div>
       </div>
       <p class="lede" style="margin-top:22px">The non-zero exit code is the point: this command drops into any pipeline as a hard gate — the <a href="https://dprovenance.dev/guides/ci-gate-for-llm-agents/">CI gate guide</a> covers GitHub Actions and GitLab wiring end to end. And for invariants that should hold on <em>every</em> run, not just against a baseline, two anomaly rules ship out of the box — <strong>Tool Drop</strong> (a required step never ran) and <strong>Looping</strong> (a step repeated past a threshold) — configured through a JSON rule registry:</p>
       <div class="code">
@@ -445,15 +445,15 @@ store = InMemoryTraceStore()
         <pre><span class="t-dollar">$ </span>pip install dprovenancekit</pre>
       </div>
       <ul class="facts" style="margin-top:18px">
-        <li><strong>v0.4.0 on PyPI</strong> · Python 3.9+ · zero third-party dependencies in the core · Apache-2.0.</li>
-        <li><strong>Validated:</strong> 284 tests; precision / recall / F1 of 1.000 across 8 standard + 5 adversarial regression-detection scenarios (<code>dprovenancekit evaluate</code>), matching the original Swift implementation case-for-case.</li>
+        <li><strong>v0.6.0 on PyPI</strong> · Python 3.9+ · zero third-party dependencies in the core · Apache-2.0.</li>
+        <li><strong>Validated:</strong> 380+ tests; precision / recall / F1 of 1.000 across 8 standard + 5 adversarial regression-detection scenarios (<code>dprovenancekit evaluate</code>), matching the original Swift implementation case-for-case.</li>
         <li><strong>CI-ready:</strong> a <a href="https://github.com/marketplace/actions/dprovenancekit-regression-gate">GitHub Action</a> on the Marketplace and a GitLab CI template in the repo.</li>
       </ul>
       <p class="ctas">
         <a class="btn primary" href="https://dprovenance.dev/guides/ci-gate-for-llm-agents/">Next: wire it into CI →</a>
         <a class="btn" href="https://github.com/Therealdk8890/DProvenanceKitPython">View on GitHub</a>
       </p>
-      <p class="caption">The SDK, CLI, and Action are free and open source. A hosted trace visualizer (span tree, payload inspector, side-by-side semantic diff) is in early access at <a href="https://app.dprovenance.dev">app.dprovenance.dev</a>.</p>
+      <p class="caption">The SDK, CLI, and Action are free and open source. A hosted trace visualizer (span tree, payload inspector, side-by-side structural diff) is in early access at <a href="https://app.dprovenance.dev">app.dprovenance.dev</a>.</p>
     </div>
   </section>
 </main>

@@ -232,7 +232,7 @@
       <div class="term">
         <div class="term-bar">
           <span class="dot r" aria-hidden="true"></span><span class="dot y" aria-hidden="true"></span><span class="dot g" aria-hidden="true"></span>
-          <span class="term-title">research-agent · golden vs candidate · dprovenancekit 0.4.0</span>
+          <span class="term-title">research-agent · golden vs candidate · dprovenancekit</span>
           <span class="term-badge ok">real output</span>
         </div>
         <pre class="term-body" aria-label="Terminal transcript: the dprovenancekit gate command diffs a candidate run against a golden run, reports that verify.claims was removed and search.web was repeated, and exits with code 1."><span class="t-dollar">$</span> <span class="t-cmd">dprovenancekit gate</span> <span class="t-flag">--db</span> traces.sqlite <span class="t-faint">\</span>
@@ -248,7 +248,7 @@
 
 <span class="t-dollar">$</span> <span class="t-cmd">echo $?</span>
 <span class="t-red">1</span></pre>
-        <div class="term-note">Verbatim <strong>real output</strong> — captured from <code>dprovenancekit gate</code> (v0.4.0) run against two actually-recorded traces; the fingerprints are the real hashes. An animated replay of the same catch runs on <a href="https://dprovenance.dev/#demo">the homepage</a>.</div>
+        <div class="term-note">Verbatim <strong>real output</strong> — captured from <code>dprovenancekit gate</code> run against two actually-recorded traces; the fingerprints are the real hashes. An animated replay of the same catch runs on <a href="https://dprovenance.dev/#demo">the homepage</a>.</div>
       </div>
       <p class="caption">The fingerprint line is a cheap first signal: a run fingerprint is a structural identity of the execution path, so a reordered tool, a skipped retrieval step, or a dropped verify step each change it. The per-step diff and the engine's severity assessment explain <em>why</em> it changed.</p>
     </div>

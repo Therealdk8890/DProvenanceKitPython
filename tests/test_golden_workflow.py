@@ -195,30 +195,36 @@ AGENT_DROPPED_STEP = """
 """
 
 
+def _run_pytest(pytester, *args):
+    return pytester.runpytest(
+        "-o", "asyncio_default_fixture_loop_scope=function", *args
+    )
+
+
 def test_golden_trace_record_then_gate(pytester):
     pytester.makepyfile(AGENT_OK)
 
     # 1. Record the baseline.
-    result = pytester.runpytest("--dprov-update-golden")
+    result = _run_pytest(pytester, "--dprov-update-golden")
     result.assert_outcomes(passed=1)
     result.stdout.fnmatch_lines(["*golden baseline*commit this file*"])
     golden = pytester.path / "tests" / "goldens" / "demo-agent.sqlite"
     assert golden.exists()
 
     # 2. An identical run gates clean.
-    result = pytester.runpytest()
+    result = _run_pytest(pytester)
     result.assert_outcomes(passed=1)
 
     # 3. The agent silently drops its verify step -> the gate fails the test.
     pytester.makepyfile(AGENT_DROPPED_STEP)
-    result = pytester.runpytest()
+    result = _run_pytest(pytester)
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(["*RegressionError*"])
 
 
 def test_golden_trace_missing_baseline_fails_with_instructions(pytester):
     pytester.makepyfile(AGENT_OK)
-    result = pytester.runpytest()
+    result = _run_pytest(pytester)
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(["*no golden baseline*", "*--dprov-update-golden*"])
 
@@ -227,15 +233,15 @@ def test_golden_trace_update_rerecords(pytester):
     # Pin the dropped-step variant first, then update to the full agent: the
     # re-recorded baseline must gate the full agent clean.
     pytester.makepyfile(AGENT_DROPPED_STEP)
-    result = pytester.runpytest("--dprov-update-golden")
+    result = _run_pytest(pytester, "--dprov-update-golden")
     result.assert_outcomes(passed=1)
     result.stdout.fnmatch_lines(["*golden baseline*commit this file*"])
 
     pytester.makepyfile(AGENT_OK)
-    result = pytester.runpytest("--dprov-update-golden")
+    result = _run_pytest(pytester, "--dprov-update-golden")
     result.assert_outcomes(passed=1)
     result.stdout.fnmatch_lines(["*golden baseline*commit this file*"])
-    result = pytester.runpytest()
+    result = _run_pytest(pytester)
     result.assert_outcomes(passed=1)
 
 
@@ -247,7 +253,7 @@ def test_golden_trace_custom_dir_via_ini(pytester):
         """
     )
     pytester.makepyfile(AGENT_OK)
-    result = pytester.runpytest("--dprov-update-golden")
+    result = _run_pytest(pytester, "--dprov-update-golden")
     result.assert_outcomes(passed=1)
     result.stdout.fnmatch_lines(["*golden baseline*commit this file*"])
     assert (pytester.path / "snapshots" / "demo-agent.sqlite").exists()
@@ -261,7 +267,7 @@ def test_golden_trace_block_exception_propagates(pytester):
                 raise RuntimeError("agent crashed")
         """
     )
-    result = pytester.runpytest("--dprov-update-golden")
+    result = _run_pytest(pytester, "--dprov-update-golden")
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(["*agent crashed*"])
 
@@ -284,16 +290,16 @@ def test_golden_trace_update_crash_preserves_baseline(pytester):
     # A crashing --dprov-update-golden run must NOT replace the committed baseline
     # with a partial trace.
     pytester.makepyfile(AGENT_OK)
-    result = pytester.runpytest("--dprov-update-golden")
+    result = _run_pytest(pytester, "--dprov-update-golden")
     result.assert_outcomes(passed=1)
 
     pytester.makepyfile(AGENT_CRASHES)
-    result = pytester.runpytest("--dprov-update-golden")
+    result = _run_pytest(pytester, "--dprov-update-golden")
     result.assert_outcomes(failed=1)
 
     # The original baseline still gates the original agent clean.
     pytester.makepyfile(AGENT_OK)
-    result = pytester.runpytest()
+    result = _run_pytest(pytester)
     result.assert_outcomes(passed=1)
 
 
@@ -311,7 +317,7 @@ def test_golden_trace_name_collision_fails_loudly(pytester):
                 record_event("step.b", {})
         """
     )
-    result = pytester.runpytest("--dprov-update-golden")
+    result = _run_pytest(pytester, "--dprov-update-golden")
     result.assert_outcomes(passed=1, failed=1)
     result.stdout.fnmatch_lines(
         ["*name collision*'shared'*", "*unique per test session*"]
@@ -334,12 +340,12 @@ def test_golden_trace_sanitized_names_stay_distinct(pytester):
                 record_event("step.colon", {})
         """
     )
-    result = pytester.runpytest("--dprov-update-golden")
+    result = _run_pytest(pytester, "--dprov-update-golden")
     result.assert_outcomes(passed=2)
     goldens = sorted(p.name for p in (pytester.path / "tests" / "goldens").iterdir())
     assert len(goldens) == 2, goldens
 
-    result = pytester.runpytest()
+    result = _run_pytest(pytester)
     result.assert_outcomes(passed=2)
 
 
@@ -348,6 +354,6 @@ def test_golden_trace_corrupt_baseline_fails_actionably(pytester):
     baseline = pytester.path / "tests" / "goldens" / "demo-agent.sqlite"
     baseline.parent.mkdir(parents=True)
     baseline.write_text("this is not a sqlite database")
-    result = pytester.runpytest()
+    result = _run_pytest(pytester)
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(["*could not open trace db*", "*--dprov-update-golden*"])

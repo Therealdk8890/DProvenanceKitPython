@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=77.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,8 @@ version = "0.6.0"
 description = "Regression testing for AI agents — fail the PR when your agent skips a step, even when the answer still looks right."
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "DProvenanceKit" }]
 keywords = ["observability", "ai", "agents", "tracing", "provenance", "regression"]
 classifiers = [
@@ -22,7 +23,6 @@ classifiers = [
     "Topic :: Software Development :: Debuggers",
     "Topic :: Software Development :: Quality Assurance",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Typing :: Typed",
 ]
@@ -66,6 +66,10 @@ dprovenancekit = ["py.typed", "index.html", "rulesets/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]
 
 [tool.setuptools.packages.find]
 include = ["dprovenancekit*"]

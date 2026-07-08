@@ -555,14 +555,16 @@ def _run_sync(argv) -> int:
     import sys
 
     try:
-        from .sync_client import CloudSyncClient
+        # The sync client is the hosted/premium connector, shipped in the separate
+        # `dprovenancekit-cloud` distribution — not in this open-source package.
+        from dprovenancekit_cloud.sync_client import CloudSyncClient
     except ImportError:
         print(
             "dprovenancekit sync requires the hosted DProvenance service client,\n"
             "which is not part of the open-source package. Everything else —\n"
             "recording, diffing, and the CI gate — works fully offline without it.\n"
-            "For the hosted dashboard and cloud sync (early access), see\n"
-            "https://dprovenance.dev",
+            "Install the connector with `pip install dprovenancekit-cloud` (early\n"
+            "access); for the hosted dashboard and cloud sync, see https://dprovenance.dev",
             file=sys.stderr,
         )
         return 2

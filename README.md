@@ -309,7 +309,7 @@ from dprovenancekit.integrations.crewai import (
 )
 
 store = SQLiteTraceStore(CrewAITraceEvent, "traces.sqlite")
-DProvenanceKitEventListener(store)          # registers on crewai's event bus
+listener = DProvenanceKitEventListener(store)  # registers on crewai's event bus
 
 researcher = Agent(
     role="Researcher",
@@ -324,7 +324,7 @@ task = Task(
 crew = Crew(agents=[researcher], tasks=[task])
 
 crew.kickoff()                              # recorded: crew / task / agent / tool / llm events
-store.flush()                              # make the run durable before the process exits
+listener.force_flush()                    # drain crewai's event bus and persist the run
 ```
 
 Each kickoff becomes one diffable run — `crew.start`/`.end`, `task.*`, `agent.*`,
@@ -512,4 +512,3 @@ integrations are installed, otherwise skipped.)
 ## License
 
 Distributed under the **Apache License 2.0**. See [LICENSE](LICENSE).
-

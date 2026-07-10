@@ -162,11 +162,11 @@
 )
 
 store = SQLiteTraceStore(CrewAITraceEvent, <span class="st">"traces.sqlite"</span>)
-DProvenanceKitEventListener(store)   <span class="cm"># registers on crewai's event bus</span>
+listener = DProvenanceKitEventListener(store) <span class="cm"># registers on crewai's event bus</span>
 
 <span class="cm"># ... build your agents / tasks / crew as usual ...</span>
 crew.kickoff()                       <span class="cm"># recorded: crew / task / agent / tool / llm events</span>
-store.flush()                        <span class="cm"># make the run durable before the process exits</span></pre>
+listener.force_flush()               <span class="cm"># drain crewai's event bus and persist the run</span></pre>
       </div>
       <p class="caption">Full reference: <a href="https://github.com/Therealdk8890/DProvenanceKitPython#crewai">the CrewAI section of the README</a>.</p>
     </div>

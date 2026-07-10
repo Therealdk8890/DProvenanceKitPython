@@ -47,7 +47,7 @@ instantiating it once is enough to record every subsequent ``crew.kickoff()``::
     listener = DProvenanceKitEventListener(store)   # registers on crewai_event_bus
 
     # ... build and run your crew normally; each kickoff is recorded ...
-    store.flush()
+    listener.force_flush()
 
 Only *constructing* the listener needs ``crewai`` installed
 (``pip install dprovenancekit[crewai]``). The translation logic imports nothing from
@@ -743,7 +743,23 @@ class DProvenanceKitEventListener(_BaseEventListener):  # type: ignore[misc,vali
         return state.run_id if state is not None else None
 
     def force_flush(self) -> None:
-        """Flush the backing store (durably persist everything recorded so far)."""
+        """Wait for CrewAI's event bus, then durably flush the backing store.
+
+        CrewAI dispatches handlers on a thread pool. In current releases the final
+        ``CrewKickoffCompletedEvent`` is emitted after ``Crew.kickoff()`` performs its
+        own bus flush, so it may still be in flight when ``kickoff()`` returns. Draining
+        the bus here ensures the trailing ``crew.end`` event reaches this listener before
+        the store is made durable.
+        """
+        if _HAS_CREWAI:
+            try:
+                from crewai.events import crewai_event_bus
+
+                flush_bus = getattr(crewai_event_bus, "flush", None)
+                if callable(flush_bus):
+                    flush_bus()
+            except Exception:  # noqa: BLE001 - upstream flush is best-effort
+                pass
         try:
             self._store.flush()
         except Exception:  # noqa: BLE001 - flush is best-effort

@@ -560,7 +560,7 @@ def test_real_crew_kickoff_records_a_run(monkeypatch, tmp_path):
     from dprovenancekit.testing import run_fingerprint
 
     store = SQLiteTraceStore(CrewAITraceEvent, str(tmp_path / "traces.sqlite"))
-    DProvenanceKitEventListener(store)  # registers on the global bus (kept alive by it)
+    listener = DProvenanceKitEventListener(store)
 
     llm = LLM(model="gpt-4o")
     researcher = Agent(
@@ -578,7 +578,7 @@ def test_real_crew_kickoff_records_a_run(monkeypatch, tmp_path):
     crew = Crew(agents=[researcher], tasks=[task], name="research-crew", verbose=False)
 
     crew.kickoff()
-    store.flush()
+    listener.force_flush()
 
     runs = store.query_runs(TraceQueryDSL())
     assert len(runs) == 1

@@ -21,6 +21,9 @@ public API may still change between minor versions.
   now sanitized.
 - **GitHub Action passes caller inputs via `env:`** instead of interpolating them into inline
   shell, removing a script-injection vector.
+- **The GitLab CI template no longer tracks `main`.** The remote `include:` and the `mr_note.py`
+  fetch are pinned to a release tag via a new `DPROV_REF` variable, so an upstream push can't change
+  what runs in a consumer's pipeline.
 
 ### Fixed
 
@@ -32,6 +35,12 @@ public API may still change between minor versions.
   before a query are visible (read-your-writes), removing a source of flaky gate failures.
 - **The `sync` CLI command and nonexistent-database paths** now report a clean error and exit `2`
   instead of raising a traceback or silently creating an empty database file.
+- **The write buffer's retry queue is now bounded.** Under a persistently failing writer (e.g. a
+  locked database) it previously grew without limit while reporting zero depth; it is now capped at
+  the configured capacity, sheds the oldest retried rows (counted as drops), and its backlog is
+  reflected in the buffer's depth signal.
+- **`SQLiteTraceStore.get_events` chunks its query,** so fetching a graph with more than ~999 nodes
+  no longer raises "too many SQL variables" on the older SQLite versions some LTS distros ship.
 
 ### Added
 
@@ -49,6 +58,12 @@ public API may still change between minor versions.
 
 ### Changed
 
+- **The public API (`__all__`) was curated from 178 symbols to 87.** Internal machinery (query
+  compiler/planner, write buffer, sqlite connection/writer, alignment-engine internals, benchmark
+  report types, verification invariants, Swift-port view/perturbation helpers) is no longer in the
+  curated surface. This is **non-breaking**: every one of those symbols is still importable via
+  `from dprovenancekit import X`; only `from dprovenancekit import *` and tooling's notion of the
+  public surface change.
 - **`UnusedToolResultRule` is parallel-safe:** it no longer false-positives when a framework emits
   multiple tool results before the next model call (parallel/fan-out tool use).
 - **The `google_genai` and `llama_index` adapters were hardened** to the standard of the other

@@ -1,9 +1,14 @@
 # DProvenanceKit regression gate for GitLab CI — parity with the GitHub Action.
 #
-# Include it in your .gitlab-ci.yml:
+# Include it in your .gitlab-ci.yml, PINNED to a release tag (never 'main' — a remote
+# include is fetched at pipeline time, so tracking a moving branch lets an upstream push
+# change what runs in your CI):
 #
 #   include:
-#     - remote: 'https://raw.githubusercontent.com/Therealdk8890/DProvenanceKitPython/main/gitlab/dprovenancekit.gitlab-ci.yml'
+#     - remote: 'https://raw.githubusercontent.com/Therealdk8890/DProvenanceKitPython/v0.6.0/gitlab/dprovenancekit.gitlab-ci.yml'
+#
+# Set DPROV_REF (below) to the same tag so the helper script is fetched from the pinned
+# revision too. Keep both on the tag matching your installed dprovenancekit version.
 #
 # Then set (as CI/CD variables or job variables):
 #   DPROV_DB              path to the SQLite trace database holding both runs
@@ -15,6 +20,8 @@
 #   DPROV_ALLOW_DIVERGENT true|false             (default: false)
 #   DPROV_FAIL_ON_REGRESSION true|false          (default: true)
 #   DPROV_INSTALL_SPEC    pip requirement        (default: dprovenancekit)
+#   DPROV_REF             repo tag to fetch mr_note.py from (default: v0.6.0; pin to the
+#                         release matching your installed dprovenancekit — never 'main')
 #   DPROV_GITLAB_TOKEN    token with 'api' scope to post the MR note (CI_JOB_TOKEN cannot)
 
 dprovenancekit-gate:
@@ -26,9 +33,10 @@ dprovenancekit-gate:
     DPROV_ALLOW_DIVERGENT: "false"
     DPROV_FAIL_ON_REGRESSION: "true"
     DPROV_INSTALL_SPEC: "dprovenancekit"
+    DPROV_REF: "v0.6.0"
   script:
     - python -m pip install --disable-pip-version-check "$DPROV_INSTALL_SPEC"
-    - curl -sSfL "https://raw.githubusercontent.com/Therealdk8890/DProvenanceKitPython/main/gitlab/mr_note.py" -o mr_note.py
+    - curl -sSfL "https://raw.githubusercontent.com/Therealdk8890/DProvenanceKitPython/${DPROV_REF}/gitlab/mr_note.py" -o mr_note.py
     - |
       GOLDEN_DB="${DPROV_GOLDEN_DB:-$DPROV_DB}"
       CANDIDATE_DB="${DPROV_CANDIDATE_DB:-$DPROV_DB}"

@@ -769,8 +769,6 @@ def _emit_forest_events(
         span, closing = stack.pop()
         kind = _classify(span)
         include = kind is not None or include_unclassified
-        if not include:
-            continue
         step = kind or UNCLASSIFIED
         engine = _engine_for(span, step) if kind is not None else (span.name or step)
         priority = (
@@ -782,8 +780,12 @@ def _emit_forest_events(
         if span.span_id in visited:
             continue  # cycle / re-entry guard
         visited.add(span.span_id)
-        _emit_start(span, step, engine, priority)
-        stack.append((span, True))
+        # An excluded span (e.g. an auto-instrumented HTTP root wrapping GenAI work)
+        # emits nothing itself, but its children must still be traversed — otherwise
+        # every GenAI subtree under a non-GenAI parent is silently dropped.
+        if include:
+            _emit_start(span, step, engine, priority)
+            stack.append((span, True))
         for child in reversed(span.children):
             stack.append((child, False))
 

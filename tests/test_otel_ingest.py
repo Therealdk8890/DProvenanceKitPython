@@ -600,3 +600,35 @@ def test_event_payload_roundtrips_via_any_traceable_event():
     decoded = AnyTraceableEvent.decode(payload.encode())
     assert decoded.type_identifier == "tool_call.end"
     assert decoded.priority == TracePriority.STRUCTURAL
+
+
+def test_genai_subtree_under_non_genai_root_is_kept():
+    """The standard auto-instrumented topology: an HTTP root span wrapping GenAI
+    work. The root itself is unclassified (and excluded by default), but its GenAI
+    descendants must still ingest rather than vanish with the excluded subtree."""
+    http_root = _span(
+        "a100000000000001", "POST /chat", 1_000, 9_000, attrs={"http.method": "POST"}
+    )
+    llm_child = _span(
+        "a100000000000002",
+        "openai.chat",
+        2_000,
+        8_000,
+        parent="a100000000000001",
+        attrs={"gen_ai.system": "openai", "gen_ai.usage.prompt_tokens": 10},
+    )
+    tool_grandchild = _span(
+        "a100000000000003",
+        "execute_tool lookup",
+        3_000,
+        4_000,
+        parent="a100000000000002",
+    )
+    store = InMemoryTraceStore()
+    (run,) = ingest_otlp(_request([http_root, llm_child, tool_grandchild]), store)
+    assert _signatures(store, run.run_id) == [
+        "llm_call.start::openai",
+        "tool_call.start::lookup",
+        "tool_call.end::lookup",
+        "llm_call.end::openai",
+    ]

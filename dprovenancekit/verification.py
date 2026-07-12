@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, cast
 
 from .alignment_evidence import (
     AlignmentEvidence,
@@ -105,14 +105,17 @@ class CausalOrderingInvariant:
             for s in m.interpretations
             if s.base_sequence is not None and s.comparison_sequence is not None
         ]
-        matched.sort(key=lambda s: s.base_sequence)
+        # Both sequence fields are non-None by the filter above; cast makes that guarantee
+        # explicit to the type checker (the fields are Optional on InterpretationStep).
+        matched.sort(key=lambda s: cast(int, s.base_sequence))
         if len(matched) < 2:
             return 1.0
 
+        comp_seqs = [cast(int, s.comparison_sequence) for s in matched]
         out_of_order = set()
         for i in range(len(matched)):
             for j in range(i + 1, len(matched)):
-                if matched[i].comparison_sequence > matched[j].comparison_sequence:
+                if comp_seqs[i] > comp_seqs[j]:
                     out_of_order.add(i)
                     out_of_order.add(j)
 

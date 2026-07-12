@@ -345,9 +345,9 @@ class TraceQueryCompiler:
             return CompiledSQLQuery(sql, bindings)
 
         if isinstance(node, NotNode):
-            compiled = TraceQueryCompiler._compile_node(node.node)
+            inner = TraceQueryCompiler._compile_node(node.node)
             return CompiledSQLQuery(
-                f"SELECT run_id FROM runs EXCEPT\n{compiled.sql}", compiled.bindings
+                f"SELECT run_id FROM runs EXCEPT\n{inner.sql}", inner.bindings
             )
 
         if isinstance(node, ContextIDEquals):

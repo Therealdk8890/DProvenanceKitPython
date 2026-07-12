@@ -322,6 +322,7 @@ def render_trace_html(graph: TraceGraph, title: str = "Visual Debugger") -> str:
     js_nodes = {}
     for n in nodes_list:
         payload = n.payload
+        payload_dict: object
         try:
             payload_dict = payload.to_dict()
         except AttributeError:

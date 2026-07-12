@@ -5,10 +5,15 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from .alignment_meta import AlignmentMetaEvent
 from .event import TraceEvent
+
+if TYPE_CHECKING:
+    # Imported only for typing to avoid a runtime import cycle; the attribute is populated
+    # by the engine (alignment_engine.py) with a real VerificationArtifacts instance.
+    from .alignment_evidence import VerificationArtifacts
 
 #: A normalized heuristic score in 0.0-1.0 — algorithmic match strength, not a probability.
 AlignmentStrength = float
@@ -268,7 +273,7 @@ class TraceAlignmentResult:
     engine_version: str
     alignments: List[EventAlignment]
     regression_risk: RegressionRisk
-    verification_artifacts: Optional["object"] = None  # VerificationArtifacts
+    verification_artifacts: Optional["VerificationArtifacts"] = None
 
     def render_models(self):
         from .alignment_render import render_models as _render

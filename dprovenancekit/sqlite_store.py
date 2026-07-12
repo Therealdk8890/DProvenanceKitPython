@@ -29,6 +29,11 @@ from .write_buffer import TraceWriteBuffer
 
 logger = logging.getLogger(__name__)
 
+# SQLite's compile-time limit on bound parameters per statement is 999 before 3.32
+# (raised to 32766 after). Chunk multi-id ``IN`` clauses below the conservative floor so
+# large graphs work on the older library versions still shipped by some LTS distros.
+_SQLITE_MAX_VARIABLES = 900
+
 
 class SQLiteConnection:
     """Thread-safe wrapper over a single sqlite3 connection.
@@ -655,47 +660,52 @@ class SQLiteTraceStore(TraceStore):
             return {}
         self.flush()
         id_strings = [str(i) for i in ids]
-        placeholders = ", ".join("?" for _ in id_strings)
-        sql = (
-            "SELECT e.id, e.run_id, r.context_id, e.engine, e.span_id, e.parent_span_id, "
-            "e.payload, e.timestamp, e.sequence "
-            "FROM trace_events e JOIN runs r ON e.run_id = r.run_id "
-            f"WHERE e.id IN ({placeholders})"
-        )
         events: Dict[uuid.UUID, TraceEvent] = {}
-        for row in self._db.query(sql, tuple(id_strings)):
-            (
-                id_str,
-                run_id_str,
-                context_id,
-                engine,
-                span_id,
-                parent_span_id,
-                payload_data,
-                timestamp_us,
-                sequence,
-            ) = row
-            try:
-                event_id = uuid.UUID(id_str)
-                run_id = uuid.UUID(run_id_str)
-            except (ValueError, AttributeError):
-                continue
-            if engine is None:
-                continue
-            try:
-                payload = self._event_type.decode(bytes(payload_data))
-            except Exception:
-                continue
-            events[event_id] = TraceEvent(
-                id=event_id,
-                run_id=run_id,
-                context_id=context_id,
-                engine_name=engine,
-                schema_version=1,
-                sequence=int(sequence),
-                span_id=span_id,
-                parent_span_id=parent_span_id,
-                payload=payload,
-                timestamp=float(timestamp_us) / 1_000_000.0,
+        # Chunk the IN clause: SQLite caps bound parameters per statement (999 before
+        # 3.32, on the older LTS distros this still ships on), so a graph with more
+        # nodes than that would raise "too many SQL variables".
+        for start in range(0, len(id_strings), _SQLITE_MAX_VARIABLES):
+            chunk = id_strings[start : start + _SQLITE_MAX_VARIABLES]
+            placeholders = ", ".join("?" for _ in chunk)
+            sql = (
+                "SELECT e.id, e.run_id, r.context_id, e.engine, e.span_id, e.parent_span_id, "
+                "e.payload, e.timestamp, e.sequence "
+                "FROM trace_events e JOIN runs r ON e.run_id = r.run_id "
+                f"WHERE e.id IN ({placeholders})"
             )
+            for row in self._db.query(sql, tuple(chunk)):
+                (
+                    id_str,
+                    run_id_str,
+                    context_id,
+                    engine,
+                    span_id,
+                    parent_span_id,
+                    payload_data,
+                    timestamp_us,
+                    sequence,
+                ) = row
+                try:
+                    event_id = uuid.UUID(id_str)
+                    run_id = uuid.UUID(run_id_str)
+                except (ValueError, AttributeError):
+                    continue
+                if engine is None:
+                    continue
+                try:
+                    payload = self._event_type.decode(bytes(payload_data))
+                except Exception:
+                    continue
+                events[event_id] = TraceEvent(
+                    id=event_id,
+                    run_id=run_id,
+                    context_id=context_id,
+                    engine_name=engine,
+                    schema_version=1,
+                    sequence=int(sequence),
+                    span_id=span_id,
+                    parent_span_id=parent_span_id,
+                    payload=payload,
+                    timestamp=float(timestamp_us) / 1_000_000.0,
+                )
         return events

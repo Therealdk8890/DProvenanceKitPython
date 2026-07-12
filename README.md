@@ -97,8 +97,13 @@ trace.explain()
 #   ✔ Finished Verify Claims
 # ✔ Finished Agent Workflow
 
-# 4. Catch regressions when the logic changes: rerun the (now buggy) workflow,
-#    then diff the current run against the saved golden baseline
+# 4. Later, the workflow regresses: a code change drops the verification step
+with trace("Agent Workflow"):
+    with trace("Retrieve Documents"):
+        pass
+    # "Verify Claims" never runs
+
+# 5. Diff the current run against the saved golden baseline
 trace.diff("golden_run.sqlite")
 # --- Trace Diff (Golden vs Current) ---
 # ❌ Missing step: Verify Claims

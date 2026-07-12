@@ -289,8 +289,13 @@ trace.explain()
 <span class="out">#   <span class="ok">✔</span> Finished Verify Claims</span>
 <span class="out"># <span class="ok">✔</span> Finished Agent Workflow</span>
 
-<span class="cm"># 4. Catch regressions when the logic changes: rerun the (now buggy) workflow,</span>
-<span class="cm">#    then diff the current run against the saved golden baseline</span>
+<span class="cm"># 4. Later, the workflow regresses: a code change drops the verification step</span>
+<span class="kw">with</span> trace(<span class="st">"Agent Workflow"</span>):
+    <span class="kw">with</span> trace(<span class="st">"Retrieve Documents"</span>):
+        <span class="kw">pass</span>
+    <span class="cm"># "Verify Claims" never runs</span>
+
+<span class="cm"># 5. Diff the current run against the saved golden baseline</span>
 trace.diff(<span class="st">"golden_run.sqlite"</span>)
 <span class="out"># --- Trace Diff (Golden vs Current) ---</span>
 <span class="er-band"><span class="er"># ❌ Missing step: Verify Claims</span></span></pre>

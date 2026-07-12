@@ -473,6 +473,9 @@ class SQLiteTraceStore(TraceStore):
         return self._buffer.drop_stats + self._drop_tally.snapshot
 
     def query_runs(self, dsl: TraceQueryDSL) -> List[TraceRun]:
+        """Run a query against the database. Flushes pending writes first so events
+        recorded moments ago are visible (read-your-writes)."""
+        self.flush()
         compiled = TraceQueryCompiler.compile(dsl.ast)
         rows = self._db.query(compiled.sql, tuple(compiled.bindings))
         run_ids = [r[0] for r in rows if r[0] is not None]

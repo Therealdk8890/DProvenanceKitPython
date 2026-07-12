@@ -29,6 +29,19 @@ _MARKER = "<!-- dprovenancekit-regression-gate -->"
 _CHANGE_ORDER = ("removed", "added", "reordered", "ambiguous")
 
 
+def _one_line(value):
+    """Collapse newlines/carriage returns so trace-derived text can't break out of a
+    markdown table row or inject extra lines into the note body. Mirrors the sanitizer
+    proven in ``action/run_anomalies.py`` (duplicated here to keep ``gitlab/`` standalone)."""
+    return str(value).replace("\r", " ").replace("\n", " ")
+
+
+def _cell(value):
+    """One-line, table-safe text for a markdown cell (escapes the column separator so a
+    hostile step identifier cannot open a new cell/row)."""
+    return _one_line(value).replace("|", "\\|")
+
+
 def render_note(report):
     """Render the gate report dict as a sticky MR-note markdown body (pure function)."""
     passed = bool(report.get("passed"))
@@ -51,13 +64,16 @@ def render_note(report):
     rows = [(kind, changes[kind]) for kind in _CHANGE_ORDER if changes.get(kind)]
     if rows:
         lines += ["", "| change | steps |", "| --- | --- |"]
-        lines += [f"| {kind} | {', '.join(steps)} |" for kind, steps in rows]
+        lines += [
+            f"| {kind} | {', '.join(_cell(step) for step in steps)} |"
+            for kind, steps in rows
+        ]
     else:
         lines.append("- No per-step changes (all exact matches).")
 
     reasoning = report.get("reasoning")
     if reasoning:
-        lines += ["", f"_{reasoning}_"]
+        lines += ["", f"_{_one_line(reasoning)}_"]
     return "\n".join(lines)
 
 

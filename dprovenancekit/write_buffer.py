@@ -102,7 +102,10 @@ class TraceWriteBuffer:
     @property
     def current_depth(self) -> int:
         with self._lock:
-            return self._total_count
+            # Include the retry backlog so the writer's load signal reflects a stalled
+            # (e.g. persistently locked) database rather than reading zero while the
+            # retry queue grows.
+            return self._total_count + len(self._retry_queue)
 
     @property
     def drop_stats(self) -> TraceDropStats:
@@ -254,7 +257,30 @@ class TraceWriteBuffer:
             return result
 
     def requeue(self, events: List[TraceEventRow], edges: List[TraceEdge]) -> None:
-        """Push a failed batch back to the absolute front of the line for the next drain."""
+        """Push a failed batch back to the absolute front of the line for the next drain.
+
+        Under a persistently failing writer (e.g. a locked database), the tiers keep
+        draining into the retry queue, so without a bound the retry queue would grow
+        without limit. Cap it at the configured global capacity, shedding the oldest
+        retried rows (and tallying them as drops) so memory stays bounded — matching the
+        bound the live tiers already enforce.
+        """
         with self._lock:
             self._retry_queue = events + self._retry_queue
             self._retry_edges = edges + self._retry_edges
+            self._enforce_retry_cap_locked()
+
+    def _enforce_retry_cap_locked(self) -> None:
+        cap = self._config.capacity.max_items
+        if cap >= _MAX_INT:
+            return  # explicitly unbounded config: retry backlog is unbounded by design
+        # The freshest failed batch is at the front (drained first); shed the oldest
+        # rows at the tail so the most recent work survives.
+        while len(self._retry_queue) > cap:
+            victim = self._retry_queue.pop()
+            try:
+                self._dropped_by_tier[TracePriority(victim.priority)] += 1
+            except ValueError:
+                self._dropped_by_tier[TracePriority.TELEMETRY] += 1
+        while len(self._retry_edges) > cap:
+            self._retry_edges.pop()

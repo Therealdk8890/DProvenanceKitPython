@@ -213,14 +213,14 @@ class TraceReplayEngine:
         reconstructed_spans = 0
         contaminated_spans = 0
 
-        stack = list(true_roots)
-        while stack:
-            node = stack.pop()
-            if node.span_id is not None:
+        span_stack = list(true_roots)
+        while span_stack:
+            span_node = span_stack.pop()
+            if span_node.span_id is not None:
                 reconstructed_spans += 1
-                if node.contains_quarantined_events:
+                if span_node.contains_quarantined_events:
                     contaminated_spans += 1
-            stack.extend(node.children)
+            span_stack.extend(span_node.children)
 
         manifest = ReplayManifest(
             total_events=len(valid_events),

@@ -96,7 +96,22 @@ def _run_gate(argv) -> int:
         "--max-level",
         default="none",
         choices=["none", "low", "medium", "high"],
-        help="worst severity that still passes (default: none = strict)",
+        help=(
+            "worst severity that still passes (default: none = strict). The engine "
+            "currently assigns only 'none' or 'high', so 'low' and 'medium' behave "
+            "like 'none' today"
+        ),
+    )
+    ap.add_argument(
+        "--profile",
+        default="strict_audit_v1",
+        choices=["strict_audit_v1", "developer_debug_v1"],
+        help=(
+            "alignment profile (default: strict_audit_v1). strict_audit_v1 aligns "
+            "linearly, so a pure reorder of the same steps reads as matching; use "
+            "the span-aware developer_debug_v1 to detect reordered steps (reordered "
+            "CRITICAL steps are a high-severity regression)"
+        ),
     )
     ap.add_argument(
         "--allow-divergent",
@@ -105,6 +120,13 @@ def _run_gate(argv) -> int:
     )
     ap.add_argument("--json", action="store_true", help="emit the report as JSON")
     args = ap.parse_args(argv)
+
+    if args.max_level in ("low", "medium"):
+        print(
+            f"warning: --max-level {args.max_level} currently behaves like 'none': "
+            "the alignment engine assigns only 'none' or 'high' severities.",
+            file=sys.stderr,
+        )
 
     if bool(args.golden) == bool(args.golden_context):
         print(
@@ -186,8 +208,12 @@ def _run_gate(argv) -> int:
     if not_found:
         print(f"error: run not found: {', '.join(not_found)}", file=sys.stderr)
         return 2
+    # Both are non-None here (each None appended to not_found above and returned). The
+    # assert makes that invariant explicit so the gate never receives a None run.
+    assert golden is not None and candidate is not None
 
     report = RegressionGate(
+        profile=getattr(AlignmentProfile, args.profile),
         max_regression_level=RegressionLevel(args.max_level),
         allow_divergent_steps=args.allow_divergent,
     ).check(golden, candidate)
@@ -229,6 +255,7 @@ def _run_anomalies(argv) -> int:
     """
     import argparse
     import json
+    import os
     import sqlite3
     import uuid
 
@@ -250,7 +277,6 @@ def _run_anomalies(argv) -> int:
     args = ap.parse_args(argv)
 
     try:
-        import os
         if not os.path.exists(args.rules):
             from importlib.resources import files
             try:
@@ -274,6 +300,12 @@ def _run_anomalies(argv) -> int:
         except ValueError:
             print("error: --run must be a valid run id (UUID)", file=sys.stderr)
             return 2
+
+    # sqlite3.connect() would silently CREATE an empty db from a typo'd path; guard first so
+    # this read-only command errors cleanly instead of leaving a stray empty file behind.
+    if not os.path.exists(args.db):
+        print(f"error: no such database: {args.db}", file=sys.stderr)
+        return 2
 
     try:
         store = SQLiteTraceStore(AnyTraceableEvent, args.db, start_writer=False)
@@ -311,6 +343,8 @@ def _run_anomalies(argv) -> int:
                             "rule": a.rule_name,
                             "run_id": str(a.run_id),
                             "description": a.description,
+                            "severity": a.severity,
+                            "message": a.message,
                         }
                         for a in found
                     ],
@@ -323,7 +357,10 @@ def _run_anomalies(argv) -> int:
     else:
         print(f"{len(found)} anomaly(ies) detected:")
         for anomaly in found:
-            print(f"  [{anomaly.rule_name}] {anomaly.description}")
+            line = f"  [{anomaly.rule_name}] {anomaly.severity}: {anomaly.description}"
+            if anomaly.message:
+                line += f" ({anomaly.message})"
+            print(line)
 
     return 1 if found else 0
 
@@ -341,6 +378,7 @@ def _run_runs(argv) -> int:
     """
     import argparse
     import json
+    import os
     import sqlite3
 
     from .event import AnyTraceableEvent
@@ -360,6 +398,12 @@ def _run_runs(argv) -> int:
         "--format", choices=["id"], help="print only run ids, one per line"
     )
     args = ap.parse_args(argv)
+
+    # sqlite3.connect() would silently CREATE an empty db from a typo'd path; guard first so
+    # this read-only command errors cleanly instead of leaving a stray empty file behind.
+    if not os.path.exists(args.db):
+        print(f"error: no such database: {args.db}", file=sys.stderr)
+        return 2
 
     try:
         store = SQLiteTraceStore(AnyTraceableEvent, args.db, start_writer=False)
@@ -558,6 +602,8 @@ def _run_ingest(argv) -> int:
 def _run_sync(argv) -> int:
     """``dprovenancekit sync`` — push/pull traces to/from the hosted DProvenance service."""
     import argparse
+    import os
+    import sqlite3
     import uuid
     import sys
 
@@ -593,7 +639,19 @@ def _run_sync(argv) -> int:
         print("error: --run must be a valid run id (UUID)", file=sys.stderr)
         return 2
 
-    store = SQLiteTraceStore(AnyTraceableEvent, args.db, start_writer=False)
+    # sqlite3.connect() would silently CREATE an empty db from a typo'd path; guard first so
+    # a bad --db errors cleanly instead of leaving a stray empty file behind.
+    if not os.path.exists(args.db):
+        print(f"error: no such database: {args.db}", file=sys.stderr)
+        return 2
+
+    # Mirror the sibling subcommands (runs/anomalies/gate): a bad --db path reports a clean
+    # exit-2 error instead of surfacing a raw sqlite3 traceback.
+    try:
+        store = SQLiteTraceStore(AnyTraceableEvent, args.db, start_writer=False)
+    except (sqlite3.Error, OSError) as exc:
+        print(f"error: could not open database {args.db}: {exc}", file=sys.stderr)
+        return 2
     client = CloudSyncClient()
 
     try:
@@ -628,6 +686,7 @@ def _run_export(argv) -> int:
     import sqlite3
     import uuid
     import sys
+    from typing import cast
 
     from .event import AnyTraceableEvent
     from .sqlite_store import SQLiteTraceStore
@@ -672,11 +731,15 @@ def _run_export(argv) -> int:
 
         if args.format == "jsonl":
             for event in sorted(run.events, key=lambda e: e.sequence):
+                # The export store is opened with AnyTraceableEvent, so every payload is an
+                # AnyTraceableEvent carrying the authoritative raw_json blob; cast so the
+                # type checker sees the attribute the base TraceableEvent doesn't declare.
+                payload = cast(AnyTraceableEvent, event.payload)
                 # Try to parse the raw JSON payload if possible, else use it as a string
                 try:
-                    payload_data = json.loads(event.payload.raw_json)
+                    payload_data = json.loads(payload.raw_json)
                 except Exception:
-                    payload_data = event.payload.raw_json
+                    payload_data = payload.raw_json
 
                 row = {
                     "schema_version": "dprov.export.v1",

@@ -226,6 +226,102 @@ def test_gate_across_separate_databases(tmp_path):
     assert fail == 1
 
 
+def test_gate_reorder_needs_span_aware_profile(trace_db, capsys):
+    """A pure reorder of CRITICAL steps passes the default (linear) profile but fails
+    under the span-aware developer_debug_v1 profile, with the reorder reported."""
+    db, ids = trace_db
+    # Same steps as the golden, but the two CRITICAL steps swapped.
+    store = SQLiteTraceStore(AnyTraceableEvent, db, start_writer=False)
+    swapped = _record(
+        store, "candidate-swapped", [GOLDEN_STEPS[0], GOLDEN_STEPS[2], GOLDEN_STEPS[1]]
+    )
+    store.flush()
+    store._db.close()
+
+    # Default profile (strict_audit_v1, linear): the reorder binds 1:1 and passes.
+    default = main(
+        [
+            "gate",
+            "--db",
+            db,
+            "--golden",
+            str(ids["golden"]),
+            "--candidate",
+            str(swapped),
+        ]
+    )
+    assert default == 0
+    capsys.readouterr()  # drain
+
+    # Span-aware profile: the reorder is detected and fails the gate.
+    code = main(
+        [
+            "gate",
+            "--db",
+            db,
+            "--golden",
+            str(ids["golden"]),
+            "--candidate",
+            str(swapped),
+            "--profile",
+            "developer_debug_v1",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 1
+    assert payload["passed"] is False
+    assert payload["regression_level"] == "high"
+    assert set(payload["steps_by_change"].get("reordered", [])) == {
+        "verified",
+        "decided",
+    }
+    assert "reordered" in payload["reasoning"]
+
+
+def test_gate_max_level_low_medium_warn_and_behave_like_none(trace_db, capsys):
+    """'low' and 'medium' are accepted (existing CI configs keep working) but warn on
+    stderr that they currently behave like 'none' — the engine assigns only NONE or HIGH."""
+    db, ids = trace_db
+    for level in ("low", "medium"):
+        code = main(
+            [
+                "gate",
+                "--db",
+                db,
+                "--golden",
+                str(ids["golden"]),
+                "--candidate",
+                str(ids["regressed"]),
+                "--max-level",
+                level,
+            ]
+        )
+        err = capsys.readouterr().err
+        # Behavior is unchanged: the HIGH regression still fails the gate.
+        assert code == 1
+        assert f"--max-level {level} currently behaves like 'none'" in err
+
+    # 'none' and 'high' stay silent.
+    code = main(
+        [
+            "gate",
+            "--db",
+            db,
+            "--golden",
+            str(ids["golden"]),
+            "--candidate",
+            str(ids["regressed"]),
+            "--max-level",
+            "high",
+        ]
+    )
+    err = capsys.readouterr().err
+    # Still fails (the removed step is a divergence), but without any warning.
+    assert code == 1
+    assert "behaves like 'none'" not in err
+
+
 def test_gate_requires_a_db_source(trace_db, capsys):
     _, ids = trace_db
     code = main(

@@ -22,6 +22,7 @@ import sqlite3
 import tempfile
 import uuid
 from pathlib import Path
+from typing import Dict, Tuple
 
 import pytest
 
@@ -61,7 +62,7 @@ _UNSAFE_NAME_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
 # Two golden_trace uses mapping to the same file would silently record
 # last-writer-wins baselines (and then gate one block against the other's run),
 # so any second claim fails loudly instead.
-_CLAIMED_BASELINES = pytest.StashKey()
+_CLAIMED_BASELINES: pytest.StashKey[Dict[Path, Tuple[str, str]]] = pytest.StashKey()
 
 
 class GoldenTrace:

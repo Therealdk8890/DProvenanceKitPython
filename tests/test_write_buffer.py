@@ -106,3 +106,60 @@ def test_global_eviction_is_counted():
     drained = buffer.flush_all()
     assert len(drained) + drops.total == cap + critical_count
     assert sum(1 for d in drained if d.type == "critical") == critical_count
+
+
+def test_requeue_is_bounded_and_counts_shed_rows():
+    """A persistently failing writer keeps draining the tiers into the retry queue via
+    requeue(); without a bound that queue would grow without limit. It must stay capped
+    at the configured global capacity, shedding the oldest retried rows and counting
+    them as drops."""
+    import sys
+
+    from dprovenancekit.config import BufferCapacity, EvictionPolicy, OfflineConfig
+
+    cap = 10
+    config = OfflineConfig(
+        capacity=BufferCapacity(
+            max_items=cap, max_bytes=sys.maxsize, max_event_size_bytes=sys.maxsize
+        ),
+        eviction=EvictionPolicy.DROP_OLDEST,
+    )
+    buffer = TraceWriteBuffer(config=config)
+
+    # Simulate the writer draining and re-queuing failed batches repeatedly, as it would
+    # against a locked database. Each round pushes a fresh failed row to the front.
+    total_requeued = 0
+    for seq in range(100):
+        buffer.requeue([_make_row("run", seq, TracePriority.STRUCTURAL)], [])
+        total_requeued += 1
+
+    # The retry backlog surfaces in current_depth (so the load signal isn't blind to it)
+    # and is bounded by the configured capacity.
+    assert buffer.current_depth <= cap
+    # Everything shed from the retry queue is accounted for as a drop.
+    drained = buffer.flush_all()
+    assert len(drained) + buffer.drop_stats.total == total_requeued
+    # The freshest rows survive: requeue prepends, so the last row enqueued is drained first.
+    assert drained[0].sequence == 99
+
+
+def test_requeue_unbounded_config_keeps_all_retries():
+    """When the buffer is explicitly configured unbounded, the retry backlog is unbounded
+    by design and nothing is shed."""
+    import sys
+
+    from dprovenancekit.config import BufferCapacity, EvictionPolicy, OfflineConfig
+
+    config = OfflineConfig(
+        capacity=BufferCapacity(
+            max_items=sys.maxsize,
+            max_bytes=sys.maxsize,
+            max_event_size_bytes=sys.maxsize,
+        ),
+        eviction=EvictionPolicy.DROP_OLDEST,
+    )
+    buffer = TraceWriteBuffer(config=config)
+    for seq in range(2000):
+        buffer.requeue([_make_row("run", seq, TracePriority.STRUCTURAL)], [])
+    assert buffer.drop_stats.total == 0
+    assert len(buffer.flush_all()) == 2000

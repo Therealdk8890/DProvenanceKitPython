@@ -100,7 +100,9 @@ class TraceAlignmentEngine:
         ]
         if removed_critical:
             critical_types = ", ".join(
-                a.base_event.payload.type_identifier for a in removed_critical
+                a.base_event.payload.type_identifier
+                for a in removed_critical
+                if a.base_event is not None
             )
             risk = RegressionRisk(
                 level=RegressionLevel.HIGH,
@@ -109,7 +111,9 @@ class TraceAlignmentEngine:
             )
         elif reordered_critical:
             reordered_types = ", ".join(
-                a.base_event.payload.type_identifier for a in reordered_critical
+                a.base_event.payload.type_identifier
+                for a in reordered_critical
+                if a.base_event is not None
             )
             risk = RegressionRisk(
                 level=RegressionLevel.HIGH,

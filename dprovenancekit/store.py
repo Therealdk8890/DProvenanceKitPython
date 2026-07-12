@@ -197,7 +197,7 @@ class InMemoryTraceStore(TraceStore):
                 if self._live_queue is None
                 else self._make_run_locked(event.run_id)
             )
-            if snapshot is not None:
+            if snapshot is not None and self._live_queue is not None:
                 self._live_queue.put((event, snapshot))
 
     def link(self, source: uuid.UUID, target: uuid.UUID, type: TraceEdgeType) -> None:

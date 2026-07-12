@@ -156,6 +156,81 @@ def test_scoped_run_applies_is_anomalous_refinement(tmp_path, capsys):
     assert payload["anomalies"][0]["rule"] == "unused_tool_result:web_search"
 
 
+def test_anomalies_json_includes_severity_and_message(tmp_path, capsys):
+    """The JSON output surfaces the presentation metadata build_rule carries onto each
+    anomaly: an explicit severity/message from the spec, and the defaults
+    (severity 'warning', message null) when the spec omits them."""
+    db = str(tmp_path / "s.sqlite")
+    store = SQLiteTraceStore(AnyTraceableEvent, db, start_writer=False)
+    bad = _record(store, "bad", ["plan"] + ["web_search"] * 6)
+    store.flush()
+    store._db.close()
+
+    rules = tmp_path / "rules.json"
+    rules.write_text(
+        json.dumps(
+            {
+                "rules": [
+                    {
+                        "type": "tool_drop",
+                        "required_step": "safety_check",
+                        "severity": "critical",
+                        "message": "Agent skipped the safety check.",
+                    },
+                    {"type": "looping", "step": "web_search", "max_repeats": 5},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    code = main(
+        ["anomalies", "--db", db, "--rules", str(rules), "--run", str(bad), "--json"]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 1
+    by_rule = {a["rule"]: a for a in payload["anomalies"]}
+    assert by_rule["tool_drop:safety_check"]["severity"] == "critical"
+    assert (
+        by_rule["tool_drop:safety_check"]["message"]
+        == "Agent skipped the safety check."
+    )
+    # Spec without severity/message keeps the defaults.
+    assert by_rule["looping:web_search"]["severity"] == "warning"
+    assert by_rule["looping:web_search"]["message"] is None
+
+
+def test_anomalies_text_includes_severity_and_message(tmp_path, capsys):
+    db = str(tmp_path / "s.sqlite")
+    store = SQLiteTraceStore(AnyTraceableEvent, db, start_writer=False)
+    bad = _record(store, "bad", ["plan", "act"])
+    store.flush()
+    store._db.close()
+
+    rules = tmp_path / "rules.json"
+    rules.write_text(
+        json.dumps(
+            {
+                "rules": [
+                    {
+                        "type": "tool_drop",
+                        "required_step": "safety_check",
+                        "severity": "critical",
+                        "message": "Agent skipped the safety check.",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    code = main(["anomalies", "--db", db, "--rules", str(rules), "--run", str(bad)])
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "[tool_drop:safety_check] critical:" in out
+    assert "(Agent skipped the safety check.)" in out
+
+
 def test_anomalies_bad_config_is_usage_error(db_and_rules, tmp_path, capsys):
     db, _, _ = db_and_rules
     bad = tmp_path / "bad.json"
@@ -198,3 +273,14 @@ def test_anomalies_bad_run_uuid_does_not_create_db_file(tmp_path, db_and_rules):
     assert code == 2
     # The bad-UUID error is reported before the store is opened, so no DB file is created.
     assert not fresh.exists()
+
+
+def test_anomalies_nonexistent_db_exits_2_without_creating_file(tmp_path, db_and_rules, capsys):
+    # A typo'd --db path (rules load fine) must error rather than have sqlite3.connect()
+    # create an empty database and report "No anomalies detected." with exit 0.
+    _, rules, _ = db_and_rules
+    missing = tmp_path / "typo.sqlite"
+    code = main(["anomalies", "--db", str(missing), "--rules", rules])
+    assert code == 2
+    assert "no such database" in capsys.readouterr().err
+    assert not missing.exists()  # guard must not leave a stray empty db

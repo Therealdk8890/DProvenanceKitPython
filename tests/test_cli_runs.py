@@ -94,3 +94,13 @@ def test_runs_unopenable_db_exits_2(tmp_path, capsys):
     code = main(["runs", "--db", str(tmp_path), "--format", "id"])  # a directory
     assert code == 2
     assert "could not open database" in capsys.readouterr().err
+
+
+def test_runs_nonexistent_db_exits_2_without_creating_file(tmp_path, capsys):
+    # A typo'd --db path must error (exit 2) rather than have sqlite3.connect() create an
+    # empty database and print "No runs found." with exit 0.
+    missing = tmp_path / "typo.sqlite"
+    code = main(["runs", "--db", str(missing), "--format", "id"])
+    assert code == 2
+    assert "no such database" in capsys.readouterr().err
+    assert not missing.exists()  # read-only command must not leave a stray empty db

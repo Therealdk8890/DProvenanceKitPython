@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable
+from typing import Callable, ClassVar
 
 from .alignment_contract import AlignmentExecutionContract
 
@@ -34,8 +34,16 @@ class AlignmentProfile:
     ambiguity_delta_threshold: float
     alignment_mode: AlignmentMode
 
+    # Predefined, canonical profiles. They are singleton instances of this class, so they
+    # cannot be given as inline class-body defaults (the class isn't defined yet); they are
+    # assigned just below the class body. Declared here as ClassVars purely so the type
+    # checker knows the attributes exist. ClassVar is excluded from dataclass fields, so this
+    # does not change the generated __init__ or any runtime behavior.
+    strict_audit_v1: ClassVar["AlignmentProfile"]
+    developer_debug_v1: ClassVar["AlignmentProfile"]
 
-AlignmentProfile.strict_audit_v1 = AlignmentProfile(  # type: ignore[attr-defined]
+
+AlignmentProfile.strict_audit_v1 = AlignmentProfile(
     strategy=AlignmentStrategy.STRICT_AUDIT,
     version=1,
     type_weight=0.5,
@@ -48,7 +56,7 @@ AlignmentProfile.strict_audit_v1 = AlignmentProfile(  # type: ignore[attr-define
     alignment_mode=AlignmentMode.LINEAR,
 )
 
-AlignmentProfile.developer_debug_v1 = AlignmentProfile(  # type: ignore[attr-defined]
+AlignmentProfile.developer_debug_v1 = AlignmentProfile(
     strategy=AlignmentStrategy.DEVELOPER_DEBUG,
     version=1,
     type_weight=0.4,

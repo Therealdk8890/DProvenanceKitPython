@@ -11,18 +11,50 @@ on:
   - cron: '0 6 * * 1'   # Mondays 06:00 UTC
   workflow_dispatch: {}
 jobs:
-  test:
-    name: pytest (Python ${{ matrix.python-version }})
+  # Ruff + mypy gate. Both already pass clean on the codebase, so this locks in that state
+  # and blocks regressions. mypy uses ignore_missing_imports (see [tool.mypy] in
+  # pyproject.toml), so the heavy framework extras are intentionally NOT installed here —
+  # the same shape under which the baseline was verified clean.
+  lint:
+    name: lint + type-check
     runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install lint/type tools and the package
+      run: |
+        python -m pip install --upgrade pip
+        pip install ruff mypy
+        pip install -e ".[dev]"
+    - name: Ruff (lint)
+      run: ruff check dprovenancekit/
+    - name: Mypy (type-check)
+      run: mypy dprovenancekit/
+
+  test:
+    name: pytest (Python ${{ matrix.python-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version:
         - '3.9'
         - '3.10'
         - '3.11'
         - '3.12'
         - '3.13'
+        # The threaded SQLite writer is only exercised on Linux above. macOS is POSIX-similar
+        # and the suite passes on Darwin, so add one macOS leg for cheap portability coverage.
+        # Windows is intentionally omitted: it can't be validated in this environment and its
+        # different filesystem/locking semantics may surface real failures that would block
+        # launch CI. TODO(follow-up): add a Windows leg once the writer is validated there.
+        include:
+        - os: macos-latest
+          python-version: '3.12'
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
@@ -34,7 +66,9 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     - name: Run tests
-      run: python -m pytest -q
+      # -rs surfaces skipped tests (e.g. importorskip-guarded integration tests) in the log
+      # so a silently-skipping suite is visible rather than looking fully green.
+      run: python -m pytest -rs
 
   # The default `test` job installs only `.[dev]` (which includes langchain-core, so the
   # LangChain integration tests run there). The OpenAI Agents, LlamaIndex, and CrewAI

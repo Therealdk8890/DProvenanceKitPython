@@ -89,7 +89,7 @@ class DProvenanceKit:
 
     @contextmanager
     def with_engine(self, name: str) -> Iterator[None]:
-        new_stack = list(TraceContext.engine_stack.get()) + [name]
+        new_stack = TraceContext.engine_stack.get() + (name,)
         token = TraceContext.engine_stack.set(new_stack)
         try:
             yield

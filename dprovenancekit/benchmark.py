@@ -439,7 +439,10 @@ class BenchmarkFailureDiagnoser:
     ) -> List[DiagnosedFailure]:
         diagnoses: List[DiagnosedFailure] = []
 
-        def comparison_sequences(for_type: str):
+        def comparison_sequences(for_type: Optional[str]):
+            # ``for_type`` comes from a finding's optional comp/base identifier. A None
+            # identifier matches no event's ``type_identifier`` (always a str), so the
+            # degenerate result is an empty set — the same value the loop already produces.
             result = set()
             for a in alignment_result.alignments:
                 comp = a.comparison_event
@@ -683,7 +686,15 @@ class BenchmarkRunner:
         reports = []
         for i in range(iterations):
             context = EnvironmentContext(boundary=boundary, iteration=i)
-            report = self.run(dataset, lambda cb, ctx=context: engine_factory(ctx, cb))
+
+            # Bind this iteration's context via a default argument so each factory closes
+            # over its own EnvironmentContext (a bare lambda would defeat mypy's inference).
+            def factory(
+                cb: Callable, ctx: EnvironmentContext = context
+            ) -> TraceAlignmentEngine:
+                return engine_factory(ctx, cb)
+
+            report = self.run(dataset, factory)
             reports.append(report)
         return BenchmarkStabilityReport(
             iterations=iterations, reports=reports, boundary=boundary
@@ -837,11 +848,11 @@ class BenchmarkRunner:
         if meta.kind == MetaEventKind.EVALUATED_PAIR:
             title = f"Evaluated Base:{meta.base_sequence} → Comp:{meta.comp_sequence}"
             detail = "Calculated heuristic alignment score."
-            category = AlignmentStrengthCategory.from_strength(meta.score)
+            category = AlignmentStrengthCategory.from_strength(meta.score or 0.0)
         elif meta.kind == MetaEventKind.AMBIGUITY_THRESHOLD_MET:
             title = "Ambiguity Threshold Exceeded"
             detail = f"Comparison event {meta.comp_sequence} hit ambiguity threshold."
-            category = AlignmentStrengthCategory.from_strength(meta.score)
+            category = AlignmentStrengthCategory.from_strength(meta.score or 0.0)
         elif meta.kind == MetaEventKind.CANDIDATE_EVICTED:
             title = f"Rejected Comp:{meta.comp_sequence}"
             detail = f"Reason: {meta.reason}"

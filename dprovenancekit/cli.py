@@ -186,6 +186,9 @@ def _run_gate(argv) -> int:
     if not_found:
         print(f"error: run not found: {', '.join(not_found)}", file=sys.stderr)
         return 2
+    # Both are non-None here (each None appended to not_found above and returned). The
+    # assert makes that invariant explicit so the gate never receives a None run.
+    assert golden is not None and candidate is not None
 
     report = RegressionGate(
         max_regression_level=RegressionLevel(args.max_level),
@@ -229,6 +232,7 @@ def _run_anomalies(argv) -> int:
     """
     import argparse
     import json
+    import os
     import sqlite3
     import uuid
 
@@ -250,7 +254,6 @@ def _run_anomalies(argv) -> int:
     args = ap.parse_args(argv)
 
     try:
-        import os
         if not os.path.exists(args.rules):
             from importlib.resources import files
             try:
@@ -274,6 +277,12 @@ def _run_anomalies(argv) -> int:
         except ValueError:
             print("error: --run must be a valid run id (UUID)", file=sys.stderr)
             return 2
+
+    # sqlite3.connect() would silently CREATE an empty db from a typo'd path; guard first so
+    # this read-only command errors cleanly instead of leaving a stray empty file behind.
+    if not os.path.exists(args.db):
+        print(f"error: no such database: {args.db}", file=sys.stderr)
+        return 2
 
     try:
         store = SQLiteTraceStore(AnyTraceableEvent, args.db, start_writer=False)
@@ -341,6 +350,7 @@ def _run_runs(argv) -> int:
     """
     import argparse
     import json
+    import os
     import sqlite3
 
     from .event import AnyTraceableEvent
@@ -360,6 +370,12 @@ def _run_runs(argv) -> int:
         "--format", choices=["id"], help="print only run ids, one per line"
     )
     args = ap.parse_args(argv)
+
+    # sqlite3.connect() would silently CREATE an empty db from a typo'd path; guard first so
+    # this read-only command errors cleanly instead of leaving a stray empty file behind.
+    if not os.path.exists(args.db):
+        print(f"error: no such database: {args.db}", file=sys.stderr)
+        return 2
 
     try:
         store = SQLiteTraceStore(AnyTraceableEvent, args.db, start_writer=False)
@@ -551,6 +567,8 @@ def _run_ingest(argv) -> int:
 def _run_sync(argv) -> int:
     """``dprovenancekit sync`` — push/pull traces to/from the hosted DProvenance service."""
     import argparse
+    import os
+    import sqlite3
     import uuid
     import sys
 
@@ -586,7 +604,19 @@ def _run_sync(argv) -> int:
         print("error: --run must be a valid run id (UUID)", file=sys.stderr)
         return 2
 
-    store = SQLiteTraceStore(AnyTraceableEvent, args.db, start_writer=False)
+    # sqlite3.connect() would silently CREATE an empty db from a typo'd path; guard first so
+    # a bad --db errors cleanly instead of leaving a stray empty file behind.
+    if not os.path.exists(args.db):
+        print(f"error: no such database: {args.db}", file=sys.stderr)
+        return 2
+
+    # Mirror the sibling subcommands (runs/anomalies/gate): a bad --db path reports a clean
+    # exit-2 error instead of surfacing a raw sqlite3 traceback.
+    try:
+        store = SQLiteTraceStore(AnyTraceableEvent, args.db, start_writer=False)
+    except (sqlite3.Error, OSError) as exc:
+        print(f"error: could not open database {args.db}: {exc}", file=sys.stderr)
+        return 2
     client = CloudSyncClient()
 
     try:
@@ -621,6 +651,7 @@ def _run_export(argv) -> int:
     import sqlite3
     import uuid
     import sys
+    from typing import cast
 
     from .event import AnyTraceableEvent
     from .sqlite_store import SQLiteTraceStore
@@ -665,11 +696,15 @@ def _run_export(argv) -> int:
 
         if args.format == "jsonl":
             for event in sorted(run.events, key=lambda e: e.sequence):
+                # The export store is opened with AnyTraceableEvent, so every payload is an
+                # AnyTraceableEvent carrying the authoritative raw_json blob; cast so the
+                # type checker sees the attribute the base TraceableEvent doesn't declare.
+                payload = cast(AnyTraceableEvent, event.payload)
                 # Try to parse the raw JSON payload if possible, else use it as a string
                 try:
-                    payload_data = json.loads(event.payload.raw_json)
+                    payload_data = json.loads(payload.raw_json)
                 except Exception:
-                    payload_data = event.payload.raw_json
+                    payload_data = payload.raw_json
 
                 row = {
                     "schema_version": "dprov.export.v1",

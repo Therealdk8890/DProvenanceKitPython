@@ -303,12 +303,14 @@ class _TraceFacade:
             by_run: Dict[uuid.UUID, List[TraceEvent]] = {}
             for event in events:
                 by_run.setdefault(event.run_id, []).append(event)
-            newest = max(by_run.values(), key=lambda evs: max(e.timestamp for e in evs))
-            newest.sort(key=lambda e: e.sequence)
+            newest_events = max(
+                by_run.values(), key=lambda evs: max(e.timestamp for e in evs)
+            )
+            newest_events.sort(key=lambda e: e.sequence)
             return TraceRun(
-                run_id=newest[0].run_id,
-                context_id=newest[0].context_id,
-                events=newest,
+                run_id=newest_events[0].run_id,
+                context_id=newest_events[0].context_id,
+                events=newest_events,
             )
         raise ValueError("Unsupported file extension. Use .jsonl or .sqlite")
 

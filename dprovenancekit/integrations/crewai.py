@@ -536,19 +536,19 @@ class DProvenanceKitEventListener(_BaseEventListener):  # type: ignore[misc,vali
                 state = self._open_run(key, source, event)
                 self._record(state, kind, "start", source, event)
                 return
-            state = self._runs.get(key) or self._active_run()
-            if state is None:
+            close_state = self._runs.get(key) or self._active_run()
+            if close_state is None:
                 return
-            self._record(state, kind, phase, source, event)
-            self._close_run(key, state)
+            self._record(close_state, kind, phase, source, event)
+            self._close_run(key, close_state)
             return
 
         # Sub-event (task / agent / tool / llm): the innermost open kickoff, or — for a
         # straggler that arrives just after its kickoff completed — the most recent run.
-        state = self._active_run()
-        if state is None:
+        sub_state = self._active_run()
+        if sub_state is None:
             return  # a sub-event with no run to attach to — soft no-op
-        self._record(state, kind, phase, source, event)
+        self._record(sub_state, kind, phase, source, event)
 
     def _active_run(self) -> Optional[_RunState]:
         if self._open_keys:

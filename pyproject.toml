@@ -64,6 +64,30 @@ Issues = "https://github.com/Therealdk8890/DProvenanceKitPython/issues"
 [tool.setuptools.package-data]
 dprovenancekit = ["py.typed", "index.html", "rulesets/*.json"]
 
+[tool.ruff]
+# Conservative, house-style-friendly gate. ruff already passes clean on this codebase, so
+# this locks in that state without a reformat. Line length matches the existing source.
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+# Conservative rule set that already passes clean on this codebase: pyflakes (F) catches
+# real bugs (undefined names, unused imports, bad f-strings), pycodestyle (E) covers core
+# style. Kept deliberately narrow so the gate is free today and can be widened later.
+select = ["E", "F"]
+# E501 (line length) is handled by the formatter's line-length above; leaving it off here
+# avoids churn on the handful of long docstring/URL lines the codebase already carries.
+ignore = ["E501"]
+
+[tool.mypy]
+# An honest, non-strict baseline gate: it type-checks the package and blocks regressions,
+# and can be tightened later. Framework adapters import optional third-party packages that
+# are not installed in the lint job, so missing imports are ignored rather than failing.
+# python_version is intentionally unset so mypy assumes the interpreter it runs under (the
+# CI job pins 3.12); the package itself still supports 3.9 per requires-python.
+ignore_missing_imports = true
+# Do NOT enable strict mode; untyped function bodies stay unchecked for now.
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"

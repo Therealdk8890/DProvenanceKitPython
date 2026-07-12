@@ -76,8 +76,12 @@ class LiveAnomalySubscription(TraceQuerySubscription):
         self.query_id = uuid.uuid4()
         self.rule = rule
 
+    # The base declares ``query`` as a plain (writeable) attribute for the common case
+    # where a subscription stores a fixed DSL; this subscription derives it from its rule,
+    # so it is exposed as a read-only property. mypy flags the property-over-attribute
+    # override even though it is a valid, more-specific implementation.
     @property
-    def query(self) -> TraceQueryDSL:
+    def query(self) -> TraceQueryDSL:  # type: ignore[override]
         return self.rule.anomaly_query
 
     def on_match(self, run: TraceRun) -> None:

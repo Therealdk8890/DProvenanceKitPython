@@ -198,3 +198,14 @@ def test_anomalies_bad_run_uuid_does_not_create_db_file(tmp_path, db_and_rules):
     assert code == 2
     # The bad-UUID error is reported before the store is opened, so no DB file is created.
     assert not fresh.exists()
+
+
+def test_anomalies_nonexistent_db_exits_2_without_creating_file(tmp_path, db_and_rules, capsys):
+    # A typo'd --db path (rules load fine) must error rather than have sqlite3.connect()
+    # create an empty database and report "No anomalies detected." with exit 0.
+    _, rules, _ = db_and_rules
+    missing = tmp_path / "typo.sqlite"
+    code = main(["anomalies", "--db", str(missing), "--rules", rules])
+    assert code == 2
+    assert "no such database" in capsys.readouterr().err
+    assert not missing.exists()  # guard must not leave a stray empty db

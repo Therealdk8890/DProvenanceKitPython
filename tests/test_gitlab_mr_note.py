@@ -69,6 +69,59 @@ def test_render_note_fail_lists_changes():
     assert "Critical reasoning steps removed" in md
 
 
+def test_render_note_escapes_pipe_in_step_identifier():
+    """A hostile trace-derived step identifier must not break out of its table cell."""
+    md = mr_note.render_note(
+        {
+            "passed": False,
+            "regression_level": "high",
+            "strength": 0.95,
+            "fingerprint_match": False,
+            "max_regression_level": "none",
+            "steps_by_change": {"removed": ["evil | ✅ **gate passed**"]},
+        }
+    )
+    row = next(ln for ln in md.splitlines() if ln.startswith("| removed |"))
+    assert "evil \\| ✅ **gate passed**" in row
+    assert "evil | ✅" not in md
+
+
+def test_render_note_collapses_newlines_in_reasoning_and_steps():
+    """Newlines in trace-derived text can't inject extra markdown lines/rows."""
+    md = mr_note.render_note(
+        {
+            "passed": False,
+            "regression_level": "high",
+            "strength": 0.95,
+            "fingerprint_match": False,
+            "max_regression_level": "none",
+            "steps_by_change": {"removed": ["a\n| forged | row |"]},
+            "reasoning": "benign\n| forged | reasoning |",
+        }
+    )
+    assert sum(1 for ln in md.splitlines() if ln.startswith("| removed")) == 1
+    assert not any(ln.startswith("| forged") for ln in md.splitlines())
+    reasoning_line = next(ln for ln in md.splitlines() if ln.startswith("_benign"))
+    assert reasoning_line == "_benign | forged | reasoning |_"
+
+
+def test_render_note_benign_output_unchanged():
+    """Golden output for clean input is unchanged by the sanitizer."""
+    md = mr_note.render_note(
+        {
+            "passed": False,
+            "regression_level": "high",
+            "strength": 0.95,
+            "fingerprint_match": False,
+            "max_regression_level": "none",
+            "steps_by_change": {"removed": ["verify", "reflect"]},
+            "reasoning": "Critical reasoning steps removed: verify",
+        }
+    )
+    assert "| removed | verify, reflect |" in md
+    assert "_Critical reasoning steps removed: verify_" in md
+
+
 # ── post_note (injected fake API) ────────────────────────────────────────────────
 
 

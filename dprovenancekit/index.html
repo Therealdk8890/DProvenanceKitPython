@@ -49,7 +49,19 @@
 
     <script>
         let allRuns = [];
-        
+
+        // Trace payloads carry LLM/tool inputs and outputs — attacker-influenced
+        // text. Every dynamic value interpolated into innerHTML must pass through
+        // here, or a prompt-injected agent run becomes XSS in the viewer.
+        function esc(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         async function fetchRuns() {
             try {
                 const response = await fetch('/api/runs');
@@ -72,10 +84,10 @@
                     const date = new Date(run.start_time * 1000).toLocaleString();
                     
                     li.innerHTML = `
-                        <div class="run-title">${run.context_id || 'Unknown Context'}</div>
+                        <div class="run-title">${esc(run.context_id || 'Unknown Context')}</div>
                         <div class="run-meta">
-                            ${date}<br>
-                            Events: ${run.event_count}
+                            ${esc(date)}<br>
+                            Events: ${esc(run.event_count)}
                         </div>
                     `;
                     listEl.appendChild(li);
@@ -95,52 +107,52 @@
             viewEl.innerHTML = '<div class="loading">Loading trace details...</div>';
             
             try {
-                const response = await fetch(`/api/runs/${runId}`);
+                const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`);
                 const run = await response.json();
                 
                 if (run.error) {
-                    viewEl.innerHTML = `<div class="loading" style="color: #ef4444;">${run.error}</div>`;
+                    viewEl.innerHTML = `<div class="loading" style="color: #ef4444;">${esc(run.error)}</div>`;
                     return;
                 }
-                
+
                 let compareOptions = `<option value="">None (Single Trace View)</option>`;
                 allRuns.forEach(r => {
                     if (r.run_id !== run.run_id) {
-                        compareOptions += `<option value="${r.run_id}">${r.context_id || r.run_id} (${new Date(r.start_time * 1000).toLocaleString()})</option>`;
+                        compareOptions += `<option value="${esc(r.run_id)}">${esc(r.context_id || r.run_id)} (${esc(new Date(r.start_time * 1000).toLocaleString())})</option>`;
                     }
                 });
-                
+
                 let html = `
                     <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                        <h2>Trace: ${run.context_id || 'Unknown'}</h2>
+                        <h2>Trace: ${esc(run.context_id || 'Unknown')}</h2>
                         <div>
                             <label style="font-size: 14px; font-weight: 500; margin-right: 8px;">Compare against baseline:</label>
-                            <select id="compare-select" style="padding: 6px; border-radius: 4px; border: 1px solid #d1d5db;" onchange="loadDiff('${run.run_id}', this.value)">
+                            <select id="compare-select" style="padding: 6px; border-radius: 4px; border: 1px solid #d1d5db;" onchange="loadDiff('${esc(run.run_id)}', this.value)">
                                 ${compareOptions}
                             </select>
                         </div>
                     </div>
                     <p class="run-meta" style="margin-bottom: 20px;">
-                        Run ID: ${run.run_id}<br>
-                        Fingerprint: ${run.fingerprint}
+                        Run ID: ${esc(run.run_id)}<br>
+                        Fingerprint: ${esc(run.fingerprint)}
                     </p>
                     <div class="event-list">
                 `;
-                
+
                 run.events.forEach((event, idx) => {
                     const payloadStr = JSON.stringify(event.payload, null, 2);
-                    const engineName = event.engine_name ? `<span class="badge">${event.engine_name}</span>` : '';
-                    
+                    const engineName = event.engine_name ? `<span class="badge">${esc(event.engine_name)}</span>` : '';
+
                     html += `
                         <div class="event-card">
                             <div class="event-header">
                                 <div>
-                                    <span class="event-type">#${event.sequence} ${event.payload.type_identifier}</span>
+                                    <span class="event-type">#${esc(event.sequence)} ${esc(event.payload.type_identifier)}</span>
                                     ${engineName}
                                 </div>
-                                <span class="event-time">${event.timestamp}</span>
+                                <span class="event-time">${esc(event.timestamp)}</span>
                             </div>
-                            <div class="event-payload">${payloadStr}</div>
+                            <div class="event-payload">${esc(payloadStr)}</div>
                         </div>
                     `;
                 });
@@ -164,38 +176,38 @@
             viewEl.innerHTML = '<div class="loading">Computing structural diff...</div>';
             
             try {
-                const response = await fetch(`/api/diff?golden=${goldenId}&candidate=${candidateId}`);
+                const response = await fetch(`/api/diff?golden=${encodeURIComponent(goldenId)}&candidate=${encodeURIComponent(candidateId)}`);
                 const result = await response.json();
                 
                 if (result.error) {
-                    viewEl.innerHTML = `<div class="loading" style="color: #ef4444;">${result.error}</div>`;
+                    viewEl.innerHTML = `<div class="loading" style="color: #ef4444;">${esc(result.error)}</div>`;
                     return;
                 }
-                
+
                 let goldenRun = allRuns.find(r => r.run_id === goldenId) || {context_id: goldenId};
                 let candidateRun = allRuns.find(r => r.run_id === candidateId) || {context_id: candidateId};
-                
+
                 let compareOptions = `<option value="">None (Single Trace View)</option>`;
                 allRuns.forEach(r => {
                     if (r.run_id !== candidateId) {
                         let selected = r.run_id === goldenId ? 'selected' : '';
-                        compareOptions += `<option value="${r.run_id}" ${selected}>${r.context_id || r.run_id} (${new Date(r.start_time * 1000).toLocaleString()})</option>`;
+                        compareOptions += `<option value="${esc(r.run_id)}" ${selected}>${esc(r.context_id || r.run_id)} (${esc(new Date(r.start_time * 1000).toLocaleString())})</option>`;
                     }
                 });
-                
+
                 let html = `
                     <div style="display: flex; justify-content: space-between; align-items: baseline;">
                         <h2>Unified Diff View</h2>
                         <div>
                             <label style="font-size: 14px; font-weight: 500; margin-right: 8px;">Baseline (Golden):</label>
-                            <select id="compare-select" style="padding: 6px; border-radius: 4px; border: 1px solid #d1d5db;" onchange="loadDiff('${candidateId}', this.value)">
+                            <select id="compare-select" style="padding: 6px; border-radius: 4px; border: 1px solid #d1d5db;" onchange="loadDiff('${esc(candidateId)}', this.value)">
                                 ${compareOptions}
                             </select>
                         </div>
                     </div>
                     <p class="run-meta" style="margin-bottom: 20px;">
-                        <strong>Candidate:</strong> ${candidateRun.context_id}<br>
-                        <strong>Golden:</strong> ${goldenRun.context_id}
+                        <strong>Candidate:</strong> ${esc(candidateRun.context_id)}<br>
+                        <strong>Golden:</strong> ${esc(goldenRun.context_id)}
                     </p>
                     <div class="event-list">
                 `;
@@ -214,16 +226,16 @@
                     if (!eventData) return;
                     
                     const payloadStr = JSON.stringify(eventData.data, null, 2);
-                    
+
                     html += `
                         <div class="${cardClass}">
                             <div class="event-header">
                                 <div>
-                                    <span class="event-type">#${eventData.sequence} ${eventData.type_identifier}</span>
-                                    <span class="badge" style="background: ${badgeColor}; border: 1px solid rgba(0,0,0,0.1);">${badgeLabel}</span>
+                                    <span class="event-type">#${esc(eventData.sequence)} ${esc(eventData.type_identifier)}</span>
+                                    <span class="badge" style="background: ${badgeColor}; border: 1px solid rgba(0,0,0,0.1);">${esc(badgeLabel)}</span>
                                 </div>
                             </div>
-                            <div class="event-payload">${payloadStr}</div>
+                            <div class="event-payload">${esc(payloadStr)}</div>
                         </div>
                     `;
                 });

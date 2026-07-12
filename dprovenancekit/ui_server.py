@@ -56,8 +56,10 @@ def create_handler(db_path: str):
         def serve_api_runs(self):
             try:
                 store = SQLiteTraceStore(AnyTraceableEvent, db_path, start_writer=False)
-                runs_meta = store.list_run_metadata()
-                store.close()
+                try:
+                    runs_meta = store.list_run_metadata()
+                finally:
+                    store.close()
 
                 runs_data = [
                     {
@@ -74,15 +76,17 @@ def create_handler(db_path: str):
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps(runs_data).encode("utf-8"))
-            except Exception as e:
-                self.send_error(500, f"Internal Server Error: {e}")
+            except Exception:
+                self._server_error()
 
         def serve_api_run(self, run_id_str):
             try:
                 run_id = uuid.UUID(run_id_str)
                 store = SQLiteTraceStore(AnyTraceableEvent, db_path, start_writer=False)
-                run = store.get_run(run_id)
-                store.close()
+                try:
+                    run = store.get_run(run_id)
+                finally:
+                    store.close()
 
                 if not run:
                     self.send_response(404)
@@ -125,8 +129,8 @@ def create_handler(db_path: str):
                 self.wfile.write(json.dumps(run_data, default=str).encode("utf-8"))
             except ValueError:
                 self.send_error(400, "Invalid run ID format")
-            except Exception as e:
-                self.send_error(500, f"Internal Server Error: {e}")
+            except Exception:
+                self._server_error()
 
         def serve_api_diff(self, query_string):
             try:
@@ -147,9 +151,11 @@ def create_handler(db_path: str):
                 candidate_id = uuid.UUID(candidate_id_str)
 
                 store = SQLiteTraceStore(AnyTraceableEvent, db_path, start_writer=False)
-                golden_run = store.get_run(golden_id)
-                candidate_run = store.get_run(candidate_id)
-                store.close()
+                try:
+                    golden_run = store.get_run(golden_id)
+                    candidate_run = store.get_run(candidate_id)
+                finally:
+                    store.close()
 
                 if not golden_run or not candidate_run:
                     self.send_error(404, "Run not found")
@@ -201,21 +207,34 @@ def create_handler(db_path: str):
                 )
             except ValueError:
                 self.send_error(400, "Invalid run ID format")
-            except Exception as e:
-                import traceback
+            except Exception:
+                self._server_error()
 
-                traceback.print_exc()
-                self.send_error(500, f"Internal Server Error: {e}")
+        def _server_error(self):
+            """500 without leaking exception detail to the client; the traceback
+            goes to the server's stderr instead."""
+            import traceback
+
+            traceback.print_exc()
+            self.send_error(500, "Internal Server Error")
 
     return UIHandler
 
 
-def run_ui_server(db_path: str, port: int = 8080):
+def create_server(db_path: str, port: int = 8080, host: str = "127.0.0.1"):
+    """Build the UI server bound to ``host`` (loopback by default: trace databases
+    hold prompts and outputs, so exposing them beyond the machine must be a
+    deliberate choice)."""
+    return ThreadingHTTPServer((host, port), create_handler(db_path))
+
+
+def run_ui_server(db_path: str, port: int = 8080, host: str = "127.0.0.1"):
+    server = create_server(db_path, port, host)
+    display_host = "localhost" if host == "127.0.0.1" else host
     print(
-        f"Starting DProvenanceKit UI at http://localhost:{port} (serving from {db_path})"
+        f"Starting DProvenanceKit UI at http://{display_host}:{port} "
+        f"(serving from {db_path})"
     )
-    handler = create_handler(db_path)
-    server = ThreadingHTTPServer(("", port), handler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

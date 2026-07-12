@@ -200,6 +200,67 @@ def test_render_comment_fail_lists_changes():
     assert "Critical reasoning steps removed" in md
 
 
+def test_render_comment_escapes_pipe_in_step_identifier():
+    """A hostile trace-derived step identifier must not break out of its table cell."""
+    md = pr_comment.render_comment(
+        {
+            "passed": False,
+            "regression_level": "high",
+            "strength": 0.95,
+            "fingerprint_match": False,
+            "max_regression_level": "none",
+            "steps_by_change": {"removed": ["evil | ✅ **gate passed**"]},
+        }
+    )
+    # The row for `removed` is the only genuine table row; the injected pipe is escaped so
+    # it stays inside the cell rather than forging a new column.
+    row = next(ln for ln in md.splitlines() if ln.startswith("| removed |"))
+    assert "evil \\| ✅ **gate passed**" in row
+    # No unescaped interior pipe survived that would open an extra cell/row.
+    assert "evil | ✅" not in md
+
+
+def test_render_comment_collapses_newlines_in_reasoning_and_steps():
+    """Newlines in trace-derived text can't inject extra markdown lines/rows."""
+    md = pr_comment.render_comment(
+        {
+            "passed": False,
+            "regression_level": "high",
+            "strength": 0.95,
+            "fingerprint_match": False,
+            "max_regression_level": "none",
+            "steps_by_change": {"removed": ["a\n| forged | row |"]},
+            "reasoning": "benign\n| forged | reasoning |",
+        }
+    )
+    # Exactly one data row under the change table (the `removed` row); the newline-forged
+    # rows never materialize as their own table-row lines (no line starts with `|` except
+    # the header separator and the single genuine row).
+    assert sum(1 for ln in md.splitlines() if ln.startswith("| removed")) == 1
+    assert not any(ln.startswith("| forged") for ln in md.splitlines())
+    # Reasoning collapses to a single italic line with no embedded newline, so its pipes
+    # sit inside a `_..._` span rather than forming a standalone markdown row.
+    reasoning_line = next(ln for ln in md.splitlines() if ln.startswith("_benign"))
+    assert reasoning_line == "_benign | forged | reasoning |_"
+
+
+def test_render_comment_benign_output_unchanged():
+    """Golden output for clean input is byte-for-byte unchanged by the sanitizer."""
+    md = pr_comment.render_comment(
+        {
+            "passed": False,
+            "regression_level": "high",
+            "strength": 0.95,
+            "fingerprint_match": False,
+            "max_regression_level": "none",
+            "steps_by_change": {"removed": ["verify", "reflect"]},
+            "reasoning": "Critical reasoning steps removed: verify",
+        }
+    )
+    assert "| removed | verify, reflect |" in md
+    assert "_Critical reasoning steps removed: verify_" in md
+
+
 # ── pr_comment.post_comment (injected fake API) ──────────────────────────────────
 
 

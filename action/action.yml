@@ -111,20 +111,24 @@ runs:
 
     - name: Install dprovenancekit
       shell: bash
-      run: python -m pip install --disable-pip-version-check "${{ inputs.install-spec }}"
+      env:
+        INSTALL_SPEC: ${{ inputs.install-spec }}
+      run: python -m pip install --disable-pip-version-check "$INSTALL_SPEC"
 
     - name: Pull golden trace from cloud
       if: ${{ inputs.dprov-api-key != '' }}
       shell: bash
       run: |
-        if [ -z "${{ inputs.golden-run-id }}" ]; then
+        if [ -z "$GOLDEN_RUN_ID" ]; then
           echo "::error title=DProvenanceKit::dprov-api-key is set but golden-run-id is empty — cloud sync pulls the golden by run id and cannot use golden-context. Pass golden-run-id, or remove dprov-api-key to gate against a local baseline."
           exit 1
         fi
-        python -m dprovenancekit.cli sync pull --run "${{ inputs.golden-run-id }}" --db "${{ inputs.golden-db || inputs.db-path }}"
+        python -m dprovenancekit.cli sync pull --run "$GOLDEN_RUN_ID" --db "$GOLDEN_DB"
       env:
         DPROV_API_KEY: ${{ inputs.dprov-api-key }}
         DPROV_API_URL: ${{ inputs.dprov-api-url }}
+        GOLDEN_RUN_ID: ${{ inputs.golden-run-id }}
+        GOLDEN_DB: ${{ inputs.golden-db || inputs.db-path }}
 
     - name: Run regression gate
       id: gate

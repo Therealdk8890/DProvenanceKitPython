@@ -96,7 +96,22 @@ def _run_gate(argv) -> int:
         "--max-level",
         default="none",
         choices=["none", "low", "medium", "high"],
-        help="worst severity that still passes (default: none = strict)",
+        help=(
+            "worst severity that still passes (default: none = strict). The engine "
+            "currently assigns only 'none' or 'high', so 'low' and 'medium' behave "
+            "like 'none' today"
+        ),
+    )
+    ap.add_argument(
+        "--profile",
+        default="strict_audit_v1",
+        choices=["strict_audit_v1", "developer_debug_v1"],
+        help=(
+            "alignment profile (default: strict_audit_v1). strict_audit_v1 aligns "
+            "linearly, so a pure reorder of the same steps reads as matching; use "
+            "the span-aware developer_debug_v1 to detect reordered steps (reordered "
+            "CRITICAL steps are a high-severity regression)"
+        ),
     )
     ap.add_argument(
         "--allow-divergent",
@@ -105,6 +120,13 @@ def _run_gate(argv) -> int:
     )
     ap.add_argument("--json", action="store_true", help="emit the report as JSON")
     args = ap.parse_args(argv)
+
+    if args.max_level in ("low", "medium"):
+        print(
+            f"warning: --max-level {args.max_level} currently behaves like 'none': "
+            "the alignment engine assigns only 'none' or 'high' severities.",
+            file=sys.stderr,
+        )
 
     if bool(args.golden) == bool(args.golden_context):
         print(
@@ -188,6 +210,7 @@ def _run_gate(argv) -> int:
         return 2
 
     report = RegressionGate(
+        profile=getattr(AlignmentProfile, args.profile),
         max_regression_level=RegressionLevel(args.max_level),
         allow_divergent_steps=args.allow_divergent,
     ).check(golden, candidate)
@@ -311,6 +334,8 @@ def _run_anomalies(argv) -> int:
                             "rule": a.rule_name,
                             "run_id": str(a.run_id),
                             "description": a.description,
+                            "severity": a.severity,
+                            "message": a.message,
                         }
                         for a in found
                     ],
@@ -323,7 +348,10 @@ def _run_anomalies(argv) -> int:
     else:
         print(f"{len(found)} anomaly(ies) detected:")
         for anomaly in found:
-            print(f"  [{anomaly.rule_name}] {anomaly.description}")
+            line = f"  [{anomaly.rule_name}] {anomaly.severity}: {anomaly.description}"
+            if anomaly.message:
+                line += f" ({anomaly.message})"
+            print(line)
 
     return 1 if found else 0
 

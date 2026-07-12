@@ -1,8 +1,8 @@
-"""Headless evaluator CLI: runs the standard corpus through the real benchmark runner.
+"""Headless CLI: gate runs in CI, inspect databases, and run the benchmark corpus.
 
 Mirrors the Swift ``DProvenanceKitCLI``. Usage::
 
-    dprovenancekit <evaluate|diagnose|stability>
+    dprovenancekit <gate|anomalies|runs|ui|ingest|export|sync|evaluate|diagnose|stability>
 """
 
 from __future__ import annotations
@@ -419,9 +419,16 @@ def _run_ui(argv) -> int:
     ap.add_argument(
         "--port", type=int, default=8080, help="port to listen on (default: 8080)"
     )
+    ap.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="interface to bind (default: 127.0.0.1; use 0.0.0.0 to expose on the "
+        "network — trace databases hold prompts and outputs, so only do this "
+        "deliberately)",
+    )
     args = ap.parse_args(argv)
 
-    run_ui_server(args.db, args.port)
+    run_ui_server(args.db, args.port, host=args.host)
     return 0
 
 
@@ -712,9 +719,42 @@ def _finite_only(value):
     return value
 
 
+_USAGE = (
+    "Usage: dprovenancekit <gate|anomalies|runs|ui|ingest|export|sync"
+    "|evaluate|diagnose|stability>"
+)
+
+_HELP = """DProvenanceKit — record, diff, and gate AI agent runs.
+
+{usage}
+
+Commands:
+  gate       compare a run against a golden baseline; exit 1 on regression
+  anomalies  run anomaly rules over recorded runs
+  runs       list runs in a trace database
+  ui         serve the local trace viewer (binds 127.0.0.1)
+  ingest     import OpenTelemetry (OTLP JSON) traces as runs
+  export     export runs as JSON
+  sync       upload runs to DProvenanceKit Cloud
+  evaluate   run the bundled benchmark corpus (default)
+  diagnose   causal ranking of benchmark failure modes
+  stability  benchmark determinism boundary check
+
+Run 'dprovenancekit <command> --help' for command options.""".format(usage=_USAGE)
+
+
 def main(argv=None) -> int:
     if argv is None:
         argv = sys.argv[1:]
+
+    if argv and argv[0] in ("--help", "-h", "help"):
+        print(_HELP)
+        return 0
+    if argv and argv[0] in ("--version", "-V"):
+        from . import __version__
+
+        print(__version__)
+        return 0
 
     if argv and argv[0] == "export":
         return _run_export(argv[1:])
@@ -731,15 +771,16 @@ def main(argv=None) -> int:
     if argv and argv[0] == "sync":
         return _run_sync(argv[1:])
 
-    print("DProvenanceKit CLI Evaluator")
-    print("============================")
-
     mode = argv[0] if argv else "evaluate"
     if mode not in ("evaluate", "diagnose", "stability"):
-        print(
-            "Usage: dprovenancekit <gate|anomalies|runs|ui|ingest|export|sync|evaluate|diagnose|stability>"
-        )
-        return 0
+        # A mistyped subcommand must fail loudly: this CLI gates CI builds, and a
+        # typo that exits 0 would silently pass the pipeline forever.
+        print(f"dprovenancekit: unknown command '{mode}'", file=sys.stderr)
+        print(_USAGE, file=sys.stderr)
+        return 2
+
+    print("DProvenanceKit CLI Evaluator")
+    print("============================")
 
     runner = BenchmarkRunner()
     dataset = DProvenanceCorpus.dataset()

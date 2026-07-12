@@ -79,6 +79,12 @@ select = ["E", "F"]
 # avoids churn on the handful of long docstring/URL lines the codebase already carries.
 ignore = ["E501"]
 
+[tool.ruff.lint.per-file-ignores]
+# The package root deliberately imports names it does not itself use so they stay
+# importable (``from dprovenancekit import X``) even when they are intentionally excluded
+# from the curated ``__all__``. Re-export files are the standard exception to F401.
+"dprovenancekit/__init__.py" = ["F401"]
+
 [tool.mypy]
 # An honest, non-strict baseline gate: it type-checks the package and blocks regressions,
 # and can be tightened later. Framework adapters import optional third-party packages that

@@ -41,6 +41,16 @@ def _record(store, context_id, steps):
         return run.run_id
 
 
+def _record_with_engines(store, context_id, steps):
+    """Record ``(kind, engine)`` pairs, each event under its engine (component) name."""
+    kit = DProvenanceKit(AgentStep)
+    with kit.run(context_id=context_id, store=store) as run:
+        for kind, engine in steps:
+            with kit.with_engine(engine):
+                kit.record(AgentStep(kind))
+        return run.run_id
+
+
 def test_tool_drop_rule_flags_run_missing_required_step():
     store = InMemoryTraceStore()
     good = _record(store, "good", ["plan", "safety_check", "act"])
@@ -125,6 +135,122 @@ def test_looping_rule_rejects_non_int_max_repeats_with_valueerror(bad):
     # A typo'd config (e.g. quoting the number) must surface as ValueError, not a raw TypeError.
     with pytest.raises(ValueError):
         LoopingRule("call", bad)
+
+
+def test_looping_rule_engine_scope_counts_only_that_engine():
+    # Under the canonical vocabulary every tool call shares 'tool_call.start'; the
+    # engine name is what distinguishes tools. engine='search' must count only the
+    # search tool's calls, not the run's total tool-call volume.
+    store = InMemoryTraceStore()
+    hammering = _record_with_engines(
+        store,
+        "hammering",
+        [("tool_call.start", "search")] * 3 + [("tool_call.start", "browse")],
+    )
+    diverse = _record_with_engines(
+        store,
+        "diverse",
+        [
+            ("tool_call.start", "search"),
+            ("tool_call.start", "browse"),
+            ("tool_call.start", "summarize"),
+            ("tool_call.start", "verify"),
+        ],
+    )
+
+    rule = LoopingRule("tool_call.start", 2, engine="search")
+    assert rule.name == "looping:tool_call.start@search"
+    assert rule.engine == "search"
+
+    flagged = {a.run_id for a in AnomalyDetector(store).detect_anomalies([rule])}
+    assert hammering in flagged  # search ran 3x > 2
+    assert diverse not in flagged  # 4 total calls, but search only once
+
+
+def test_looping_rule_per_engine_flags_any_single_hot_engine():
+    store = InMemoryTraceStore()
+    stuck = _record_with_engines(
+        store,
+        "stuck",
+        [("tool_call.start", "flaky_api")] * 3 + [("tool_call.start", "search")],
+    )
+    # Same total volume (4 calls > max_repeats), but spread evenly — the old
+    # total-count semantics false-positived on exactly this shape.
+    spread = _record_with_engines(
+        store,
+        "spread",
+        [("tool_call.start", "search")] * 2 + [("tool_call.start", "browse")] * 2,
+    )
+
+    rule = LoopingRule("tool_call.start", 2, per_engine=True)
+    assert rule.name == "looping:tool_call.start:per-engine"
+    assert rule.per_engine is True
+
+    anomalies = AnomalyDetector(store).detect_anomalies([rule])
+    flagged = {a.run_id for a in anomalies}
+    assert stuck in flagged
+    assert spread not in flagged
+    (anomaly,) = anomalies
+    assert "flaky_api" in anomaly.description  # names the hot engine
+
+
+def test_looping_rule_default_remains_total_count():
+    # Backward compatibility: the positional two-arg form is still a total budget
+    # across engines.
+    store = InMemoryTraceStore()
+    spread = _record_with_engines(
+        store,
+        "spread",
+        [("tool_call.start", "search")] * 2 + [("tool_call.start", "browse")] * 2,
+    )
+    flagged = {
+        a.run_id
+        for a in AnomalyDetector(store).detect_anomalies(
+            [LoopingRule("tool_call.start", 3)]
+        )
+    }
+    assert spread in flagged  # 4 total > 3, regardless of engine spread
+
+
+def test_looping_rule_engine_and_per_engine_are_mutually_exclusive():
+    with pytest.raises(ValueError):
+        LoopingRule("tool_call.start", 2, engine="search", per_engine=True)
+
+
+@pytest.mark.parametrize("bad", ["", 123, ["search"]])
+def test_looping_rule_rejects_invalid_engine(bad):
+    with pytest.raises(ValueError):
+        LoopingRule("tool_call.start", 2, engine=bad)
+
+
+@pytest.mark.parametrize("bad", ["true", 1, None])
+def test_looping_rule_rejects_non_bool_per_engine(bad):
+    with pytest.raises(ValueError):
+        LoopingRule("tool_call.start", 2, per_engine=bad)
+
+
+def test_build_rule_constructs_engine_scoped_and_per_engine_looping():
+    scoped = build_rule(
+        {"type": "looping", "step": "tool_call.start", "max_repeats": 5, "engine": "search"}
+    )
+    assert scoped.engine == "search"
+    assert scoped.per_engine is False
+
+    grouped = build_rule(
+        {"type": "looping", "step": "tool_call.start", "max_repeats": 5, "per_engine": True}
+    )
+    assert grouped.per_engine is True
+    assert grouped.engine is None
+
+    with pytest.raises(ValueError):
+        build_rule(
+            {
+                "type": "looping",
+                "step": "tool_call.start",
+                "max_repeats": 5,
+                "per_engine": "true",  # quoted bool — common JSON misconfiguration
+            }
+        )
 
 
 @pytest.mark.parametrize("bad", [123, "", None, {"x": 1}])
@@ -240,6 +366,42 @@ def test_unused_tool_result_rule_silent_when_each_result_used():
     assert AnomalyDetector(store).detect_anomalies([rule]) == []
 
 
+def test_unused_tool_result_rule_parallel_fanout_is_healthy():
+    # Frameworks fan out tool calls: several results land before the next model step,
+    # and the model then sees all of them. That shape must not be flagged (the old
+    # strictly-serial semantics false-positived on every such run).
+    from dprovenancekit.rules import UnusedToolResultRule
+
+    store = InMemoryTraceStore()
+    fanout = _record(
+        store,
+        "fanout",
+        ["tool_result", "tool_result", "tool_result", "respond"],
+    )
+    serial = _record(store, "serial", ["tool_result", "respond", "tool_result", "respond"])
+    trailing = _record(
+        store,
+        "trailing",
+        ["tool_result", "tool_result", "respond", "tool_result"],  # last one unused
+    )
+
+    rule = UnusedToolResultRule("tool_result", "respond")
+    flagged = {a.run_id for a in AnomalyDetector(store).detect_anomalies([rule])}
+    assert fanout not in flagged
+    assert serial not in flagged
+    assert trailing in flagged
+
+
+def test_unused_tool_result_rule_describe_counts_outstanding_results():
+    from dprovenancekit.rules import UnusedToolResultRule
+
+    store = InMemoryTraceStore()
+    _record(store, "two-orphans", ["respond", "tool_result", "tool_result"])
+    rule = UnusedToolResultRule("tool_result", "respond")
+    (anomaly,) = AnomalyDetector(store).detect_anomalies([rule])
+    assert "2 result(s)" in anomaly.description
+
+
 def test_unused_tool_result_rule_validates_args():
     from dprovenancekit.rules import UnusedToolResultRule
 
@@ -309,10 +471,22 @@ def test_bundled_agent_preset_loads_and_fires_on_normalized_events():
     }
 
     store = InMemoryTraceStore()
-    runaway = _record(store, "runaway", ["tool_call.start"] * 11)  # > 10 tool calls
+    # Every tool call shares 'tool_call.start'; the tool identity is the engine name.
+    runaway = _record_with_engines(
+        store, "runaway", [("tool_call.start", "flaky_api")] * 11  # one tool, 11 calls
+    )
     unused = _record(store, "unused", ["tool_call.start", "tool_call.end"])  # no llm follow-up
     healthy = _record(
         store, "healthy", ["tool_call.start", "tool_call.end", "llm_call.start"]
+    )
+    # A busy-but-healthy research agent: 12 tool calls across 12 DISTINCT tools, each
+    # result consumed. The preset must not treat sheer volume as a loop.
+    busy = _record_with_engines(
+        store,
+        "busy",
+        [("tool_call.start", f"tool_{i}") for i in range(12)]
+        + [("tool_call.end", f"tool_{i}") for i in range(12)]
+        + [("llm_call.start", "gpt-4o")],
     )
 
     anomalies = AnomalyDetector(store).detect_anomalies(rules)
@@ -320,6 +494,7 @@ def test_bundled_agent_preset_loads_and_fires_on_normalized_events():
     assert (runaway, "agent.runaway_tool_use") in flagged
     assert (unused, "agent.unused_tool_result") in flagged
     assert healthy not in {a.run_id for a in anomalies}
+    assert busy not in {a.run_id for a in anomalies}
 
 
 # ── registry (build_rule / build_rules) ──────────────────────────────────────────

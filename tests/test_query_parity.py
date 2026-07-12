@@ -132,3 +132,56 @@ def test_count_step_matches_at_threshold_and_excludes_below(temp_db_path):
 def test_count_step_requires_positive_min_count():
     with pytest.raises(ValueError):
         TraceQueryDSL().requiring_repeated_step("stepCompleted", 0)
+
+
+def test_count_step_engine_scope_parity(tmp_path):
+    """Engine-scoped counts must agree across backends and count only that engine."""
+    kit = DProvenanceKit(TestEvent)
+
+    def scenario():
+        # 2x stepCompleted under 'search', 1x under 'browse', 1x with no engine.
+        with kit.with_engine("search"):
+            kit.record(TestEvent.step_completed(1))
+            kit.record(TestEvent.step_completed(2))
+        with kit.with_engine("browse"):
+            kit.record(TestEvent.step_completed(3))
+        kit.record(TestEvent.step_completed(4))
+
+    mem_store = InMemoryTraceStore()
+    with kit.run(context_id="case", store=mem_store):
+        scenario()
+    sql_store = SQLiteTraceStore(TestEvent, str(tmp_path / "engine-count.sqlite"))
+    with kit.run(context_id="case", store=sql_store):
+        scenario()
+    sql_store.flush()
+
+    queries = {
+        # search emitted 2 — matches at 2, not at 3.
+        "engine-hit": TraceQueryDSL().requiring_repeated_step(
+            "stepCompleted", 2, engine="search"
+        ),
+        "engine-miss": TraceQueryDSL().requiring_repeated_step(
+            "stepCompleted", 3, engine="search"
+        ),
+        # browse emitted 1 — an unscoped count of 3 would swallow it.
+        "engine-other-miss": TraceQueryDSL().requiring_repeated_step(
+            "stepCompleted", 2, engine="browse"
+        ),
+        # absent engine never matches.
+        "engine-absent": TraceQueryDSL().requiring_repeated_step(
+            "stepCompleted", 1, engine="nope"
+        ),
+        # unscoped still counts all 4 occurrences.
+        "unscoped": TraceQueryDSL().requiring_repeated_step("stepCompleted", 4),
+    }
+    expected = {
+        "engine-hit": ["case"],
+        "engine-miss": [],
+        "engine-other-miss": [],
+        "engine-absent": [],
+        "unscoped": ["case"],
+    }
+    for name, query in queries.items():
+        mem = sorted(r.context_id for r in mem_store.query_runs(query))
+        sql = sorted(r.context_id for r in sql_store.query_runs(query))
+        assert mem == sql == expected[name], f"Backend divergence on query: {name}"

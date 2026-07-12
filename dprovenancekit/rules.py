@@ -70,17 +70,45 @@ class ToolDropRule(AnomalyRule):
 class LoopingRule(AnomalyRule):
     """Flag runs where a step repeats more than a threshold — an agent stuck in a loop.
 
-    A run is anomalous iff ``step`` occurs **more than** ``max_repeats`` times (i.e. at least
-    ``max_repeats + 1``). Use it to catch an agent that calls the same tool over and over.
+    Three scopes, because ``type_identifier`` alone is often too coarse: under the
+    canonical vocabulary *every* tool call shares ``tool_call.start``, so a raw count is
+    a total tool-call budget, not loop detection. The engine (component name — the tool
+    or model identity stamped on each event) is what distinguishes one tool from
+    another:
+
+    * **Total** (default, ``LoopingRule("tool_call.start", 10)``): anomalous iff
+      ``step`` occurs more than ``max_repeats`` times in the run, regardless of engine.
+      An overall step budget.
+    * **One engine** (``engine="search"``): anomalous iff the ``search`` engine
+      specifically emitted ``step`` more than ``max_repeats`` times. Lowers entirely to
+      the query DSL (engine-scoped count), so it runs on every backend.
+    * **Any engine** (``per_engine=True``): anomalous iff *some single* engine emitted
+      ``step`` more than ``max_repeats`` times — the "agent stuck hammering one tool"
+      semantic, without naming the tool up front. The DSL cannot group by engine, so
+      this lowers to the total count as a sound pre-filter (any single engine over the
+      threshold forces the total over it) and refines per engine in
+      :meth:`is_anomalous` — the standard confirm hook every backend already applies.
+
+    ``engine`` and ``per_engine`` are mutually exclusive.
 
     Args:
         step: the ``type_identifier`` of the repeating step/tool.
         max_repeats: the largest number of occurrences still considered healthy (>= 1).
-        name: optional rule-name override (default ``"looping:<step>"``).
+        engine: optional engine (component) name to scope the count to.
+        per_engine: flag if any single engine exceeds ``max_repeats`` occurrences.
+        name: optional rule-name override (default ``"looping:<step>"``, with
+            ``"@<engine>"`` appended when engine-scoped, ``":per-engine"`` when
+            ``per_engine``).
     """
 
     def __init__(
-        self, step: str, max_repeats: int, *, name: Optional[str] = None
+        self,
+        step: str,
+        max_repeats: int,
+        *,
+        engine: Optional[str] = None,
+        per_engine: bool = False,
+        name: Optional[str] = None,
     ) -> None:
         if not isinstance(step, str) or not step:
             raise ValueError("step must be a non-empty string")
@@ -90,9 +118,27 @@ class LoopingRule(AnomalyRule):
             or max_repeats < 1
         ):
             raise ValueError("LoopingRule.max_repeats must be an int >= 1")
+        if engine is not None and (not isinstance(engine, str) or not engine):
+            raise ValueError("LoopingRule.engine must be a non-empty string when given")
+        if not isinstance(per_engine, bool):
+            raise ValueError("LoopingRule.per_engine must be a bool")
+        if engine is not None and per_engine:
+            raise ValueError(
+                "LoopingRule.engine and per_engine are mutually exclusive: "
+                "engine scopes to one named engine, per_engine flags any engine"
+            )
         self._step = step
         self._max_repeats = max_repeats
-        self._name = name or f"looping:{step}"
+        self._engine = engine
+        self._per_engine = per_engine
+        if name:
+            self._name = name
+        elif engine is not None:
+            self._name = f"looping:{step}@{engine}"
+        elif per_engine:
+            self._name = f"looping:{step}:per-engine"
+        else:
+            self._name = f"looping:{step}"
 
     @property
     def step(self) -> str:
@@ -103,20 +149,59 @@ class LoopingRule(AnomalyRule):
         return self._max_repeats
 
     @property
+    def engine(self) -> Optional[str]:
+        return self._engine
+
+    @property
+    def per_engine(self) -> bool:
+        return self._per_engine
+
+    @property
     def name(self) -> str:
         return self._name
 
     @property
     def anomaly_query(self) -> TraceQueryDSL:
+        # per_engine: the total count is a sound pre-filter (a single engine over the
+        # threshold forces the total over it); is_anomalous performs the per-engine
+        # grouping the DSL cannot express.
         return TraceQueryDSL().requiring_repeated_step(
-            self._step, self._max_repeats + 1
+            self._step, self._max_repeats + 1, engine=self._engine
         )
 
+    def is_anomalous(self, run: TraceRun) -> bool:
+        if not self._per_engine:
+            return True
+        return any(
+            count > self._max_repeats for count in self._counts_by_engine(run).values()
+        )
+
+    def _counts_by_engine(self, run: TraceRun) -> Dict[str, int]:
+        counts: Dict[str, int] = {}
+        for e in run.events:
+            if e.payload.type_identifier == self._step:
+                counts[e.engine_name] = counts.get(e.engine_name, 0) + 1
+        return counts
+
     def describe(self, run: TraceRun) -> str:
+        where = f"in run {run.run_id} (context '{run.context_id}')"
+        if self._engine is not None:
+            seen = self._counts_by_engine(run).get(self._engine, 0)
+            return (
+                f"engine '{self._engine}' repeated step '{self._step}' {seen} times "
+                f"(> {self._max_repeats} allowed) {where}"
+            )
+        if self._per_engine:
+            counts = self._counts_by_engine(run)
+            worst, seen = max(counts.items(), key=lambda kv: kv[1], default=("?", 0))
+            return (
+                f"engine '{worst}' repeated step '{self._step}' {seen} times "
+                f"(> {self._max_repeats} allowed per engine) {where}"
+            )
         seen = sum(1 for e in run.events if e.payload.type_identifier == self._step)
         return (
             f"step '{self._step}' repeated {seen} times (> {self._max_repeats} allowed) "
-            f"in run {run.run_id} (context '{run.context_id}')"
+            f"{where}"
         )
 
 
@@ -173,10 +258,14 @@ class UnregisteredToolRule(AnomalyRule):
 class UnusedToolResultRule(AnomalyRule):
     """Flag runs where a tool result is produced but never used downstream.
 
-    *Unused tool result* — an agent receives a tool result and then finishes (or moves
-    straight to the next tool) without a reasoning/response step consuming it. A run is
-    anomalous iff some ``step`` occurrence is not followed by a ``required_followup_step``
-    before the next ``step`` occurrence or the end of the run.
+    *Unused tool result* — an agent receives a tool result and then finishes without a
+    reasoning/response step consuming it. The semantic is parallel-safe: frameworks
+    routinely fan out several tool calls whose results all land before the next model
+    step, and the model then sees everything produced so far. So a
+    ``required_followup_step`` occurrence consumes **all** ``step`` results outstanding
+    at that point, and a run is anomalous iff one or more results are still outstanding
+    when the run ends (i.e. some ``step`` occurrence is never followed — at any
+    distance — by a ``required_followup_step``).
 
     Args:
         step: the ``type_identifier`` of the tool-result step.
@@ -206,20 +295,26 @@ class UnusedToolResultRule(AnomalyRule):
         return TraceQueryDSL().requiring_step(self._step)
 
     def is_anomalous(self, run: TraceRun) -> bool:
-        pending = False  # a tool result awaiting a followup
+        # Count of tool results not yet consumed. A followup consumes ALL outstanding
+        # results (the model sees everything produced so far), which keeps parallel
+        # fan-out — several results landing before the next model step — healthy.
+        return self._outstanding(run) > 0
+
+    def _outstanding(self, run: TraceRun) -> int:
+        outstanding = 0
         for e in sorted(run.events, key=lambda ev: ev.sequence):
             kind = e.payload.type_identifier
             if kind == self._step:
-                if pending:
-                    return True  # a prior result was never followed up
-                pending = True
-            elif kind == self._followup and pending:
-                pending = False
-        return pending  # a trailing result with no followup
+                outstanding += 1
+            elif kind == self._followup:
+                outstanding = 0
+        return outstanding
 
     def describe(self, run: TraceRun) -> str:
+        outstanding = self._outstanding(run)
         return (
-            f"tool result '{self._step}' was not followed by '{self._followup}' "
+            f"{outstanding} result(s) of '{self._step}' arrived after the last "
+            f"'{self._followup}' and were never consumed "
             f"in run {run.run_id} (context '{run.context_id}')"
         )
 
@@ -242,7 +337,13 @@ def _rule_name(s: Dict[str, Any]) -> Optional[str]:
 
 _RULE_BUILDERS = {
     "tool_drop": lambda s: ToolDropRule(s["required_step"], name=_rule_name(s)),
-    "looping": lambda s: LoopingRule(s["step"], s["max_repeats"], name=_rule_name(s)),
+    "looping": lambda s: LoopingRule(
+        s["step"],
+        s["max_repeats"],
+        engine=s.get("engine"),
+        per_engine=s.get("per_engine", False),
+        name=_rule_name(s),
+    ),
     "unregistered_tool": lambda s: UnregisteredToolRule(
         s["step"], s["registry_field"], name=_rule_name(s)
     ),

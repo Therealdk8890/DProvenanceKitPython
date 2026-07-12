@@ -1,16 +1,17 @@
 {
   "id": "agent.default",
   "name": "Default Agent Failure Rules",
-  "description": "Common agent-trace anomalies over DProvenanceKit's vendor-neutral event vocabulary (tool_call.*, llm_call.*, agent_invocation.*). These names are produced by `dprovenancekit ingest` (OTel/OTLP traces) and by the live integrations in canonical mode: openai-agents `register(store, canonical=True)`, LangChain `DProvenanceTracer.trace(..., canonical=True)`. Without canonical mode the integrations emit framework-native names (openai-agents `function.*`, LangChain `toolStarted`) that this preset won't match — enable canonical mode, ingest via OTel, or write a preset targeting the native types. Rules whose signal needs data no emitter yet produces (a registered-tool list, a distinct tool-result-vs-reasoning event) are intentionally omitted until the emitters carry it.",
-  "version": "0.3.0",
+  "description": "Common agent-trace anomalies over DProvenanceKit's vendor-neutral event vocabulary (tool_call.*, llm_call.*, agent_invocation.*). These names are produced by `dprovenancekit ingest` (OTel/OTLP traces) and by the live integrations in canonical mode: openai-agents `register(store, canonical=True)`, LangChain `DProvenanceTracer.trace(..., canonical=True)`. Without canonical mode the integrations emit framework-native names (openai-agents `function.*`, LangChain `toolStarted`) that this preset won't match — enable canonical mode, ingest via OTel, or write a preset targeting the native types. Rules whose signal needs data no emitter yet produces (a registered-tool list, a distinct tool-result-vs-reasoning event) are intentionally omitted until the emitters carry it. The runaway rule counts tool calls per engine (the tool name emitters stamp on each event), so it fires when a single tool is hammered, not when many distinct tools are each used a few times; under an emitter that stamps one fixed engine on every tool event it degrades to a total tool-call budget.",
+  "version": "0.4.0",
   "rules": [
     {
       "id": "agent.runaway_tool_use",
       "type": "looping",
       "step": "tool_call.start",
       "max_repeats": 10,
+      "per_engine": true,
       "severity": "warning",
-      "message": "Runaway tool use: the agent made more than 10 tool calls in a single run."
+      "message": "Runaway tool use: a single tool was invoked more than 10 times in one run — the agent is likely stuck looping it."
     },
     {
       "id": "agent.unused_tool_result",
@@ -18,7 +19,7 @@
       "step": "tool_call.end",
       "required_followup_step": "llm_call.start",
       "severity": "warning",
-      "message": "A tool call completed but was not followed by a model step that could use its result."
+      "message": "One or more tool calls completed after the last model step, so their results were never consumed."
     }
   ]
 }

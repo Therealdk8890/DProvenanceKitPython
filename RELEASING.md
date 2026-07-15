@@ -15,6 +15,11 @@ The build is reproducible and dependency-light; verified locally — `twine chec
 a clean `pip install dist/*.whl` imports the package, its integrations, and the
 `dprovenancekit` console script.
 
+> **Note:** a manual `twine upload` produces an *unattested* release — no PEP 740 attestations
+> on PyPI and no GitHub artifact attestation, so `gh attestation verify` will fail for its
+> files. Use the workflow below for anything users are expected to verify (see
+> [Build provenance](#build-provenance-attestations)).
+
 ## Automated (recommended)
 
 Publishing on a GitHub Release is wired up in
@@ -27,7 +32,29 @@ project (owner/repo, workflow `publish-pypi.yml`, environment `pypi`). Then:
    metadata; the fallback only applies when running from a source checkout, but
    it must not drift).
 2. Commit, tag (`git tag v0.1.0 && git push --tags`), and publish a GitHub Release.
-3. The workflow builds, `twine check`s, and uploads.
+3. The workflow builds, `twine check`s, attests, and uploads.
+
+## Build provenance (attestations)
+
+Releases cut through the publish workflow ship with verifiable build provenance — fitting,
+for a provenance toolkit. Two independent layers, both produced automatically (PEP 740
+attestations exist for all published releases; GitHub artifact attestations start with the
+first release after v0.6.0):
+
+1. **PyPI attestations (PEP 740).** `pypa/gh-action-pypi-publish` generates Sigstore-signed
+   publish attestations by default under trusted publishing and uploads them alongside the
+   files. Check the per-file provenance entries on
+   [pypi.org/project/dprovenancekit/#files](https://pypi.org/project/dprovenancekit/#files).
+2. **GitHub artifact attestations (SLSA build provenance).** The workflow runs
+   `actions/attest-build-provenance` on `dist/*`, recording in GitHub's attestation store
+   which workflow, commit, and runner produced each artifact. Verify a downloaded file with:
+
+   ```bash
+   gh attestation verify dprovenancekit-<version>-py3-none-any.whl \
+     --repo Therealdk8890/DProvenanceKitPython
+   ```
+
+Neither layer needs a stored key or manual step; both derive from the workflow's OIDC identity.
 
 ## Install (once published)
 

@@ -31,7 +31,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
-      id-token: write   # required for trusted publishing
+      id-token: write      # required for trusted publishing and Sigstore signing
+      attestations: write  # required to store GitHub artifact attestations
+      contents: read       # explicit: a permissions block resets unlisted scopes to none
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -42,5 +44,13 @@ jobs:
           python -m pip install --upgrade build twine
           python -m build
           twine check dist/*
+      # SLSA build provenance for every artifact, verifiable with
+      # `gh attestation verify <file> --repo Therealdk8890/DProvenanceKitPython`.
+      # Separate from the PEP 740 attestations that gh-action-pypi-publish
+      # uploads to PyPI by default under trusted publishing.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/*
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

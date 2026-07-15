@@ -55,6 +55,10 @@ public API may still change between minor versions.
 - **The `anomalies` command reports each finding's severity and message** in both text and JSON.
 - **Continuous integration adds `ruff` and `mypy` gates**, publishes only after the test suite
   passes, and surfaces skipped tests in the logs.
+- **Releases ship with GitHub artifact attestations (SLSA build provenance).** The publish
+  workflow attests `dist/*`, so downloaded artifacts can be checked with
+  `gh attestation verify` — alongside the PEP 740 attestations that PyPI trusted publishing
+  already uploads. Documented in `RELEASING.md`.
 
 ### Changed
 

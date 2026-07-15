@@ -65,6 +65,15 @@ pip install -e ".[dev]"
 Requires Python 3.9+; the core has **zero third-party dependencies**. Releasing is documented
 in [RELEASING.md](RELEASING.md).
 
+Releases carry their own provenance: artifacts are published with PEP 740 attestations on
+PyPI, and releases after v0.6.0 also carry SLSA build provenance on GitHub. Verify a
+downloaded wheel with:
+
+```bash
+gh attestation verify dprovenancekit-<version>-py3-none-any.whl \
+  --repo Therealdk8890/DProvenanceKitPython
+```
+
 ---
 
 ## The 5-Minute "Wow"

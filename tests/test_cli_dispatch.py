@@ -23,12 +23,19 @@ def test_help_exits_0_and_lists_commands(capsys):
     code = main(["--help"])
     captured = capsys.readouterr()
     assert code == 0
-    for command in ("gate", "anomalies", "runs", "ui", "ingest", "export", "sync"):
+    for command in ("demo", "gate", "anomalies", "runs", "ui", "ingest", "export", "sync"):
         assert command in captured.out
 
 
 def test_version_exits_0_and_prints_version(capsys):
     code = main(["--version"])
+    captured = capsys.readouterr()
+    assert code == 0
+    assert captured.out.strip() == __version__
+
+
+def test_short_version_exits_0_and_prints_version(capsys):
+    code = main(["-V"])
     captured = capsys.readouterr()
     assert code == 0
     assert captured.out.strip() == __version__

@@ -2,7 +2,7 @@
 
 Mirrors the Swift ``DProvenanceKitCLI``. Usage::
 
-    dprovenancekit <gate|anomalies|runs|ui|ingest|export|sync|evaluate|diagnose|stability>
+    dprovenancekit <demo|gate|anomalies|runs|ui|ingest|export|sync|evaluate|diagnose|stability>
 """
 
 from __future__ import annotations
@@ -783,7 +783,7 @@ def _finite_only(value):
 
 
 _USAGE = (
-    "Usage: dprovenancekit <gate|anomalies|runs|ui|ingest|export|sync"
+    "Usage: dprovenancekit <demo|gate|anomalies|runs|ui|ingest|export|sync"
     "|evaluate|diagnose|stability>"
 )
 
@@ -792,6 +792,7 @@ _HELP = """DProvenanceKit — record, diff, and gate AI agent runs.
 {usage}
 
 Commands:
+  demo       run the installed end-to-end regression demo
   gate       compare a run against a golden baseline; exit 1 on regression
   anomalies  run anomaly rules over recorded runs
   runs       list runs in a trace database
@@ -802,6 +803,10 @@ Commands:
   evaluate   run the bundled benchmark corpus (default)
   diagnose   causal ranking of benchmark failure modes
   stability  benchmark determinism boundary check
+
+Options:
+  -h, --help       show this help
+  -V, --version    show the installed package version
 
 Run 'dprovenancekit <command> --help' for command options.""".format(usage=_USAGE)
 
@@ -819,6 +824,10 @@ def main(argv=None) -> int:
         print(__version__)
         return 0
 
+    if argv and argv[0] == "demo":
+        from .demo import main as demo_main
+
+        return demo_main(argv[1:])
     if argv and argv[0] == "export":
         return _run_export(argv[1:])
     if argv and argv[0] == "gate":

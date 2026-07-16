@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dprovenancekit"
-version = "0.6.0"
+version = "0.6.1"
 description = "Regression testing for AI agents — fail the PR when your agent skips a step, even when the answer still looks right."
 readme = "README.md"
 requires-python = ">=3.9"

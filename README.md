@@ -16,11 +16,10 @@ path changes. It works with LangChain/LangGraph, the OpenAI Agents SDK, LlamaInd
 Python — or any OpenTelemetry-instrumented stack, via built-in OTLP trace ingestion — and the core
 has zero third-party dependencies.
 
-**See the catch in one runnable file:**
-[`python examples/regression_testing.py`](examples/regression_testing.py) records a fact-checking
-agent (retrieve → verify → decide), then catches a later run that drops verification — flagged as a
-HIGH-severity regression even though the final decision is byte-identical. Run it and the output
-reads `regression: HIGH  (strength 0.95)` with `claimVerified` marked `removed`.
+**See the catch immediately after installing:** `dprovenancekit demo` records a healthy agent
+(plan → search → rank → verify → decide), then catches a later run that drops verification and
+loops its search tool. It flags the regression as HIGH severity, writes a local SQLite trace,
+anomaly rules, and a shareable HTML report, then prints copy-paste commands for the gate and viewer.
 
 > Run → Record → Query → Diff → Detect regressions → Gate in CI
 
@@ -41,8 +40,8 @@ reads `regression: HIGH  (strength 0.95)` with `claimVerified` marked `removed`.
 - **Out-of-the-box anomaly rules** — Tool Drop and Looping detection with a JSON rule registry, runnable locally or on every PR.
 - **A hosted visualizer** — a web dashboard (single-run span tree, JSON payload inspector, side-by-side structural diff, shareable HTML reports) backed by a regression-gate API and multi-tenant control plane. Available as a separate commercial service — see [dprovenance.dev](https://dprovenance.dev).
 
-Prefer the full tour? [`python examples/end_to_end_demo.py`](examples/end_to_end_demo.py)
-walks every feature.
+Prefer readable source? [`dprovenancekit/demo.py`](dprovenancekit/demo.py) contains the same demo;
+[`python examples/end_to_end_demo.py`](examples/end_to_end_demo.py) runs it from a checkout.
 
 ---
 
@@ -55,6 +54,16 @@ pip install dprovenancekit
 pip install "dprovenancekit[langchain]"        # + LangChain adapter
 pip install "dprovenancekit[openai-agents]"    # + OpenAI Agents adapter
 ```
+
+Then run the zero-configuration tour from any directory:
+
+```bash
+dprovenancekit demo
+# Optional: dprovenancekit demo --output-dir ./dprovenance-demo
+```
+
+The demo writes `demo-traces.sqlite`, `demo-rules.json`, and `demo-report.html` to the current
+directory (or the directory you select) and prints the exact commands to gate and inspect them.
 
 From a checkout (development):
 
@@ -166,7 +175,7 @@ external benchmark or third-party evaluation.
 | Framework-agnostic instrumentation (decorators) | `instrument` |
 | Framework adapters | `integrations.langchain`, `integrations.openai_agents`, `integrations.llama_index`, `integrations.crewai`, `integrations.google_genai`, `integrations.fastapi`, `integrations.jupyter`, `integrations.mcp` |
 | Shareable HTML regression report | `report` |
-| Headless CLI — `gate`, `anomalies`, `runs`, `evaluate` | `cli` |
+| Headless CLI — `demo`, `gate`, `anomalies`, `runs`, `ui`, `evaluate` | `cli` |
 
 The SwiftUI `DProvenanceUI` target is intentionally **not** ported (it is Apple-platform UI); its
 pure value-model layer (`SpanViewModel`, flattening) is ported in `viewmodel`.
@@ -461,12 +470,19 @@ Copy-paste CI setups live in [`examples/ci/`](examples/ci/): a cloud-sync
 
 ## Example: regression testing
 
+The installed package includes the complete runnable story:
+
+```bash
+dprovenancekit demo
+```
+
 [`examples/regression_testing.py`](examples/regression_testing.py) is the end-to-end story in ~150
 readable lines: record a **golden** run of a fact-checking agent (retrieve → verify → decide), then
 catch a later run that skips its verification step — via both the fast **fingerprint** check and the
 detailed **alignment** verdict (which flags the dropped `claimVerified` step as a HIGH regression).
 
 ```bash
+# From a repository checkout:
 python examples/regression_testing.py
 ```
 

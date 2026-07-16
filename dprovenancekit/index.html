@@ -11,8 +11,9 @@
         .main-content { flex: 1; background: white; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); height: calc(100vh - 40px); overflow-y: auto; }
         h1, h2, h3 { margin-top: 0; color: #1f2937; }
         .run-list { list-style: none; padding: 0; margin: 0; }
-        .run-item { padding: 12px; border-bottom: 1px solid #e5e7eb; cursor: pointer; border-radius: 4px; }
+        .run-item { width: 100%; padding: 12px; border: 0; border-bottom: 1px solid #e5e7eb; cursor: pointer; border-radius: 4px; background: transparent; color: inherit; font: inherit; text-align: left; }
         .run-item:hover { background: #f3f4f6; }
+        .run-item:focus-visible { outline: 3px solid #818cf8; outline-offset: 2px; }
         .run-item.active { background: #e0e7ff; border-left: 4px solid #4f46e5; padding-left: 8px; }
         .run-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
         .run-meta { font-size: 12px; color: #6b7280; }
@@ -62,6 +63,22 @@
                 .replace(/'/g, '&#39;');
         }
 
+        // SQLite metadata is stored in microseconds, while detailed event payloads use
+        // seconds. Accept both (and ordinary JavaScript milliseconds) so every viewer
+        // surface renders a useful date instead of exposing a raw epoch or "Invalid Date".
+        function formatTimestamp(value) {
+            const numeric = Number(value);
+            if (!Number.isFinite(numeric)) return 'Time unavailable';
+
+            const magnitude = Math.abs(numeric);
+            let milliseconds = numeric;
+            if (magnitude >= 1e14) milliseconds = numeric / 1000;
+            else if (magnitude < 1e11) milliseconds = numeric * 1000;
+
+            const date = new Date(milliseconds);
+            return Number.isNaN(date.getTime()) ? 'Time unavailable' : date.toLocaleString();
+        }
+
         async function fetchRuns() {
             try {
                 const response = await fetch('/api/runs');
@@ -78,18 +95,21 @@
                 
                 runs.forEach(run => {
                     const li = document.createElement('li');
-                    li.className = 'run-item';
-                    li.onclick = () => loadRun(run.run_id, li);
-                    
-                    const date = new Date(run.start_time * 1000).toLocaleString();
-                    
-                    li.innerHTML = `
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'run-item';
+                    button.dataset.runId = run.run_id;
+                    button.setAttribute('aria-pressed', 'false');
+                    button.addEventListener('click', () => loadRun(run.run_id, button));
+
+                    button.innerHTML = `
                         <div class="run-title">${esc(run.context_id || 'Unknown Context')}</div>
                         <div class="run-meta">
-                            ${esc(date)}<br>
+                            ${esc(formatTimestamp(run.start_time))}<br>
                             Events: ${esc(run.event_count)}
                         </div>
                     `;
+                    li.appendChild(button);
                     listEl.appendChild(li);
                 });
             } catch (error) {
@@ -100,8 +120,16 @@
 
         async function loadRun(runId, listItem) {
             // Update active state
-            document.querySelectorAll('.run-item').forEach(el => el.classList.remove('active'));
-            if (listItem) listItem.classList.add('active');
+            const selectedItem = listItem || Array.from(document.querySelectorAll('.run-item'))
+                .find(el => el.dataset.runId === runId);
+            document.querySelectorAll('.run-item').forEach(el => {
+                el.classList.remove('active');
+                el.setAttribute('aria-pressed', 'false');
+            });
+            if (selectedItem) {
+                selectedItem.classList.add('active');
+                selectedItem.setAttribute('aria-pressed', 'true');
+            }
             
             const viewEl = document.getElementById('trace-view');
             viewEl.innerHTML = '<div class="loading">Loading trace details...</div>';
@@ -118,7 +146,7 @@
                 let compareOptions = `<option value="">None (Single Trace View)</option>`;
                 allRuns.forEach(r => {
                     if (r.run_id !== run.run_id) {
-                        compareOptions += `<option value="${esc(r.run_id)}">${esc(r.context_id || r.run_id)} (${esc(new Date(r.start_time * 1000).toLocaleString())})</option>`;
+                        compareOptions += `<option value="${esc(r.run_id)}">${esc(r.context_id || r.run_id)} (${esc(formatTimestamp(r.start_time))})</option>`;
                     }
                 });
 
@@ -126,7 +154,7 @@
                     <div style="display: flex; justify-content: space-between; align-items: baseline;">
                         <h2>Trace: ${esc(run.context_id || 'Unknown')}</h2>
                         <div>
-                            <label style="font-size: 14px; font-weight: 500; margin-right: 8px;">Compare against baseline:</label>
+                            <label for="compare-select" style="font-size: 14px; font-weight: 500; margin-right: 8px;">Compare against baseline:</label>
                             <select id="compare-select" style="padding: 6px; border-radius: 4px; border: 1px solid #d1d5db;" onchange="loadDiff('${esc(run.run_id)}', this.value)">
                                 ${compareOptions}
                             </select>
@@ -150,7 +178,7 @@
                                     <span class="event-type">#${esc(event.sequence)} ${esc(event.payload.type_identifier)}</span>
                                     ${engineName}
                                 </div>
-                                <span class="event-time">${esc(event.timestamp)}</span>
+                                <span class="event-time">${esc(formatTimestamp(event.timestamp))}</span>
                             </div>
                             <div class="event-payload">${esc(payloadStr)}</div>
                         </div>
@@ -191,7 +219,7 @@
                 allRuns.forEach(r => {
                     if (r.run_id !== candidateId) {
                         let selected = r.run_id === goldenId ? 'selected' : '';
-                        compareOptions += `<option value="${esc(r.run_id)}" ${selected}>${esc(r.context_id || r.run_id)} (${esc(new Date(r.start_time * 1000).toLocaleString())})</option>`;
+                        compareOptions += `<option value="${esc(r.run_id)}" ${selected}>${esc(r.context_id || r.run_id)} (${esc(formatTimestamp(r.start_time))})</option>`;
                     }
                 });
 
@@ -199,7 +227,7 @@
                     <div style="display: flex; justify-content: space-between; align-items: baseline;">
                         <h2>Unified Diff View</h2>
                         <div>
-                            <label style="font-size: 14px; font-weight: 500; margin-right: 8px;">Baseline (Golden):</label>
+                            <label for="compare-select" style="font-size: 14px; font-weight: 500; margin-right: 8px;">Baseline (Golden):</label>
                             <select id="compare-select" style="padding: 6px; border-radius: 4px; border: 1px solid #d1d5db;" onchange="loadDiff('${esc(candidateId)}', this.value)">
                                 ${compareOptions}
                             </select>
@@ -254,4 +282,3 @@
     </script>
 </body>
 </html>
-

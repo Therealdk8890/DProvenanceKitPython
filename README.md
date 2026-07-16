@@ -4,6 +4,7 @@
 [![PyPI](https://img.shields.io/pypi/v/dprovenancekit)](https://pypi.org/project/dprovenancekit/)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/dprovenancekit?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/dprovenancekit)
 [![Listed in the official OpenAI Agents SDK docs](https://img.shields.io/badge/OpenAI%20Agents%20SDK-listed%20in%20the%20official%20docs-412991)](https://github.com/openai/openai-agents-python/blob/main/docs/tracing.md#external-tracing-processors-list)
+[![Open in Spaces](https://huggingface.co/datasets/huggingface/badges/resolve/main/open-in-hf-spaces-sm.svg)](https://huggingface.co/spaces/dpk890/D.P.K)
 
 **Your agent skipped its verification step. The final answer still looked right, so every eval and
 snapshot test passed. DProvenanceKit — regression testing for AI agents — caught the skipped
@@ -20,6 +21,8 @@ has zero third-party dependencies.
 (plan → search → rank → verify → decide), then catches a later run that drops verification and
 loops its search tool. It flags the regression as HIGH severity, writes a local SQLite trace,
 anomaly rules, and a shareable HTML report, then prints copy-paste commands for the gate and viewer.
+Or skip the install entirely: the same gate, anomaly rules, diff, and HTML report run in a
+[live browser demo on Hugging Face Spaces](https://huggingface.co/spaces/dpk890/D.P.K).
 
 > Run → Record → Query → Diff → Detect regressions → Gate in CI
 
@@ -32,7 +35,8 @@ anomaly rules, and a shareable HTML report, then prints copy-paste commands for 
 **Guides:** [Regression testing for AI agents](https://dprovenance.dev/guides/regression-testing-for-ai-agents/) ·
 [A CI gate for LLM agents](https://dprovenance.dev/guides/ci-gate-for-llm-agents/) ·
 [DProvenanceKit vs LangSmith](https://dprovenance.dev/compare/dprovenancekit-vs-langsmith/) ·
-[OpenAI Agents SDK integration](https://dprovenance.dev/openai-agents/)
+[OpenAI Agents SDK integration](https://dprovenance.dev/openai-agents/) ·
+[Live demo (Hugging Face Space)](https://huggingface.co/spaces/dpk890/D.P.K)
 
 **It's not just the library** — it ships the surfaces that make reasoning regressions actionable:
 

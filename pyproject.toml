@@ -59,6 +59,7 @@ dprovenancekit = "dprovenancekit.pytest_plugin"
 Homepage = "https://github.com/Therealdk8890/DProvenanceKitPython"
 Repository = "https://github.com/Therealdk8890/DProvenanceKitPython"
 Issues = "https://github.com/Therealdk8890/DProvenanceKitPython/issues"
+Demo = "https://huggingface.co/spaces/dpk890/D.P.K"
 "Swift original" = "https://github.com/Therealdk8890/DProvenanceKit"
 
 [tool.setuptools.package-data]

@@ -7,6 +7,8 @@ public API may still change between minor versions.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-07-15
+
 ### Security
 
 - **Local trace viewer binds to `127.0.0.1` by default.** `dprovenancekit ui` previously bound
@@ -27,6 +29,12 @@ public API may still change between minor versions.
 
 ### Fixed
 
+- **The local trace viewer renders real run and event dates.** SQLite run metadata is stored in
+  microseconds while detailed events use seconds; the viewer now normalizes both (plus ordinary
+  JavaScript milliseconds) instead of displaying `Invalid Date` or a raw epoch.
+- **The end-to-end demo writes artifacts where the user ran it.** It no longer writes ignored
+  databases and reports beside the checkout script, and its printed follow-up commands shell-quote
+  paths safely.
 - **CLI exits `2` on an unknown subcommand** (previously printed usage and exited `0`, which could
   let a typo silently pass a CI gate). Added top-level `--help` and `--version`.
 - **OTLP ingestion keeps GenAI spans nested under a non-GenAI root span.** Traces from an
@@ -44,6 +52,10 @@ public API may still change between minor versions.
 
 ### Added
 
+- **`dprovenancekit demo` ships in the installed wheel.** A zero-configuration tour records a
+  healthy and regressed agent run, queries and diffs them, applies the gate and anomaly rules, then
+  writes a self-contained SQLite database, JSON ruleset, and shareable HTML report with copy-paste
+  commands for the CLI and local viewer.
 - **`dprovenancekit gate --profile {strict_audit_v1,developer_debug_v1}`** exposes the alignment
   profile, making reorder detection reachable from the CLI (the span-aware profile fails on
   reordered critical steps; the default remains linear).
@@ -62,6 +74,8 @@ public API may still change between minor versions.
 
 ### Changed
 
+- **The local viewer run picker is keyboard- and assistive-technology friendly.** Runs are native
+  buttons with visible focus and pressed state, and comparison selectors have programmatic labels.
 - **The public API (`__all__`) was curated from 178 symbols to 87.** Internal machinery (query
   compiler/planner, write buffer, sqlite connection/writer, alignment-engine internals, benchmark
   report types, verification invariants, Swift-port view/perturbation helpers) is no longer in the
@@ -82,5 +96,6 @@ Baseline for this changelog. See the Git history and
 [GitHub releases](https://github.com/Therealdk8890/DProvenanceKitPython/releases) for earlier
 changes.
 
-[Unreleased]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Therealdk8890/DProvenanceKitPython/releases/tag/v0.6.0

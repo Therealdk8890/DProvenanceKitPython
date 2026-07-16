@@ -48,3 +48,21 @@ def test_every_viewer_interpolation_is_escaped():
         "unescaped template interpolations found in index.html — route them "
         f"through esc() or add a justified entry to SAFE_INTERPOLATIONS: {unescaped}"
     )
+
+
+def test_viewer_normalizes_sqlite_and_event_timestamp_units():
+    html = INDEX_HTML.read_text()
+    assert "function formatTimestamp(value)" in html
+    assert "magnitude >= 1e14" in html  # SQLite run metadata: microseconds
+    assert "magnitude < 1e11" in html  # detailed event payloads: seconds
+    assert "new Date(run.start_time * 1000)" not in html
+    assert "esc(formatTimestamp(run.start_time))" in html
+    assert "esc(formatTimestamp(event.timestamp))" in html
+
+
+def test_run_picker_uses_keyboard_accessible_buttons():
+    html = INDEX_HTML.read_text()
+    assert "document.createElement('button')" in html
+    assert "button.type = 'button'" in html
+    assert "aria-pressed" in html
+    assert ".run-item:focus-visible" in html

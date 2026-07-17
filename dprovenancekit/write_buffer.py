@@ -165,7 +165,14 @@ class TraceWriteBuffer:
             )
             self._total_count += 1
             self._total_bytes += event_bytes
-            self._queue_depth_by_run[event.run_id] = run_depth + 1
+            # Re-read the per-run depth rather than reusing the ``run_depth`` captured
+            # before eviction: global-capacity eviction above may have popped a victim
+            # belonging to *this* run and decremented the counter, so ``run_depth + 1``
+            # would write back a stale, permanently-inflated value that spuriously trips
+            # the soft per-run cap once the run's real occupancy is far below it.
+            self._queue_depth_by_run[event.run_id] = (
+                self._queue_depth_by_run.get(event.run_id, 0) + 1
+            )
 
     def enqueue_edge(self, edge: TraceEdge) -> None:
         with self._lock:

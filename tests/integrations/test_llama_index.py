@@ -246,6 +246,37 @@ def test_payload_values_are_truncated():
     assert llm_end.payload.attributes["response"] == "R" * 2000 + "…"
 
 
+def test_serialized_config_secrets_are_redacted():
+    """LlamaIndex's serialized LLM config has shipped an api_key in some versions. With
+    capture on, secret-keyed values (including those nested in the serialized dict) must
+    be redacted so the key never lands in a trace store shared as a golden baseline —
+    while non-secret structure like the model name is preserved."""
+    def drive(handler):
+        handler.on_event_start(
+            LLM,
+            payload={
+                "serialized": {"model": "gpt-4o", "api_key": "sk-SECRET123"},
+                "api_key": "sk-TOPLEVEL",
+                "total_tokens": 42,
+            },
+            event_id="l",
+            parent_id="root",
+        )
+        handler.on_event_end(LLM, payload={}, event_id="l")
+
+    store, run = _run_handler(drive)
+    llm_start, _ = _recorded(store, run)
+    attrs = llm_start.payload.attributes
+    # No secret material anywhere in the recorded attributes.
+    assert "sk-SECRET123" not in repr(attrs)
+    assert "sk-TOPLEVEL" not in repr(attrs)
+    assert attrs["api_key"] == "***redacted***"
+    # Useful structure survives: model name kept, token counts not treated as secrets.
+    assert "gpt-4o" in attrs["serialized"]
+    assert "***redacted***" in attrs["serialized"]
+    assert attrs["total_tokens"] == "42"
+
+
 def test_node_lists_become_counts():
     def drive(handler):
         handler.on_event_start(RETRIEVE, event_id="r", parent_id="root")

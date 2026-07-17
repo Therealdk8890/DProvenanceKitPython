@@ -22,6 +22,25 @@ def _make_row(run_id, seq, priority):
     )
 
 
+def test_per_run_depth_counter_does_not_drift_after_global_eviction():
+    """The per-run depth counter must track actual occupancy. When global-capacity eviction
+    pops a victim from the enqueuing run, writing back a pre-eviction ``run_depth + 1``
+    left the counter permanently inflated, spuriously tripping the soft per-run cap and
+    shedding a run's events while its real occupancy was far below the limit."""
+    buffer = TraceWriteBuffer(max_global_buffer=10, max_per_run_buffer=40)
+    for i in range(60):  # far past the global cap, one run
+        buffer.enqueue(_make_row("r", i, TracePriority.TELEMETRY))
+
+    # Only 10 rows can be buffered; the counter must agree, not read 40.
+    assert buffer.current_depth == 10
+    assert buffer._queue_depth_by_run.get("r") == 10
+
+    buffer.flush_all()
+    # Emptied buffer -> no residual phantom count for the run.
+    assert buffer.current_depth == 0
+    assert not buffer._queue_depth_by_run.get("r")
+
+
 def test_drain_preserves_global_insertion_order():
     buffer = TraceWriteBuffer(max_global_buffer=10_000, max_per_run_buffer=10_000)
     priorities = [

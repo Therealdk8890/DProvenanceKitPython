@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import queue
 import threading
 import uuid
@@ -13,6 +14,8 @@ from .edge import TraceEdge, TraceEdgeType
 from .event import TraceEvent
 from .graph import TraceExplanation, TraceGraph
 from .query import TraceQueryDSL, TraceQueryPlanner, TraceRun
+
+logger = logging.getLogger(__name__)
 
 
 class TraceError(Exception):
@@ -169,7 +172,16 @@ class InMemoryTraceStore(TraceStore):
             if item is None:  # sentinel
                 return
             event, run = item
-            self._live_engine.process(event=event, run=run)
+            try:
+                self._live_engine.process(event=event, run=run)
+            except Exception:
+                # A subscriber callback raising must not kill this shared daemon consumer
+                # and silently stop *all* live delivery (while `record` keeps enqueuing
+                # into an unbounded queue). Log and continue with the next event.
+                logger.exception(
+                    "[DProvenanceKit] live subscription handler raised; "
+                    "continuing delivery"
+                )
 
     def close(self) -> None:
         if self._live_queue is not None and self._live_thread is not None:

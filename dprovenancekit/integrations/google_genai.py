@@ -237,10 +237,15 @@ class _ModelsWrapper:
     def generate_content(self, *args, **kwargs):
         model_name = _model_name(args, kwargs)
         # Start and end of one generate_content call share a single span so the
-        # pair reads as one node in the span tree. `record()` reads the span from
-        # the contextvar (there is no span_id kwarg), so set it for the call.
+        # pair reads as one node in the span tree. `record()` reads both the span and
+        # its parent from contextvars (there is no span_id kwarg), so set both for the
+        # call: the previously-current span becomes this call's parent. Setting only
+        # current_span_id (as before) left parent_span_id pointing at the *enclosing*
+        # span's parent — the grandparent — so a nested call attached to the wrong node.
         call_span = str(uuid.uuid4())
+        parent_span = TraceContext.current_span_id.get()
         span_token = TraceContext.current_span_id.set(call_span)
+        parent_token = TraceContext.parent_span_id.set(parent_span)
         try:
             start_event = GoogleGenAITraceEvent.make(
                 type_name="generateContentStarted",
@@ -273,6 +278,7 @@ class _ModelsWrapper:
 
             return response
         finally:
+            TraceContext.parent_span_id.reset(parent_token)
             TraceContext.current_span_id.reset(span_token)
 
 

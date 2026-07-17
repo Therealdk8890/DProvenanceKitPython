@@ -6,7 +6,6 @@ import uuid
 from typing import Callable, List, Optional
 
 from .alignment_contract import AlignmentExecutionContract
-from .alignment_config import AlignmentMode
 from .alignment_evidence import EvidenceCollector, InterpretationStep
 from .alignment_meta import AlignmentMetaEvent
 from .alignment_models import (
@@ -162,10 +161,14 @@ class DefaultAlignmentInterpreter:
                     used_comparison_indices.add(match_idx)
                 else:
                     used_comparison_indices.add(match_idx)
-                    is_reordered = (
-                        config.profile.alignment_mode != AlignmentMode.LINEAR
-                        and b_event.id in reordered_base_ids
-                    )
+                    # Reorder detection is a pure matched-pair inversion check; it does not
+                    # depend on span-aware *scoring*, so it must not be suppressed in LINEAR
+                    # mode. Gating it on ``!= LINEAR`` (as before) made the strictest audit
+                    # profile — strict_audit_v1, which is LINEAR — blind to critical-step
+                    # dependency inversion (e.g. GenerateInvoice before CreateCustomer),
+                    # the exact HIGH-risk failure the engine documents it exists to catch,
+                    # so it detected strictly *less* than the developer_debug profile.
+                    is_reordered = b_event.id in reordered_base_ids
                     if is_reordered:
                         state = AlignmentState.reordered(
                             b_event.sequence, c_event.sequence

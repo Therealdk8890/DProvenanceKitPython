@@ -220,6 +220,52 @@ def test_generator_records_error_raised_during_iteration():
     assert by_type["stream.error"].payload.attributes["error_type"] == "ValueError"
 
 
+def test_generator_early_termination_records_clean_end_not_error():
+    """Breaking out of a traced generator early (GeneratorExit) is ordinary control flow,
+    not a failure: it must record a normal ``.end``, not a spurious CRITICAL ``.error`` —
+    otherwise every take-first/islice consumer diverges from a fully-consumed run."""
+    store = InMemoryTraceStore()
+
+    @traced
+    def stream(n):
+        for i in range(n):
+            yield i
+
+    with traced_run(store, context_id="c") as run:
+        for x in stream(10):
+            break  # abandon the generator after one item
+
+    by_type = _events_by_type(_get_run(store, run))
+    assert "stream.end" in by_type
+    assert "stream.error" not in by_type
+    assert by_type["stream.end"].payload.priority == TracePriority.STRUCTURAL
+
+
+def test_async_generator_early_termination_records_clean_end_not_error():
+    store = InMemoryTraceStore()
+
+    @traced
+    async def astream(n):
+        for i in range(n):
+            yield i
+
+    async def main():
+        with traced_run(store, context_id="c") as run:
+            gen = astream(10)
+            async for _ in gen:
+                break
+            # Async generators are not finalized synchronously on ``break`` (their
+            # ``aclose()`` is a coroutine), so close it explicitly — the same
+            # GeneratorExit the event loop's finalizer would later deliver.
+            await gen.aclose()
+            return run
+
+    run = asyncio.run(main())
+    by_type = _events_by_type(_get_run(store, run))
+    assert "astream.end" in by_type
+    assert "astream.error" not in by_type
+
+
 def test_async_generator_is_traced():
     store = InMemoryTraceStore()
 

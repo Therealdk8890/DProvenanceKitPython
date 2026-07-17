@@ -16,16 +16,40 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
 
 
 def _json_serializable(obj):
+    # Prefer the payload's own to_dict() (its canonical, export-consistent shape) over the
+    # raw __dict__ of internal fields. Dataclasses always have __dict__, so checking it
+    # first left to_dict() unreachable and served internal attribute names to the viewer.
+    if hasattr(obj, "to_dict"):
+        try:
+            return obj.to_dict()
+        except Exception:
+            pass
     if hasattr(obj, "__dict__"):
         return obj.__dict__
-    if hasattr(obj, "to_dict"):
-        return obj.to_dict()
     return str(obj)
 
 
-def create_handler(db_path: str):
+def _host_only(host_header: str) -> str:
+    """The hostname from a ``Host`` header, without the optional ``:port`` (IPv6-aware)."""
+    host_header = host_header.strip()
+    if host_header.startswith("["):  # bracketed IPv6 literal, e.g. [::1]:8080
+        return host_header[1 : host_header.find("]")] if "]" in host_header else host_header
+    return host_header.rsplit(":", 1)[0] if ":" in host_header else host_header
+
+
+def create_handler(db_path: str, allowed_hosts=None):
     class UIHandler(BaseHTTPRequestHandler):
         def do_GET(self):
+            # Reject requests whose Host header isn't in the allow-list. For a loopback
+            # bind this defeats DNS rebinding: a malicious page that rebinds its hostname
+            # to 127.0.0.1 sends its own Host, which we refuse — without this, that page
+            # could read unauthenticated trace prompts/outputs from the local viewer.
+            if allowed_hosts is not None:
+                host = _host_only(self.headers.get("Host", ""))
+                if host not in allowed_hosts:
+                    self.send_error(403, "Forbidden")
+                    return
+
             parsed = urlparse(self.path)
             path = parsed.path
 
@@ -221,11 +245,19 @@ def create_handler(db_path: str):
     return UIHandler
 
 
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
 def create_server(db_path: str, port: int = 8080, host: str = "127.0.0.1"):
     """Build the UI server bound to ``host`` (loopback by default: trace databases
     hold prompts and outputs, so exposing them beyond the machine must be a
-    deliberate choice)."""
-    return ThreadingHTTPServer((host, port), create_handler(db_path))
+    deliberate choice).
+
+    When bound to loopback, the handler enforces a loopback-only ``Host`` allow-list to
+    block DNS rebinding. A non-loopback bind (via ``--host``) is an explicit choice to
+    expose the viewer, so Host filtering is left off there."""
+    allowed_hosts = _LOOPBACK_HOSTS if host in _LOOPBACK_HOSTS else None
+    return ThreadingHTTPServer((host, port), create_handler(db_path, allowed_hosts))
 
 
 def run_ui_server(db_path: str, port: int = 8080, host: str = "127.0.0.1"):

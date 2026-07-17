@@ -153,7 +153,12 @@ class SQLiteWriter:
                     staged = self._flush_runs_table(force=True)
                 self._mark_runs_clean(staged)
             except Exception:  # pragma: no cover - defensive
-                pass
+                # A failed runs-table write leaves events durable in trace_events but
+                # unreadable (get_run/get_events JOIN runs). Don't fail flush over it, but
+                # log it — a silent pass made the metadata loss impossible to diagnose.
+                logger.exception(
+                    "[DProvenanceKit] SQLiteWriter failed to flush runs-table metadata"
+                )
 
     def shutdown(self) -> None:
         self._shutting_down.set()

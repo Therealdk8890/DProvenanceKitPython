@@ -212,26 +212,43 @@ class TraceGraphValidator:
         for edge in causal:
             adjacency.setdefault(edge.source_id, []).append(edge.target_id)
 
-        visited = set()
-        rec_stack = set()
-        path: List[uuid.UUID] = []
+        # Seed the search from every node that participates in a causal edge (as source
+        # *or* target), not only ``graph.nodes``: ``store.lineage()``/``impact()`` return
+        # partial graphs whose ``nodes`` dict need not cover every edge endpoint, and a
+        # cycle among edge-only nodes must still be detected. Sorted for deterministic
+        # cycle reporting.
+        seeds = set(adjacency.keys())
+        for targets in adjacency.values():
+            seeds.update(targets)
+        seeds.update(graph.nodes.keys())
 
-        def has_cycle(node: uuid.UUID) -> None:
-            visited.add(node)
-            rec_stack.add(node)
-            path.append(node)
-            for neighbor in adjacency.get(node, []):
-                if neighbor not in visited:
-                    has_cycle(neighbor)
-                elif neighbor in rec_stack:
-                    path.append(neighbor)
-                    raise StructuralCycleDetected(list(path))
-            rec_stack.discard(node)
-            path.pop()
-
-        for node in graph.nodes.keys():
-            if node not in visited:
-                has_cycle(node)
+        # Iterative DFS (an explicit stack, not recursion) so a long-but-valid causal
+        # chain cannot overflow Python's recursion limit and raise RecursionError from a
+        # validator whose whole job is to *not* reject well-formed traces.
+        visited: set = set()  # fully explored
+        for start in sorted(seeds, key=str):
+            if start in visited:
+                continue
+            stack = [(start, iter(adjacency.get(start, [])))]
+            on_path = {start}
+            path: List[uuid.UUID] = [start]
+            while stack:
+                node, neighbors = stack[-1]
+                advanced = False
+                for neighbor in neighbors:
+                    if neighbor in on_path:
+                        raise StructuralCycleDetected(path + [neighbor])
+                    if neighbor not in visited:
+                        stack.append((neighbor, iter(adjacency.get(neighbor, []))))
+                        on_path.add(neighbor)
+                        path.append(neighbor)
+                        advanced = True
+                        break
+                if not advanced:
+                    stack.pop()
+                    on_path.discard(node)
+                    path.pop()
+                    visited.add(node)
 
 
 class TraceGraphProvenanceValidator:

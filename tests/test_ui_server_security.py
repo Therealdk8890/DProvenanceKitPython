@@ -66,3 +66,48 @@ def test_run_picker_uses_keyboard_accessible_buttons():
     assert "button.type = 'button'" in html
     assert "aria-pressed" in html
     assert ".run-item:focus-visible" in html
+
+
+def test_host_header_allowlist_blocks_dns_rebinding():
+    """A loopback-bound viewer must reject requests whose Host header isn't loopback, so a
+    malicious page that rebinds its hostname to 127.0.0.1 cannot read trace data. Requests
+    with a loopback Host still succeed."""
+    import http.client
+    import threading
+
+    server = create_server(db_path="unused.sqlite", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = server.server_address[1]
+
+        def get_status(host_header):
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            try:
+                conn.putrequest("GET", "/", skip_host=True, skip_accept_encoding=True)
+                conn.putheader("Host", host_header)
+                conn.endheaders()
+                return conn.getresponse().status
+            finally:
+                conn.close()
+
+        # Rebinding attack: attacker-controlled Host pointing at the loopback server.
+        assert get_status("evil.example.com") == 403
+        # Legitimate local access serves the viewer.
+        assert get_status(f"localhost:{port}") == 200
+        assert get_status(f"127.0.0.1:{port}") == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_non_loopback_bind_does_not_enforce_host_allowlist():
+    """Binding to a non-loopback host is an explicit choice to expose the viewer, so Host
+    filtering is left off (there is no practical allow-list for an 0.0.0.0 bind)."""
+    from dprovenancekit.ui_server import create_handler, _LOOPBACK_HOSTS
+
+    # Loopback bind gets an allow-list; a wildcard bind gets None (no filtering).
+    assert "127.0.0.1" in _LOOPBACK_HOSTS
+    handler = create_handler("unused.sqlite", allowed_hosts=None)
+    assert handler is not None  # constructs without a Host allow-list

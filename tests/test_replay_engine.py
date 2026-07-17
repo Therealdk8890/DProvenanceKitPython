@@ -113,3 +113,45 @@ def test_sequence_gaps():
     assert (gaps[0].lower_bound, gaps[0].upper_bound) == (0, 0)
     assert (gaps[1].lower_bound, gaps[1].upper_bound) == (3, 4)
     assert (gaps[2].lower_bound, gaps[2].upper_bound) == (7, 9)
+
+
+def test_span_parent_cycle_events_are_orphaned_not_dropped():
+    """A parent cycle (A<->B) or a self-parent leaves its spans neither rooted nor
+    reachable. The old orphan test only fired on a *missing* parent, so cycle members
+    silently vanished from the tree while the manifest still counted them. They must now
+    surface as orphaned events so nothing is lost without accounting."""
+    run_id = uuid.uuid4()
+    events = [
+        _event(run_id, 0, "A", "B", MockEvent("a")),  # A's parent is B
+        _event(run_id, 1, "B", "A", MockEvent("b")),  # B's parent is A -> cycle
+        _event(run_id, 2, "C", None, MockEvent("c")),  # healthy root span
+    ]
+    snap = TraceReplayEngine(events).snapshot()
+
+    def tree_event_count(roots):
+        total, stack, seen = 0, list(roots), set()
+        while stack:
+            node = stack.pop()
+            if id(node) in seen:
+                continue
+            seen.add(id(node))
+            total += len(node.events)
+            stack.extend(node.children)
+        return total
+
+    in_tree = tree_event_count(snap.roots)
+    assert snap.manifest.total_events == 3
+    assert snap.manifest.orphaned_events == 2  # A and B
+    # Every event is accounted for: in the tree or explicitly orphaned, none dropped.
+    assert in_tree + snap.manifest.orphaned_events == snap.manifest.total_events
+
+
+def test_self_parent_span_is_orphaned_not_dropped():
+    run_id = uuid.uuid4()
+    events = [
+        _event(run_id, 0, "S", "S", MockEvent("s")),  # self-parent
+        _event(run_id, 1, "C", None, MockEvent("c")),
+    ]
+    snap = TraceReplayEngine(events).snapshot()
+    assert snap.manifest.total_events == 2
+    assert snap.manifest.orphaned_events == 1

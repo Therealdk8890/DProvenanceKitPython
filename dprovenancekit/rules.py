@@ -247,6 +247,13 @@ class UnregisteredToolRule(AnomalyRule):
                 continue
             tool_name = payload.get("tool_name") or payload.get("name")
             registry = payload.get(self._registry_field) or []
+            if isinstance(registry, str):
+                # A registry serialized as a bare string must not let ``not in`` degrade
+                # into substring matching: an unregistered tool whose name is a substring
+                # of the string (e.g. "arc" in "search,calc") would slip through this
+                # allow-list check. Treat the string as a single opaque entry so the
+                # comparison stays an exact match — fail closed, not open.
+                registry = [registry]
             if tool_name and tool_name not in registry:
                 return True
         return False

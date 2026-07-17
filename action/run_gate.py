@@ -18,11 +18,26 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import subprocess
 import sys
 
-# An unlikely delimiter for the $GITHUB_OUTPUT multiline (heredoc) format.
-_DELIM = "__DPROV_OUTPUT_EOF__"
+
+def _fresh_delimiter(value: str) -> str:
+    """A random heredoc delimiter guaranteed absent from ``value``.
+
+    The ``$GITHUB_OUTPUT`` multiline format is ``key<<DELIM\\n<value>\\nDELIM``. A *fixed*
+    delimiter lets attacker-influenced content (a candidate step's ``type_identifier``,
+    which flows verbatim into the multi-line ``summary``) embed a line equal to the
+    delimiter, closing the heredoc early and injecting forged output commands such as
+    ``passed=true`` — silently bypassing the gate. A fresh random delimiter per write,
+    verified absent from the value, is GitHub's recommended defense.
+    """
+    lines = value.splitlines()
+    while True:
+        delim = f"ghadelimiter_{secrets.token_hex(16)}"
+        if delim not in lines:
+            return delim
 
 
 def resolve_run(env, run_key, context_key, db, run=subprocess.run):
@@ -87,12 +102,18 @@ def render_outputs(report):
 
 
 def write_outputs(pairs, path):
-    """Append ``pairs`` to ``$GITHUB_OUTPUT`` using the multiline heredoc format."""
+    """Append ``pairs`` to ``$GITHUB_OUTPUT`` using the multiline heredoc format.
+
+    Each value gets its own random delimiter that is verified absent from that value, so
+    no attacker-influenced content can close the heredoc early and forge later outputs.
+    """
     if not path:
         return
     with open(path, "a", encoding="utf-8") as fh:
         for key, value in pairs:
-            fh.write(f"{key}<<{_DELIM}\n{value}\n{_DELIM}\n")
+            value = str(value)
+            delim = _fresh_delimiter(value)
+            fh.write(f"{key}<<{delim}\n{value}\n{delim}\n")
 
 
 def main(env=None):
@@ -135,8 +156,25 @@ def main(env=None):
     step_summary = env.get("GITHUB_STEP_SUMMARY")
     if step_summary:
         with open(step_summary, "a", encoding="utf-8") as fh:
-            fh.write("### DProvenanceKit regression gate\n\n```\n" + summary + "\n```\n")
+            fh.write("### DProvenanceKit regression gate\n\n" + _fenced(summary) + "\n")
     return 0
+
+
+def _fenced(text: str) -> str:
+    """Wrap ``text`` in a Markdown code fence that it cannot break out of.
+
+    ``summary`` embeds attacker-influenced step ``type_identifier``s; a fixed 3-backtick
+    fence lets a step name containing ```` ``` ```` close the block and inject arbitrary
+    Markdown into the job summary. Markdown allows fences longer than any backtick run
+    they enclose, so size the fence to one more than the longest run in ``text``.
+    """
+    longest = 0
+    run = 0
+    for ch in text:
+        run = run + 1 if ch == "`" else 0
+        longest = max(longest, run)
+    fence = "`" * max(3, longest + 1)
+    return f"{fence}\n{text}\n{fence}"
 
 
 if __name__ == "__main__":

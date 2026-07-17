@@ -66,6 +66,7 @@ required.
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -74,6 +75,8 @@ from typing import Any, Dict, List, Mapping, Optional, Set
 from ..edge import TraceEdgeType
 from ..event import TraceableEvent, TraceEvent
 from ..priority import TracePriority
+
+logger = logging.getLogger(__name__)
 
 # Subclass CrewAI's ``BaseEventListener`` when installed so we are a first-class listener
 # whose construction registers handlers on the global bus; fall back to ``object``
@@ -527,7 +530,15 @@ class DProvenanceKitEventListener(_BaseEventListener):  # type: ignore[misc,vali
             with self._lock:
                 self._handle_locked(kind, phase, source, event)
         except Exception:  # noqa: BLE001 - instrumentation must never break the crew
-            pass
+            # Still swallowed so a translation bug can't crash the crew, but logged at
+            # debug: a silently-broken adapter (e.g. a CrewAI version whose events lack
+            # the assumed correlation fields) otherwise produces empty traces with no clue.
+            logger.debug(
+                "[DProvenanceKit] failed to record CrewAI %s.%s event",
+                kind,
+                phase,
+                exc_info=True,
+            )
 
     def _handle_locked(self, kind: str, phase: str, source: Any, event: Any) -> None:
         if kind == "crew":

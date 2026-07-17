@@ -226,9 +226,11 @@ def test_gate_across_separate_databases(tmp_path):
     assert fail == 1
 
 
-def test_gate_reorder_needs_span_aware_profile(trace_db, capsys):
-    """A pure reorder of CRITICAL steps passes the default (linear) profile but fails
-    under the span-aware developer_debug_v1 profile, with the reorder reported."""
+def test_gate_reorder_of_critical_steps_fails_any_profile(trace_db, capsys):
+    """A pure reorder of CRITICAL steps fails the gate under the default (strict_audit_v1,
+    linear) profile *and* the span-aware developer_debug_v1 profile, with the reorder
+    reported. Reorder detection is a matched-pair inversion check, not a span-aware
+    scoring feature, so the strictest profile must not detect less than the debug one."""
     db, ids = trace_db
     # Same steps as the golden, but the two CRITICAL steps swapped.
     store = SQLiteTraceStore(AnyTraceableEvent, db, start_writer=False)
@@ -238,45 +240,29 @@ def test_gate_reorder_needs_span_aware_profile(trace_db, capsys):
     store.flush()
     store._db.close()
 
-    # Default profile (strict_audit_v1, linear): the reorder binds 1:1 and passes.
-    default = main(
-        [
-            "gate",
-            "--db",
-            db,
-            "--golden",
-            str(ids["golden"]),
-            "--candidate",
-            str(swapped),
-        ]
-    )
-    assert default == 0
-    capsys.readouterr()  # drain
-
-    # Span-aware profile: the reorder is detected and fails the gate.
-    code = main(
-        [
-            "gate",
-            "--db",
-            db,
-            "--golden",
-            str(ids["golden"]),
-            "--candidate",
-            str(swapped),
-            "--profile",
-            "developer_debug_v1",
-            "--json",
-        ]
-    )
-    payload = json.loads(capsys.readouterr().out)
-    assert code == 1
-    assert payload["passed"] is False
-    assert payload["regression_level"] == "high"
-    assert set(payload["steps_by_change"].get("reordered", [])) == {
-        "verified",
-        "decided",
-    }
-    assert "reordered" in payload["reasoning"]
+    for profile_args in ([], ["--profile", "developer_debug_v1"]):
+        code = main(
+            [
+                "gate",
+                "--db",
+                db,
+                "--golden",
+                str(ids["golden"]),
+                "--candidate",
+                str(swapped),
+                "--json",
+            ]
+            + profile_args
+        )
+        payload = json.loads(capsys.readouterr().out)
+        assert code == 1
+        assert payload["passed"] is False
+        assert payload["regression_level"] == "high"
+        assert set(payload["steps_by_change"].get("reordered", [])) == {
+            "verified",
+            "decided",
+        }
+        assert "reordered" in payload["reasoning"]
 
 
 def test_gate_max_level_low_medium_warn_and_behave_like_none(trace_db, capsys):

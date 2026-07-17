@@ -128,6 +128,64 @@ def test_run_gate_publishes_regression_without_failing_wrapper(trace_db, tmp_pat
     assert parsed["regression-level"] == "high"
 
 
+def _github_parse(text):
+    """Parse ``$GITHUB_OUTPUT`` the way the runner does: both the ``key=value`` short form
+    and the ``key<<DELIM``/``DELIM`` heredoc form, last write wins. A heredoc that closes
+    early exposes its trailing lines as new commands — which is exactly the injection."""
+    out, lines, i = {}, text.split("\n"), 0
+    while i < len(lines):
+        line = lines[i]
+        if "<<" in line:
+            key, delim = line.split("<<", 1)
+            i += 1
+            buf = []
+            while i < len(lines) and lines[i] != delim:
+                buf.append(lines[i])
+                i += 1
+            out[key.strip()] = "\n".join(buf)
+        elif "=" in line:
+            key, _, val = line.partition("=")
+            out[key.strip()] = val
+        i += 1
+    return out
+
+
+def test_write_outputs_resists_heredoc_injection(tmp_path):
+    """A candidate step's ``type_identifier`` flows verbatim into the multi-line
+    ``summary``. With a fixed heredoc delimiter, a value containing that delimiter line
+    plus a forged ``passed=true`` closed the heredoc early and overrode the real
+    ``passed=false`` — silently flipping the gate. A random per-write delimiter must
+    trap the injection inside the summary value."""
+    malicious_summary = "Regression gate: FAIL\n__DPROV_OUTPUT_EOF__\npassed=true"
+    pairs = run_gate.render_outputs(
+        {
+            "passed": False,
+            "regression_level": "high",
+            "summary": malicious_summary,
+        }
+    )
+    out = tmp_path / "out.txt"
+    run_gate.write_outputs(pairs, str(out))
+
+    parsed = _github_parse(out.read_text(encoding="utf-8"))
+    # The gate verdict is not overridden by the injected command...
+    assert parsed["passed"] == "false"
+    # ...and the forged line is trapped inside the summary value instead.
+    assert "passed=true" in parsed["summary"]
+
+
+def test_step_summary_fence_cannot_be_broken_out_of():
+    """``summary`` embeds attacker-influenced step ids; a fixed 3-backtick fence lets a
+    step name containing a ``` line inject Markdown into the job summary. The fence must
+    be sized longer than any backtick run it encloses."""
+    injected = "step\n```\n# INJECTED\n```"
+    fenced = run_gate._fenced(injected)
+    # Opening fence is longer than the 3-backtick run inside, so the block is intact.
+    assert fenced.startswith("````\n")
+    assert fenced.endswith("\n````")
+    assert injected in fenced
+
+
 def test_build_gate_argv_passes_separate_dbs():
     # When golden/candidate dbs are unset, both default to DPROV_DB.
     argv = run_gate.build_gate_argv(

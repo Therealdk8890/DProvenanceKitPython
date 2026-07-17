@@ -233,10 +233,10 @@ def test_custom_minimum_priority_is_honored():
     assert lifted.passed
 
 
-# ── Reorder detection depends on the profile (documented limitation) ─────────────
+# ── Reorder detection fires regardless of profile ────────────────────────────────
 
 
-def test_reordering_only_caught_with_a_span_aware_profile():
+def test_reordering_is_caught_regardless_of_profile():
     store = InMemoryTraceStore()
     golden = build_run(store, "golden")  # retrieved, verified, decided
 
@@ -251,9 +251,13 @@ def test_reordering_only_caught_with_a_span_aware_profile():
             kit.record(FCEvent("verified", "2 of 3 agree"))
         reordered = store.get_run(run.run_id)
 
-    # The default linear profile does NOT catch a pure reorder (it binds 1:1).
-    assert RegressionGate().check(golden, reordered).passed
-    # A span-aware profile does.
+    # Reorder detection is a pure matched-pair inversion check, not a span-aware scoring
+    # feature, so the default (strict_audit_v1 / LINEAR) profile catches a pure reorder
+    # just as a span-aware profile does — the strictest audit profile must not detect
+    # *less* than the debug one.
+    strict = RegressionGate().check(golden, reordered)
+    assert not strict.passed
+    assert strict.regression_level == RegressionLevel.HIGH  # critical steps reordered
     span_aware = RegressionGate(profile=AlignmentProfile.developer_debug_v1)
     assert not span_aware.check(golden, reordered).passed
 

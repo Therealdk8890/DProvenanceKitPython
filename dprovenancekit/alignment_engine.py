@@ -85,54 +85,78 @@ class TraceAlignmentEngine:
             evidence_collector=collector,
         )
 
-        # Regression risk. Two failure modes degrade a critical reasoning step:
-        #   1. Removing it outright.
-        #   2. Reordering it — running critical steps out of their original order can invert
-        #      a dependency (e.g. GenerateInvoice before CreateCustomer). The engine has no
-        #      dependency graph, so this is critical-*order* sensitivity, not true dependency
-        #      inference; it deliberately fires only on CRITICAL steps so that reordering of
-        #      structural/diagnostic steps (the common, benign case) stays NONE.
-        removed_critical = [
-            a
-            for a in alignments
-            if a.state.is_removed
-            and a.base_event is not None
-            and a.base_event.payload.priority == TracePriority.CRITICAL
-        ]
-        reordered_critical = [
-            a
-            for a in alignments
-            if a.state.kind == AlignmentStateKind.REORDERED
-            and a.base_event is not None
-            and a.base_event.payload.priority == TracePriority.CRITICAL
-        ]
-        if removed_critical:
-            critical_types = ", ".join(
-                a.base_event.payload.type_identifier
-                for a in removed_critical
-                if a.base_event is not None
-            )
+        # Regression risk derives from the equivalence OUTCOME, not just the coarse
+        # removed/reordered display states. A critical reasoning step degrades when it is:
+        #   1. Removed outright.
+        #   2. Reordered relative to another CRITICAL step — running critical steps out of
+        #      order can invert a dependency (e.g. GenerateInvoice before CreateCustomer).
+        #      The engine has no dependency graph, so this is critical-*order* sensitivity,
+        #      not true inference; restricting to critical-vs-critical keeps a benign
+        #      structural/diagnostic step moving past a stationary critical at NONE.
+        #   3. Changed beyond equivalence — bound to a same-type event but with a differing
+        #      payload whose match score falls below the profile's semantic_threshold.
+        # Type match alone clears the matcher's bind threshold, so a changed or skipped
+        # critical step is essentially never left REMOVED; it binds and is classified
+        # AMBIGUOUS. Reading only removed/reordered therefore silently missed materially
+        # changed or skipped critical steps (RegressionRisk.none on a tampered decision),
+        # even though the equivalence model had already recorded equivalent=False.
+        threshold = self.configuration.profile.semantic_threshold
+        base_index_by_id = {e.id: i for i, e in enumerate(base_events)}
+        comp_index_by_id_risk = {e.id: i for i, e in enumerate(comp_events)}
+
+        removed_critical_types: list[str] = []
+        changed_critical_types: list[str] = []
+        # (base_idx, comp_idx, type) per matched CRITICAL pair, on the same array-index
+        # basis the interpreter uses for its REORDERED findings, so the verdict can never
+        # disagree with the reorder findings it summarizes.
+        critical_pairs: list[tuple[int, int, str]] = []
+        for a in alignments:
+            b = a.base_event
+            if b is None or b.payload.priority != TracePriority.CRITICAL:
+                continue
+            c = a.comparison_event
+            if c is None:
+                removed_critical_types.append(b.payload.type_identifier)
+                continue
+            # Identical payloads are equivalent by construction; otherwise consult the same
+            # score the matcher/equivalence model used. Below the threshold => not equivalent.
+            if b.payload != c.payload:
+                score, _ = self.configuration.score_match(b, c)
+                if score < threshold:
+                    changed_critical_types.append(b.payload.type_identifier)
+            if b.id in base_index_by_id and c.id in comp_index_by_id_risk:
+                critical_pairs.append(
+                    (base_index_by_id[b.id], comp_index_by_id_risk[c.id], b.payload.type_identifier)
+                )
+
+        reordered_critical_types: list[str] = []
+        for x in critical_pairs:
+            if any(x[0] != y[0] and x[0] < y[0] and x[1] > y[1] for y in critical_pairs):
+                reordered_critical_types.append(x[2])
+
+        if removed_critical_types:
             risk = RegressionRisk(
                 level=RegressionLevel.HIGH,
                 strength=0.95,
-                reasoning=f"Critical reasoning steps removed: {critical_types}",
+                reasoning=f"Critical reasoning steps removed: {', '.join(removed_critical_types)}",
             )
-        elif reordered_critical:
-            reordered_types = ", ".join(
-                a.base_event.payload.type_identifier
-                for a in reordered_critical
-                if a.base_event is not None
-            )
+        elif reordered_critical_types:
             risk = RegressionRisk(
                 level=RegressionLevel.HIGH,
                 strength=1.0,
-                reasoning=f"Critical reasoning steps reordered: {reordered_types}",
+                reasoning=f"Critical reasoning steps reordered: {', '.join(reordered_critical_types)}",
+            )
+        elif changed_critical_types:
+            risk = RegressionRisk(
+                level=RegressionLevel.HIGH,
+                strength=0.9,
+                reasoning=f"Critical reasoning steps changed beyond equivalence: {', '.join(changed_critical_types)}",
             )
         else:
             risk = RegressionRisk(
                 level=RegressionLevel.NONE,
                 strength=1.0,
-                reasoning="No critical steps removed or reordered.",
+                reasoning="No critical steps removed, reordered, or materially changed.",
             )
 
         v_artifacts = None

@@ -14,7 +14,6 @@ from .alignment_evidence import (
 from .alignment_interpreter import DefaultAlignmentInterpreter
 from .alignment_matcher import DefaultTraceMatcher
 from .alignment_models import (
-    AlignmentStateKind,
     RegressionLevel,
     RegressionRisk,
     TraceAlignmentResult,

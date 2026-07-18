@@ -1,4 +1,3 @@
-import uuid
 from dprovenancekit import (
     DProvenanceKit,
     SQLiteTraceStore,

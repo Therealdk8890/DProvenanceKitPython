@@ -35,8 +35,8 @@ def trace_db(tmp_path):
 def test_export_emits_valid_ordered_jsonl(trace_db, capsys):
     db, run_id = trace_db
     assert main(["export", "--db", db, "--run", str(run_id)]) == 0
-    lines = [l for l in capsys.readouterr().out.splitlines() if l.strip()]
-    rows = [json.loads(l) for l in lines]  # every line must be valid JSON
+    lines = [ln for ln in capsys.readouterr().out.splitlines() if ln.strip()]
+    rows = [json.loads(ln) for ln in lines]  # every line must be valid JSON
     assert [r["type"] for r in rows] == ["retrieved", "decided"]
     assert [r["sequence"] for r in rows] == [0, 1]
     assert all(r["run_id"] == str(run_id) for r in rows)

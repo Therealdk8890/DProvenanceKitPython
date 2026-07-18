@@ -1,6 +1,5 @@
 import uuid
-import pytest
-from dprovenancekit import TraceGraph, TraceEdge, TraceEdgeType, InMemoryTraceStore
+from dprovenancekit import TraceGraph, TraceEdge, TraceEdgeType
 from dprovenancekit.visualizer import render_trace_html
 from conftest import TestEvent
 

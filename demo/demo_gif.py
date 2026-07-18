@@ -87,7 +87,7 @@ def main() -> None:
     candidate = record(store, "research-agent · PR-42", CANDIDATE)
 
     def line(label, run, color):
-        parts, prev = [], None
+        parts = []
         for e in run.events:
             a = e.payload.type_identifier
             if parts and parts[-1][0] == a:
@@ -105,7 +105,7 @@ def main() -> None:
     out(f"{DIM}$ dprovenancekit gate --golden main --candidate PR-42{R}", 0.7)
     report = RegressionGate().check(golden, candidate)
     rules = [ToolDropRule("verify"), LoopingRule("search", max_repeats=3)]
-    anomalies = AnomalyDetector(store).detect_anomalies(rules)
+    AnomalyDetector(store).detect_anomalies(rules)
 
     verdict = "PASS" if report.passed else "REGRESSION"
     out(f"  {RED}{B}✗ {verdict}{R}  {GREY}severity {R}{RED}{report.regression_level.value.upper()}{R}"

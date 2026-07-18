@@ -90,6 +90,7 @@ def test_run_fingerprint(desc, case):
         rows = store._db.query(
             "SELECT fingerprint FROM runs WHERE run_id = ?", (str(run.run_id),)
         )
+        store.close()
     assert rows[0][0] == case["fingerprint"]
 
 
@@ -131,6 +132,7 @@ def test_query_semantics(backend, desc, case):
 
         dsl = dsl_from_wire_dsl(case["dsl"])
         matched = sorted(r.context_id for r in store.query_runs(dsl))
+        store.close()
     assert matched == case["expected_context_ids"]
 
 

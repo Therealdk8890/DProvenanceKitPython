@@ -32,7 +32,6 @@ import os
 import sys
 import uuid
 from dataclasses import dataclass
-from typing import Optional
 
 # Make the package importable when run straight from a checkout (no install needed).
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

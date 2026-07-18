@@ -78,10 +78,10 @@ def test_facade_jsonl_save_is_one_event_per_line(tmp_path):
     path = tmp_path / "run.jsonl"
     trace.save(path)
 
-    lines = [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
+    lines = [json.loads(ln) for ln in path.read_text().splitlines() if ln.strip()]
     # Three spans, a .start/.end pair each.
     assert len(lines) == 6
-    types = [l["type"] for l in lines]
+    types = [ln["type"] for ln in lines]
     assert "Agent Workflow.start" in types
     assert "Verify Claims.end" in types
     # Every event carries the envelope fields the loader needs.

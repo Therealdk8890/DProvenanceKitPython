@@ -419,6 +419,7 @@ def test_same_path_shares_fingerprint_different_path_differs():
         fp1 = _fingerprint_after(store, r1.run_id)
         fp2 = _fingerprint_after(store, r2.run_id)
         fp3 = _fingerprint_after(store, r3.run_id)
+        store.close()
 
     assert fp1 == fp2
     assert fp1 != fp3

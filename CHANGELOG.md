@@ -35,6 +35,13 @@ public API may still change between minor versions.
 
 ### Fixed
 
+- **A failed store open no longer leaks its SQLite connection.** `SQLiteConnection` opened the
+  underlying `sqlite3` connection before applying its setup PRAGMAs, and `SQLiteTraceStore`
+  opened the connection before creating its schema — so pointing either at a file that is not a
+  usable database raised the expected `DatabaseError` but left the already-open connection (and
+  its file descriptor) to the garbage collector. Both constructors now close the connection
+  before re-raising, so error paths (a typo'd `--db`, a corrupted golden baseline) clean up
+  after themselves.
 - **`RegressionRisk` no longer misses materially-changed or skipped critical steps.** The risk
   verdict was derived only from `removed`/`reordered` alignment states, but a critical step that
   was changed or skipped binds to a same-type event (type match alone clears the matcher

@@ -389,6 +389,7 @@ def test_identical_paths_share_a_fingerprint_divergent_paths_do_not():
         fp_a = _fingerprint_after(store, fa)
         fp_b = _fingerprint_after(store, fb)
         fp_c = _fingerprint_after(store, fc)
+        store.close()
 
     assert fp_a == fp_b  # same path → same fingerprint
     assert fp_a != fp_c  # reordered path → different fingerprint

@@ -72,6 +72,7 @@ def test_failed_batch_insert_is_tallied_and_breaks_integrity(temp_db_path):
     assert not stats.preserved_integrity
 
     assert _count(db, "SELECT COUNT(*) FROM runs;") == 0
+    db.close()
 
 
 def test_successful_insert_tallies_nothing_and_records_accurate_metadata(temp_db_path):
@@ -94,3 +95,4 @@ def test_successful_insert_tallies_nothing_and_records_accurate_metadata(temp_db
 
     assert _count(db, "SELECT COUNT(*) FROM trace_events;") == 3
     assert _count(db, "SELECT event_count FROM runs WHERE run_id = 'run-1';") == 3
+    db.close()

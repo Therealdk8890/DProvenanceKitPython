@@ -22,9 +22,29 @@ from .event import TraceEvent
 
 @dataclass(frozen=True)
 class TraceRun:
+    """A finished run's events in ascending ``sequence`` order.
+
+    ``sequence`` is the authoritative causal order (see ``TraceEvent``); the
+    constructor normalizes whatever list it is given (ties keep the caller's
+    relative order), so two runs holding the same events query, diff, align, and
+    gate identically whether they were loaded from a store or assembled by hand.
+    This mirrors the Swift ``TraceRun`` initializer, and keeps the in-memory
+    temporal query evaluator consistent with the SQL backend, which already
+    orders by ``MIN(sequence)``.
+    """
+
     run_id: uuid.UUID
     context_id: str
     events: List[TraceEvent]
+
+    def __post_init__(self) -> None:
+        events = list(self.events)
+        if any(
+            events[i].sequence > events[i + 1].sequence
+            for i in range(len(events) - 1)
+        ):
+            events.sort(key=lambda e: e.sequence)  # sorted() is stable in Python
+            object.__setattr__(self, "events", events)
 
 
 # MARK: - AST nodes --------------------------------------------------------------

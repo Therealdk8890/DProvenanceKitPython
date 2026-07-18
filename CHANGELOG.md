@@ -35,6 +35,20 @@ public API may still change between minor versions.
 
 ### Fixed
 
+- **`RegressionRisk` no longer misses materially-changed or skipped critical steps.** The risk
+  verdict was derived only from `removed`/`reordered` alignment states, but a critical step that
+  was changed or skipped binds to a same-type event (type match alone clears the matcher
+  threshold), is classified `ambiguous`, and so escaped the verdict entirely — a tampered or
+  skipped critical decision reported `RegressionLevel.NONE` on the flagship `strict_audit_v1`
+  profile, the exact regressions the engine exists to catch (SEMANTICS Def 5 / Invariant A/E).
+  The verdict is now derived from the equivalence outcome: a critical step that is removed, bound
+  below the profile's `semantic_threshold`, or reordered relative to another **critical** step
+  fires HIGH. Reorder is computed over critical pairs only, so a benign structural/diagnostic step
+  moving past a stationary critical no longer fires a false HIGH. Alignment states and every
+  calibrated corpus case are unchanged; this only corrects the risk level. Behavior change: runs
+  that previously (incorrectly) reported `NONE` may now report `HIGH` (e.g. a `RegressionGate`
+  with `allow_divergent_steps=True` now fails on a flipped critical decision unless
+  `max_regression_level` is raised).
 - **Nested boolean queries return correct results on the SQLite backend.** The query compiler
   joined compound `AND`/`OR`/`missing_step` members with bare `INTERSECT`/`UNION`/`EXCEPT`; SQLite
   gives those operators equal, left-to-right precedence, so a nested member was silently re-grouped

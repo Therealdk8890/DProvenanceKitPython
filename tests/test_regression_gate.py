@@ -154,7 +154,24 @@ def test_multiple_critical_removals():
 # ── Lenient policies ─────────────────────────────────────────────────────────────
 
 
-def test_allow_divergent_tolerates_a_changed_payload():
+def test_allow_divergent_tolerates_a_benign_noncritical_change():
+    store = InMemoryTraceStore()
+    golden = build_run(store, "golden", retrieved_detail="3 sources")
+    # Only the STRUCTURAL "retrieved" step changed; no critical step is touched.
+    candidate = build_run(store, "candidate", retrieved_detail="4 sources")
+
+    # Strict (default): the changed structural step is an ambiguous divergence → fail.
+    strict = RegressionGate().check(golden, candidate)
+    assert not strict.passed
+    assert "retrieved" in strict.divergent_steps
+
+    # Lenient: a benign non-critical change is tolerated, and severity stays NONE.
+    lenient = RegressionGate(allow_divergent_steps=True).check(golden, candidate)
+    assert lenient.passed
+    assert lenient.regression_level is RegressionLevel.NONE
+
+
+def test_changed_critical_decision_is_high_even_under_lenient():
     store = InMemoryTraceStore()
     golden = build_run(store, "golden", decision="supported")
     flipped = build_run(store, "flipped", decision="refuted")
@@ -164,10 +181,20 @@ def test_allow_divergent_tolerates_a_changed_payload():
     assert not strict.passed
     assert "decided" in strict.divergent_steps
 
-    # Lenient: tolerate per-step changes, gate only on severity → pass (no critical removal).
+    # A CRITICAL decision flipping supported → refuted is a material change beyond
+    # equivalence — a HIGH regression, not a benign per-step divergence.
+    # ``allow_divergent_steps`` relaxes the per-step (display-state) check but NOT the
+    # severity gate, so the lenient gate still fails.
     lenient = RegressionGate(allow_divergent_steps=True).check(golden, flipped)
-    assert lenient.passed
-    assert lenient.regression_level is RegressionLevel.NONE
+    assert not lenient.passed
+    assert lenient.regression_level is RegressionLevel.HIGH
+
+    # Tolerating a changed critical decision requires explicitly raising the severity
+    # ceiling — exactly as it does for a critical removal.
+    tolerant = RegressionGate(
+        allow_divergent_steps=True, max_regression_level=RegressionLevel.HIGH
+    ).check(golden, flipped)
+    assert tolerant.passed
 
 
 def test_lenient_still_catches_critical_removal_unless_level_raised():

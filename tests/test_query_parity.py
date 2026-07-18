@@ -185,3 +185,51 @@ def test_count_step_engine_scope_parity(tmp_path):
         mem = sorted(r.context_id for r in mem_store.query_runs(query))
         sql = sorted(r.context_id for r in sql_store.query_runs(query))
         assert mem == sql == expected[name], f"Backend divergence on query: {name}"
+
+
+def test_nested_boolean_composition_parity(tmp_path):
+    """Compound query members nested below the top level must compile with the AST's
+    grouping. SQLite gives UNION/INTERSECT/EXCEPT equal, left-to-right precedence, so a
+    naive flat join silently re-groups nested AND/OR/missing_step and diverges from the
+    in-memory evaluator. Every case here is discriminating — it returns the wrong runs
+    under a flat compilation, so it also pins correctness, not merely backend agreement."""
+
+    def only(*steps):
+        def scenario(record):
+            for step in steps:
+                record(TestEvent(step))
+
+        return scenario
+
+    cases = [
+        # has(errorDetected) OR missing(stepCompleted); the run has BOTH steps.
+        # Flat: (A UNION runs) EXCEPT stepCompleted == runs - stepCompleted -> run wrongly
+        # excluded even though has(errorDetected) already satisfies the OR.
+        (
+            only("errorDetected", "stepCompleted"),
+            TraceQueryDSL()
+            .requiring_step("errorDetected")
+            .or_(TraceQueryDSL().missing_step("stepCompleted")),
+            ["case"],
+        ),
+        # has(errorDetected) OR ((stepCompleted OR processStarted) AND processFinished);
+        # the run has ONLY errorDetected. Flat left-to-right groups as
+        # (((ED UNION SC) UNION PS) INTERSECT PF) -> wrongly excluded.
+        (
+            only("errorDetected"),
+            TraceQueryDSL()
+            .requiring_step("errorDetected")
+            .or_(
+                TraceQueryDSL()
+                .requiring_step("stepCompleted")
+                .or_(TraceQueryDSL().requiring_step("processStarted"))
+                .requiring_step("processFinished")
+            ),
+            ["case"],
+        ),
+    ]
+
+    for i, (scenario, query, expected) in enumerate(cases):
+        db_path = str(tmp_path / f"nested-{i}.sqlite")
+        mem, sql = _matches(scenario, query, db_path)
+        assert mem == sql == expected, f"case {i}: mem={mem} sql={sql} expected={expected}"

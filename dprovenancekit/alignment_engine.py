@@ -55,6 +55,14 @@ class TraceAlignmentEngine:
         comp_events = [
             e for e in comparison.events if e.payload.priority >= minimum_priority
         ]
+        # Reorder detection compares list position, so order by the authoritative
+        # ``sequence`` first. ``align()`` is public and accepts arbitrary runs (merged
+        # shards, OTel-ingested, hand-built) that need not arrive sequence-sorted; without
+        # this, two logically identical traces whose events merely arrive in a different
+        # list order were flagged as a spurious HIGH reordering regression. A stable sort
+        # is a no-op for store-backed runs, which already emerge ``ORDER BY sequence``.
+        base_events.sort(key=lambda e: e.sequence)
+        comp_events.sort(key=lambda e: e.sequence)
 
         collector = (
             AlignmentEvidenceCollector()

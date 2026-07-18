@@ -179,18 +179,28 @@ class TraceReplayEngine:
             else:
                 roots.append(node)
 
-        roots.extend(root_builders)
+        # Pass 3: any span not reachable from a genuine root (parent None) is orphaned.
+        # This covers both the classic case — an ancestor chain ending at a *missing*
+        # parent — and parent *cycles* (A→B→A, or a self-parent S→S), which the old
+        # "parent missing" test skipped entirely, leaving those spans in neither the tree
+        # nor the orphan list so their events silently disappeared while the manifest
+        # still counted them. The ``reachable`` visited-guard also stops a self-referential
+        # child list from looping forever.
+        reachable = set()
+        stack = list(roots)
+        while stack:
+            n = stack.pop()
+            if id(n) in reachable:
+                continue
+            reachable.add(id(n))
+            stack.extend(n.children)
 
-        # Pass 3: collect orphaned events (subtrees whose parent span is entirely missing).
         orphaned_events: List[ReplayEvent] = []
         for node in span_map.values():
-            pid = node.parent_span_id
-            if pid is not None and pid not in span_map:
-                stack = [node]
-                while stack:
-                    n = stack.pop()
-                    orphaned_events.extend(n.events)
-                    stack.extend(n.children)
+            if id(node) not in reachable:
+                orphaned_events.extend(node.events)
+
+        roots.extend(root_builders)
 
         true_roots = [b.build() for b in roots]
         true_roots.sort(key=lambda n: n.start_sequence)

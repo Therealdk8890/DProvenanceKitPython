@@ -7,6 +7,80 @@ public API may still change between minor versions.
 
 ## [Unreleased]
 
+### Security
+
+- **The standalone HTML visualizer now escapes trace data.** `render_trace_html`
+  (`visualizer.py`) interpolated payloads, engine names, type ids, and the title into HTML and
+  into an inlined `<script>` JSON block with no escaping — the same stored-XSS class 0.6.1 fixed
+  in the served viewer and PR/MR renderers, but this module was missed. Server-rendered values are
+  now HTML-escaped, the embedded JSON is escaped so a `</script>` in trace data cannot break out,
+  and the client-side inspector escapes values before assigning `innerHTML`.
+- **The GitHub Action regression gate can no longer be bypassed by a crafted trace.**
+  `action/run_gate.py` wrote the multi-line `summary` (which embeds attacker-influenceable step
+  `type_identifier`s) to `$GITHUB_OUTPUT` with a fixed heredoc delimiter, so a candidate step name
+  containing that delimiter line plus a forged `passed=true` could close the heredoc early and
+  override the real verdict — silently passing a real regression. Each value now uses a random
+  per-write delimiter verified absent from the content. The `$GITHUB_STEP_SUMMARY` code fence is
+  likewise sized to exceed any backtick run it encloses, so a step name cannot inject markdown.
+- **The LlamaIndex adapter redacts secrets from captured payloads.** With payload capture on
+  (the default) it stringified every non-structural value, including `EventPayload.SERIALIZED` —
+  the serialized LLM config, which has shipped an `api_key` in some llama-index versions — into a
+  trace store this toolkit encourages committing as a golden baseline. Secret-keyed values, nested
+  ones included, are now replaced with a redaction placeholder while non-secret structure (model
+  name, token counts) is preserved.
+- **The local trace viewer validates the `Host` header on loopback binds.** The API returned
+  trace prompts/outputs with no `Host`/`Origin` check, so a malicious page could reach it via DNS
+  rebinding (rebinding its hostname to `127.0.0.1`). A loopback-bound viewer now rejects requests
+  whose `Host` isn't loopback; an explicit non-loopback `--host` bind leaves filtering off.
+
+### Fixed
+
+- **Nested boolean queries return correct results on the SQLite backend.** The query compiler
+  joined compound `AND`/`OR`/`missing_step` members with bare `INTERSECT`/`UNION`/`EXCEPT`; SQLite
+  gives those operators equal, left-to-right precedence, so a nested member was silently re-grouped
+  and diverged from the in-memory evaluator (e.g. `has(a) OR missing(b)` returned the wrong runs).
+  Each compiled member is now isolated in a sub-select.
+- **The write buffer no longer over-sheds a run's events after a capacity burst.** The per-run depth
+  counter was written back from a value captured before global-capacity eviction, so evicting a row
+  from the enqueuing run left the counter permanently inflated, spuriously tripping the soft per-run
+  cap. The counter now tracks actual occupancy.
+- **Early-terminating a `@traced` generator records a normal end, not a CRITICAL error.** Breaking
+  out of a traced generator (or async generator) raised `GeneratorExit`, which was recorded as a
+  spurious CRITICAL `.error`, diverging partially-consumed streams from fully-consumed ones and
+  tripping error-keyed anomaly rules. It now records `.end`.
+- **The google-genai wrapper nests calls under the enclosing span.** It set only the current span,
+  leaving the parent pointing at the enclosing span's parent (the grandparent), so nested
+  `generate_content` calls attached to the wrong node. It now sets the parent span too.
+- **The alignment engine detects reordering under every profile, keyed on sequence.** Reorder
+  detection was suppressed in `LINEAR` mode, so the strictest audit profile (`strict_audit_v1`)
+  never flagged critical-step reordering that the debug profile caught; and it compared list
+  position rather than the authoritative `sequence`, flagging logically identical but unsorted
+  runs as a spurious HIGH regression. `align()` now sorts by sequence and reorder detection is
+  mode-independent.
+- **Trace replay surfaces span-cycle events as orphans instead of dropping them.** A parent cycle
+  (`A↔B`) or self-parent left its spans neither rooted nor orphaned, so their events vanished from
+  the reconstructed tree while the manifest still counted them. Unreachable spans are now reported
+  as orphaned events.
+- **The trace-graph cycle validator catches cycles on partial graphs and survives deep chains.** It
+  seeded the search only from `graph.nodes`, missing cycles among nodes that appear solely in edges
+  (as `lineage()`/`impact()` can produce), and recursed per hop so a long valid causal chain raised
+  `RecursionError`. The search now seeds from all edge endpoints and is iterative.
+- **`UnregisteredToolRule` no longer fails open on a string registry.** When the registry field was
+  a bare string rather than a list, `tool_name not in registry` degraded to substring matching, so
+  an unregistered tool whose name was a substring of the registry string was treated as allowed. A
+  string registry is now compared as a single exact entry (fail closed).
+- **The in-memory live-subscription consumer survives a raising subscriber.** A subscriber callback
+  raising once killed the shared daemon consumer thread, silently stopping *all* live delivery while
+  `record` kept enqueuing into an unbounded queue. The consumer now logs and continues.
+- **Framework adapters and the SQLite writer log previously-silent failures.** The CrewAI listener
+  swallowed every translation error with no trace (a version whose events lack the assumed
+  correlation fields produced empty traces with no clue why); `SQLiteTraceStore.flush` swallowed a
+  failed runs-table write that leaves events durable but unreadable. Both now log while preserving
+  the non-fatal behavior.
+- **The trace viewer serializes payloads via `to_dict()`.** `_json_serializable` checked `__dict__`
+  first, which dataclasses always have, so the `to_dict()` branch was dead and the viewer showed
+  internal field names instead of each payload's canonical, export-consistent shape.
+
 ## [0.6.1] - 2026-07-15
 
 ### Security

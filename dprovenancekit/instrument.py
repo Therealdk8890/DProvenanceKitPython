@@ -298,6 +298,22 @@ def traced(
                 try:
                     async for item in func(*args, **kwargs):
                         yield item
+                except GeneratorExit:
+                    # The consumer stopped early (``aclose()``/``break``/cancellation of
+                    # the iterating task). That is ordinary control flow, not a failure —
+                    # record a normal ``.end`` so a partially-consumed stream matches a
+                    # fully-consumed one instead of emitting a spurious CRITICAL error.
+                    end_id = _record_in_span(
+                        f"{step_name}.end",
+                        priority,
+                        {"name": step_name},
+                        engine=step_name,
+                        span_id=span_id,
+                        parent_span_id=parent,
+                    )
+                    if link_lifecycle:
+                        _link(start_id, end_id, TraceEdgeType.DERIVED_FROM)
+                    raise
                 except BaseException as error:  # noqa: BLE001 - record then re-raise
                     err_id = _record_in_span(
                         f"{step_name}.error",
@@ -345,6 +361,22 @@ def traced(
                     _link(_enclosing_step.get(), start_id, TraceEdgeType.INFORMED)
                 try:
                     result = yield from func(*args, **kwargs)
+                except GeneratorExit:
+                    # The consumer stopped early (``close()``/``break``/``islice``). That
+                    # is ordinary control flow, not a failure — record a normal ``.end``
+                    # so a partially-consumed stream matches a fully-consumed one instead
+                    # of emitting a spurious CRITICAL error that trips anomaly rules.
+                    end_id = _record_in_span(
+                        f"{step_name}.end",
+                        priority,
+                        {"name": step_name},
+                        engine=step_name,
+                        span_id=span_id,
+                        parent_span_id=parent,
+                    )
+                    if link_lifecycle:
+                        _link(start_id, end_id, TraceEdgeType.DERIVED_FROM)
+                    raise
                 except BaseException as error:  # noqa: BLE001 - record then re-raise
                     err_id = _record_in_span(
                         f"{step_name}.error",

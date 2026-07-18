@@ -320,6 +320,24 @@ def test_unregistered_tool_rule_silent_when_all_calls_registered():
     assert AnomalyDetector(store).detect_anomalies([rule]) == []
 
 
+def test_unregistered_tool_rule_string_registry_is_not_substring_matched():
+    """A registry serialized as a bare string must not degrade membership into substring
+    matching: 'arc' is a substring of 'search,calc' but is not a registered tool, so the
+    rogue call must still be flagged — the rule fails closed, not open."""
+    from dprovenancekit.rules import UnregisteredToolRule
+
+    store = InMemoryTraceStore()
+    kit = DProvenanceKit(ToolCallStep)
+    with kit.run(context_id="rogue", store=store) as run:
+        # registered_tools as a STRING whose text contains the tool name as a substring.
+        kit.record(ToolCallStep(name="arc", registered_tools="search,calc"))
+        rogue = run.run_id
+
+    rule = UnregisteredToolRule("tool_call", "registered_tools")
+    flagged = {a.run_id for a in AnomalyDetector(store).detect_anomalies([rule])}
+    assert rogue in flagged
+
+
 def test_unregistered_tool_rule_validates_args():
     from dprovenancekit.rules import UnregisteredToolRule
 

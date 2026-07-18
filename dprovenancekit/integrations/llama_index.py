@@ -139,6 +139,49 @@ def _key(key: Any) -> str:
 # Bulky payload lists reduced to counts instead of being captured or dropped.
 _COUNTED_KEYS = {"nodes": "node_count", "chunks": "chunk_count"}
 
+_REDACTED = "***redacted***"
+
+# Key-name fragments that mark a value as a secret. Deliberately precise — bare "token"
+# is excluded so token-count telemetry (prompt_tokens/total_tokens) is still captured.
+_SENSITIVE_KEY_FRAGMENTS = (
+    "api_key",
+    "apikey",
+    "secret",
+    "password",
+    "passwd",
+    "authorization",
+    "credential",
+    "bearer",
+    "private_key",
+    "access_token",
+    "refresh_token",
+    "auth_token",
+    "session_token",
+)
+
+
+def _is_sensitive_key(key: Any) -> bool:
+    normalized = str(key).lower().replace("-", "_")
+    return any(fragment in normalized for fragment in _SENSITIVE_KEY_FRAGMENTS)
+
+
+def _redact_secrets(value: Any) -> Any:
+    """Recursively replace secret-keyed values with a placeholder.
+
+    LlamaIndex's ``EventPayload.SERIALIZED`` is a nested LLM/embedding config dict that has
+    shipped an ``api_key`` in some versions; stringifying it verbatim leaked the key into
+    the trace store (which this toolkit encourages committing as a golden baseline). This
+    scrubs sensitive sub-keys while preserving useful structure like the model name.
+    """
+    if isinstance(value, Mapping):
+        return {
+            _key(k): (_REDACTED if _is_sensitive_key(k) else _redact_secrets(v))
+            for k, v in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_redact_secrets(v) for v in value]
+    return value
+
 
 def _payload_attributes(
     payload: Optional[Mapping[Any, Any]], capture: bool
@@ -147,7 +190,8 @@ def _payload_attributes(
 
     Node/chunk lists become counts (always — they are structural metadata); every other
     value is captured only when ``capture`` is on, stringified and truncated so no
-    single attribute can exceed the truncation limit. The exception payload is handled
+    single attribute can exceed the truncation limit, with secret-keyed values (including
+    those nested inside the serialized config) redacted. The exception payload is handled
     by the error path, never here.
     """
     attrs: Dict[str, Any] = {}
@@ -161,7 +205,10 @@ def _payload_attributes(
         if counted is not None and isinstance(v, (list, tuple)):
             attrs[counted] = len(v)
         elif capture:
-            attrs[key] = _truncate(str(v))
+            if _is_sensitive_key(key):
+                attrs[key] = _REDACTED
+            else:
+                attrs[key] = _truncate(str(_redact_secrets(v)))
     return attrs
 
 

@@ -79,6 +79,36 @@ def test_structural_validator_cycle_throws():
         TraceGraphValidator().validate_structural_integrity(graph)
 
 
+def test_structural_validator_detects_cycle_among_edge_only_nodes():
+    """lineage()/impact() return partial graphs whose ``nodes`` dict need not cover every
+    edge endpoint. Seeding the search only from ``graph.nodes`` missed cycles among nodes
+    that appear solely in edges — a validator that silently passes a real cycle."""
+    a, b = uuid.uuid4(), uuid.uuid4()
+    graph = TraceGraph(
+        nodes={},  # neither endpoint present as a node
+        edges=[
+            TraceEdge(a, b, TraceEdgeType.DERIVED_FROM),
+            TraceEdge(b, a, TraceEdgeType.DERIVED_FROM),
+        ],
+    )
+    with pytest.raises(StructuralCycleDetected):
+        TraceGraphValidator().validate_structural_integrity(graph)
+
+
+def test_structural_validator_handles_deep_acyclic_chain_without_overflow():
+    """A long-but-valid causal chain must validate, not raise RecursionError: the search
+    is iterative, so depth is bounded by heap, not Python's recursion limit."""
+    ids = [uuid.uuid4() for _ in range(5000)]
+    graph = TraceGraph(
+        nodes={i: _node(TestEvent.process_started(), i) for i in ids},
+        edges=[
+            TraceEdge(ids[k], ids[k + 1], TraceEdgeType.DERIVED_FROM)
+            for k in range(len(ids) - 1)
+        ],
+    )
+    TraceGraphValidator().validate_structural_integrity(graph)  # no raise
+
+
 def test_provenance_validator_flags_orphan_section_and_unused_fact():
     fact, section = uuid.uuid4(), uuid.uuid4()
     graph = TraceGraph(

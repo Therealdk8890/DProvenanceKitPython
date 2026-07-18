@@ -321,6 +321,19 @@ class CompiledSQLQuery:
     bindings: List[str]
 
 
+def _isolate(sql: str) -> str:
+    """Wrap a compiled member as ``SELECT run_id FROM (<member>)``.
+
+    SQLite gives ``UNION``/``INTERSECT``/``EXCEPT`` equal precedence and evaluates
+    them strictly left-to-right, so a compound member spliced directly into a parent
+    compound is silently re-grouped: ``A UNION (B INTERSECT C)`` flattens to
+    ``(A UNION B) INTERSECT C``. Every leaf/compound this compiler emits selects a
+    ``run_id`` column, so wrapping each member in a sub-select restores the AST's
+    grouping and keeps the SQLite backend in parity with the in-memory evaluator.
+    """
+    return f"SELECT run_id FROM (\n{sql}\n)"
+
+
 class TraceQueryCompiler:
     @staticmethod
     def compile(node: TraceQueryNode) -> CompiledSQLQuery:
@@ -332,7 +345,7 @@ class TraceQueryCompiler:
             if not node.nodes:
                 return CompiledSQLQuery("SELECT run_id FROM runs", [])
             compiled = [TraceQueryCompiler._compile_node(n) for n in node.nodes]
-            sql = "\nINTERSECT\n".join(c.sql for c in compiled)
+            sql = "\nINTERSECT\n".join(_isolate(c.sql) for c in compiled)
             bindings: List[str] = [b for c in compiled for b in c.bindings]
             return CompiledSQLQuery(sql, bindings)
 
@@ -340,14 +353,15 @@ class TraceQueryCompiler:
             if not node.nodes:
                 return CompiledSQLQuery("SELECT run_id FROM runs", [])
             compiled = [TraceQueryCompiler._compile_node(n) for n in node.nodes]
-            sql = "\nUNION\n".join(c.sql for c in compiled)
+            sql = "\nUNION\n".join(_isolate(c.sql) for c in compiled)
             bindings = [b for c in compiled for b in c.bindings]
             return CompiledSQLQuery(sql, bindings)
 
         if isinstance(node, NotNode):
             inner = TraceQueryCompiler._compile_node(node.node)
             return CompiledSQLQuery(
-                f"SELECT run_id FROM runs EXCEPT\n{inner.sql}", inner.bindings
+                f"SELECT run_id FROM runs EXCEPT\n{_isolate(inner.sql)}",
+                inner.bindings,
             )
 
         if isinstance(node, ContextIDEquals):

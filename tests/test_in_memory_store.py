@@ -96,3 +96,56 @@ def test_live_engine_receives_ordered_delivery():
     while time.time() < deadline and sub.count != 1:
         time.sleep(0.005)
     assert sub.count == 1
+
+
+class _FlakySubscription(TraceQuerySubscription):
+    """Raises on its first delivery, records subsequent ones."""
+
+    def __init__(self, query):
+        import uuid
+
+        self.query_id = uuid.uuid4()
+        self.query = query
+        self._lock = threading.Lock()
+        self.ids = []
+        self._raised = False
+
+    def on_match(self, run):
+        with self._lock:
+            if not self._raised:
+                self._raised = True
+                raise RuntimeError("subscriber boom")
+            self.ids.append(run.run_id)
+
+    def on_update(self, run):
+        pass
+
+    @property
+    def count(self):
+        with self._lock:
+            return len(self.ids)
+
+
+def test_live_consumer_survives_a_raising_subscriber():
+    """A subscriber callback raising must not kill the shared live-consumer daemon thread
+    and silently stop *all* future delivery. After the first delivery raises, a later
+    matching run must still be delivered."""
+    engine = LiveTraceQueryEngine()
+    store = InMemoryTraceStore(live_engine=engine)
+    sub = _FlakySubscription(TraceQueryDSL().requiring_step("processFinished"))
+    engine.register(sub)
+
+    kit = DProvenanceKit(TestEvent)
+    # First matching run: its on_match raises (would kill an unguarded consumer thread).
+    with kit.run(context_id="live-1", store=store):
+        kit.record(TestEvent.process_started())
+        kit.record(TestEvent.process_finished())
+    # Second matching run: must still be delivered because the thread survived.
+    with kit.run(context_id="live-2", store=store):
+        kit.record(TestEvent.process_started())
+        kit.record(TestEvent.process_finished())
+
+    deadline = time.time() + 2.0
+    while time.time() < deadline and sub.count != 1:
+        time.sleep(0.005)
+    assert sub.count == 1

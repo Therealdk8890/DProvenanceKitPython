@@ -6,9 +6,29 @@ inline CSS and Vanilla JS for interactive exploration of AI execution traces.
 
 from __future__ import annotations
 
+import html
 import json
 
 from .graph import TraceGraph
+
+
+def _script_safe_json(payload: object) -> str:
+    """Serialize ``payload`` to JSON that is safe to inline inside a ``<script>`` block.
+
+    ``json.dumps`` does not escape ``<``, ``>`` or ``&``, so a trace payload containing
+    ``</script>`` would otherwise terminate the script element and inject markup. Escaping
+    those characters (plus the U+2028/U+2029 line terminators, which are newlines in JS
+    string literals) keeps attacker-influenced trace content inert. The result is still
+    valid JSON — the escapes are the standard ``\\uXXXX`` forms.
+    """
+    return (
+        json.dumps(payload)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace(" ", "\\u2028")
+        .replace(" ", "\\u2029")
+    )
 
 
 _CSS = """
@@ -243,6 +263,17 @@ function syntaxHighlight(jsonStr) {
     });
 }
 
+function escapeHtml(value) {
+    // Trace data (type ids, engine names) is attacker-influenced and is assigned via
+    // innerHTML below, so escape it before interpolation.
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function selectNode(nodeId) {
     document.querySelectorAll('.timeline-item').forEach(el => el.classList.remove('active'));
     const el = document.getElementById('node-' + nodeId);
@@ -271,7 +302,7 @@ function selectNode(nodeId) {
         derivedFrom.forEach(sourceId => {
             const srcNode = window.graphData.nodes[sourceId];
             edgesHtml += `<li class="edge-item">
-                <span class="edge-link" onclick="selectNode('${sourceId}')">${srcNode.type_identifier} (${srcNode.engine_name})</span>
+                <span class="edge-link" onclick="selectNode('${escapeHtml(sourceId)}')">${escapeHtml(srcNode.type_identifier)} (${escapeHtml(srcNode.engine_name)})</span>
                 <span class="edge-type">DERIVED_FROM</span>
             </li>`;
         });
@@ -283,7 +314,7 @@ function selectNode(nodeId) {
         informedBy.forEach(sourceId => {
             const srcNode = window.graphData.nodes[sourceId];
             edgesHtml += `<li class="edge-item">
-                <span class="edge-link" onclick="selectNode('${sourceId}')">${srcNode.type_identifier} (${srcNode.engine_name})</span>
+                <span class="edge-link" onclick="selectNode('${escapeHtml(sourceId)}')">${escapeHtml(srcNode.type_identifier)} (${escapeHtml(srcNode.engine_name)})</span>
                 <span class="edge-type">INFORMED_BY</span>
             </li>`;
         });
@@ -299,9 +330,9 @@ function selectNode(nodeId) {
 
     inspector.innerHTML = `
         <div class="inspector-title">
-            ${node.type_identifier}
-            <span class="chip">${node.engine_name}</span>
-            <span class="chip">Seq: ${node.sequence}</span>
+            ${escapeHtml(node.type_identifier)}
+            <span class="chip">${escapeHtml(node.engine_name)}</span>
+            <span class="chip">Seq: ${escapeHtml(node.sequence)}</span>
         </div>
         ${edgesHtml}
         <div class="section-heading">Payload</div>
@@ -346,7 +377,11 @@ def render_trace_html(graph: TraceGraph, title: str = "Visual Debugger") -> str:
             "type": e.type.name
         })
         
-    graph_data_json = json.dumps({"nodes": js_nodes, "edges": js_edges})
+    # Attacker-influenced trace data (payloads, engine names, type ids) must be escaped
+    # before it reaches the browser: for the script block via _script_safe_json, and for
+    # the server-rendered timeline via html.escape. The client-side inspector escapes the
+    # same fields again with escapeHtml() before assigning innerHTML.
+    graph_data_json = _script_safe_json({"nodes": js_nodes, "edges": js_edges})
 
     # Generate timeline HTML
     timeline_html = []
@@ -354,25 +389,26 @@ def render_trace_html(graph: TraceGraph, title: str = "Visual Debugger") -> str:
         type_id = n.payload.type_identifier if hasattr(n.payload, "type_identifier") else str(n.payload)
         timeline_html.append(f'''
         <div class="timeline-item" id="node-{n.id}" onclick="selectNode('{n.id}')">
-            <div class="node-engine">{n.engine_name}</div>
-            <div class="node-type">{type_id}</div>
+            <div class="node-engine">{html.escape(str(n.engine_name))}</div>
+            <div class="node-type">{html.escape(str(type_id))}</div>
             <div class="node-meta">seq: {n.sequence}</div>
         </div>
         ''')
         
     timeline_str = "".join(timeline_html)
     
+    title_safe = html.escape(str(title))
     return f"""<!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <title>{title}</title>
+    <title>{title_safe}</title>
     <style>{_CSS}</style>
 </head>
 <body>
     <div class="header">
-        <h1>{title}</h1>
+        <h1>{title_safe}</h1>
         <span class="badge">DProvenanceKit</span>
     </div>
     <div class="main-layout">

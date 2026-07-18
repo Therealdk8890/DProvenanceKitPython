@@ -9,7 +9,6 @@ so ``from dprovenancekit import <name>`` keeps working for existing code.
 
 from __future__ import annotations
 
-import importlib
 
 import dprovenancekit
 

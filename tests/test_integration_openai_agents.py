@@ -289,6 +289,7 @@ def test_force_flush_writes_open_trace():
         rows = store._db.query(
             "SELECT event_count FROM runs WHERE run_id = ?", (str(run_id),)
         )
+        store.close()
     assert rows and rows[0][0] == 1
 
 
@@ -356,6 +357,7 @@ def test_same_path_shares_fingerprint_divergent_path_differs():
             _fingerprint_after(store, b),
             _fingerprint_after(store, c),
         )
+        store.close()
 
     assert fp_a == fp_b
     assert fp_a != fp_c

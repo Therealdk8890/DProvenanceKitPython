@@ -2,7 +2,6 @@ import pytest
 from dprovenancekit.kit import DProvenanceKit
 from dprovenancekit.store import InMemoryTraceStore
 from dprovenancekit.event import TraceableEvent
-from dataclasses import dataclass
 
 pytest.importorskip("IPython")
 

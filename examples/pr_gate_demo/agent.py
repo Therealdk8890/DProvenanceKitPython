@@ -1,6 +1,4 @@
 import argparse
-import sys
-from pathlib import Path
 from langchain_core.runnables import RunnableLambda
 from dprovenancekit import SQLiteTraceStore
 from dprovenancekit.integrations.langchain import DProvenanceTracer, LangChainTraceEvent

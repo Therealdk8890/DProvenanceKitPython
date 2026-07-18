@@ -6,8 +6,6 @@ with a representative spread of priority tiers.
 
 from __future__ import annotations
 
-import os
-import sys
 import uuid
 from dataclasses import dataclass
 

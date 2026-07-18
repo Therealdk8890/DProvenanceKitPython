@@ -41,6 +41,7 @@ def test_get_run_returns_run_by_id(tmp_path):
         kit.record(_E("b"))
 
     got = store.get_run(run.run_id)  # flushes, then indexed fetch
+    store.close()
     assert got is not None
     assert got.context_id == "c"
     assert [e.payload.type_identifier for e in got.events] == ["a", "b"]
@@ -48,4 +49,6 @@ def test_get_run_returns_run_by_id(tmp_path):
 
 def test_get_run_missing_is_none(tmp_path):
     store = SQLiteTraceStore(_E, str(tmp_path / "t.sqlite"), start_writer=False)
-    assert store.get_run(uuid.uuid4()) is None
+    missing = store.get_run(uuid.uuid4())
+    store.close()
+    assert missing is None

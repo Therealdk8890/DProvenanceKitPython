@@ -46,9 +46,15 @@ class SQLiteConnection:
     def __init__(self, path: str):
         self._lock = threading.RLock()
         self._db = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
-        self.execute("PRAGMA journal_mode=WAL;")
-        self.execute("PRAGMA synchronous=NORMAL;")
-        self.execute("PRAGMA temp_store=MEMORY;")
+        try:
+            self.execute("PRAGMA journal_mode=WAL;")
+            self.execute("PRAGMA synchronous=NORMAL;")
+            self.execute("PRAGMA temp_store=MEMORY;")
+        except BaseException:
+            # The first PRAGMA is where a non-database file surfaces as DatabaseError;
+            # the connection is already open by then and would leak without this.
+            self._db.close()
+            raise
 
     def execute(self, sql: str, params=()) -> None:
         with self._lock:
@@ -340,16 +346,22 @@ class SQLiteTraceStore(TraceStore):
     ):
         self._event_type = event_type
         self._db = SQLiteConnection(path)
-        self._buffer = TraceWriteBuffer(
-            max_global_buffer=max_global_buffer, max_per_run_buffer=max_per_run_buffer
-        )
-        self._drop_tally = TraceDropTally()
-        self._writer = SQLiteWriter(self._db, self._buffer, self._drop_tally)
+        try:
+            self._buffer = TraceWriteBuffer(
+                max_global_buffer=max_global_buffer, max_per_run_buffer=max_per_run_buffer
+            )
+            self._drop_tally = TraceDropTally()
+            self._writer = SQLiteWriter(self._db, self._buffer, self._drop_tally)
 
-        self._create_schema()
+            self._create_schema()
 
-        if start_writer:
-            self._writer.start()
+            if start_writer:
+                self._writer.start()
+        except BaseException:
+            # A failed __init__ never hands the store to the caller, so nobody else can
+            # close the connection we just opened.
+            self._db.close()
+            raise
 
     def _create_schema(self) -> None:
         db = self._db

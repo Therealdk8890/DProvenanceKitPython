@@ -9,7 +9,6 @@ import pytest
 
 from dprovenancekit.diff import ChangeKind, TraceDiffEngine
 from dprovenancekit.otel_ingest import (
-    IngestedRun,
     OTelSpanEvent,
     ingest_otlp,
     run_id_for_trace,

@@ -12,25 +12,18 @@ same constructs natively; the JSON vectors are the contract they must all reprod
 
 from __future__ import annotations
 
-import os
-import sys
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
-# Make the package importable whether this module is loaded by the generator (run from
-# anywhere) or by pytest (which adds ``src`` via conftest, but we must not depend on that).
-_SRC = os.path.join(os.path.dirname(__file__), "..", "src")
-
-from dprovenancekit import (  # noqa: E402
-    AlignmentConfiguration,
+from dprovenancekit import (
     AnyEquivalenceEvaluator,
     TraceableEvent,
     TraceEvent,
     TracePriority,
     TraceRun,
 )
-from dprovenancekit.query import (  # noqa: E402
+from dprovenancekit.query import (
     AfterNode,
     AndNode,
     BeforeNode,

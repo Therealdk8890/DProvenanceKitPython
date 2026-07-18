@@ -17,9 +17,11 @@ def test_written_run_survives_raw_trace_store_reopen(temp_db_path):
         kit.record(TestEvent.error_detected())
         kit.record(TestEvent.process_finished())
     store.flush()
+    store.close()
 
     reader = RawTraceStore(temp_db_path)
     runs = reader.fetch_all_runs()
+    reader.close()
 
     assert len(runs) == 1
     run = runs[0]

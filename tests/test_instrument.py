@@ -69,6 +69,48 @@ def test_traced_records_start_and_end_with_engine_and_span():
     assert by_type["search.end"].payload.attributes["result"] == "[1, 2, 3]"
 
 
+def test_traced_run_without_store_persists_to_local_default(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    @traced
+    def search(query):
+        return [query]
+
+    with traced_run(context_id="research-agent") as active:
+        search("evidence")
+
+    db_path = tmp_path / ".dprovenance" / "traces.sqlite"
+    assert db_path.exists()
+    with SQLiteTraceStore(TracedEvent, str(db_path), start_writer=False) as store:
+        run = store.get_run(active.run_id)
+    assert run is not None
+    assert run.context_id == "research-agent"
+    assert [event.payload.type_identifier for event in run.events] == [
+        "search.start",
+        "search.end",
+    ]
+
+
+def test_traced_run_without_store_honors_db_path(tmp_path):
+    db_path = tmp_path / "custom" / "candidate.sqlite"
+
+    @traced
+    def verify():
+        return True
+
+    with traced_run(context_id="agent", db_path=db_path):
+        verify()
+
+    assert db_path.exists()
+
+
+def test_traced_run_rejects_db_path_with_explicit_store(tmp_path):
+    store = InMemoryTraceStore()
+    with pytest.raises(ValueError, match="explicit store"):
+        with traced_run(store, context_id="agent", db_path=tmp_path / "unused.sqlite"):
+            pass
+
+
 def test_custom_name_and_capture_off():
     store = InMemoryTraceStore()
 

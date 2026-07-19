@@ -51,6 +51,7 @@ mcp = ["mcp"]
 
 [project.scripts]
 dprovenancekit = "dprovenancekit.cli:main"
+dpk = "dprovenancekit.cli:main"
 
 [project.entry-points.pytest11]
 dprovenancekit = "dprovenancekit.pytest_plugin"

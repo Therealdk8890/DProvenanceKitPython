@@ -51,17 +51,20 @@ from __future__ import annotations
 import functools
 import inspect
 import json
+import os
 import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterator, Mapping, Optional
+from pathlib import Path
+from typing import Any, Callable, Dict, Iterator, Mapping, Optional, Union
 
 from .context import TraceContext
 from .edge import TraceEdgeType
 from .event import TraceableEvent
 from .kit import ActiveTraceRun, DProvenanceKit
 from .priority import TracePriority
+from .sqlite_store import SQLiteTraceStore
 
 # The enclosing decorated step's *start* event id, so a nested step can be INFORMED by it.
 _enclosing_step: ContextVar[Optional[uuid.UUID]] = ContextVar(
@@ -170,16 +173,42 @@ def _summarize_call(args: tuple, kwargs: dict) -> Dict[str, Any]:
 
 @contextmanager
 def traced_run(
-    store: Any, context_id: str, *, schema_version: int = 1
+    store: Optional[Any] = None,
+    context_id: str = "agent",
+    *,
+    schema_version: int = 1,
+    db_path: Optional[Union[str, Path]] = None,
 ) -> Iterator[ActiveTraceRun]:
-    """Open a recording run for instrumented code. Yields the active run; flushes on exit."""
-    with _KIT.run(
-        context_id=context_id, store=store, schema_version=schema_version
-    ) as run:
-        try:
-            yield run
-        finally:
-            run.flush()
+    """Open a recording run for instrumented code.
+
+    Passing a store preserves the explicit production API. When no store is supplied,
+    the run is persisted to ``DPROV_DB`` or ``.dprovenance/traces.sqlite`` so the
+    zero-configuration ``dpk record`` / ``compare`` / ``gate`` workflow can consume it.
+    The implicitly-created SQLite store is closed deterministically on exit.
+    """
+    if store is not None and db_path is not None:
+        raise ValueError("db_path cannot be used when an explicit store is supplied")
+
+    owned_store = None
+    if store is None:
+        selected_path = Path(
+            db_path or os.environ.get("DPROV_DB") or ".dprovenance/traces.sqlite"
+        )
+        selected_path.parent.mkdir(parents=True, exist_ok=True)
+        owned_store = SQLiteTraceStore(TracedEvent, str(selected_path))
+        store = owned_store
+
+    try:
+        with _KIT.run(
+            context_id=context_id, store=store, schema_version=schema_version
+        ) as run:
+            try:
+                yield run
+            finally:
+                run.flush()
+    finally:
+        if owned_store is not None:
+            owned_store.close()
 
 
 def record_event(

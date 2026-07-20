@@ -65,6 +65,46 @@ dprovenancekit demo
 The demo writes `demo-traces.sqlite`, `demo-rules.json`, and `demo-report.html` to the current
 directory (or the directory you select) and prints the exact commands to gate and inspect them.
 
+### The shortest real-project workflow
+
+Instrument the steps whose presence and order matter, then let `traced_run` use the local default
+store:
+
+```python
+from dprovenancekit import traced, traced_run
+
+@traced
+def retrieve(): ...
+
+@traced
+def verify(): ...
+
+with traced_run(context_id="research-agent"):
+    retrieve()
+    verify()
+```
+
+Run the known-good version once and pin it:
+
+```bash
+python agent.py
+dpk record
+```
+
+After a code change, record another run and either inspect or enforce the result:
+
+```bash
+python agent.py
+dpk compare   # prints the diff, but does not fail merely because one exists
+dpk gate      # same comparison; exits 1 when the candidate regresses
+```
+
+No run IDs or database flags are needed. The default candidate store is
+`.dprovenance/traces.sqlite`; `dpk record` atomically pins its newest run to the committable
+`.dprovenance/baseline.sqlite`. Use `--context` when one store contains several agents, or
+`DPROV_DB` / `--db` / `--baseline` to override the paths. `dprovenancekit` remains the long-form
+executable for every `dpk` command.
+
 From a checkout (development):
 
 ```bash
@@ -175,7 +215,7 @@ external benchmark or third-party evaluation.
 | Framework-agnostic instrumentation (decorators) | `instrument` |
 | Framework adapters | `integrations.langchain`, `integrations.openai_agents`, `integrations.llama_index`, `integrations.crewai`, `integrations.google_genai`, `integrations.fastapi`, `integrations.jupyter`, `integrations.mcp` |
 | Shareable HTML regression report | `report` |
-| Headless CLI — `demo`, `gate`, `anomalies`, `runs`, `ui`, `evaluate` | `cli` |
+| Headless CLI — `record`, `compare`, `gate`, `demo`, `anomalies`, `runs`, `ui`, `evaluate` | `cli` |
 
 The SwiftUI `DProvenanceUI` target is intentionally **not** ported (it is Apple-platform UI); its
 pure value-model layer (`SpanViewModel`, flattening) is ported in `viewmodel`.
@@ -504,6 +544,7 @@ def search(query): ...
 @traced
 def answer(question, sources): ...
 
+# Omit `store` to persist automatically to .dprovenance/traces.sqlite.
 store = InMemoryTraceStore()
 with traced_run(store, context_id="ticket-42"):
     sources = search(question)
@@ -520,6 +561,10 @@ Instrumentation never changes behavior — capture is failure-proof and exceptio
 unchanged. Outside a `traced_run` the decorators are transparent, so instrumented code is safe to
 call untraced. The trace it produces is identical in shape to the adapter-produced ones, so
 fingerprint / diff / align / the regression gate all apply.
+
+For scripts and first use, `with traced_run(context_id="ticket-42"):` creates and closes a SQLite
+store at `DPROV_DB` or `.dprovenance/traces.sqlite`. Pass an explicit store, as above, when the
+application owns storage or needs a different backend.
 
 ---
 

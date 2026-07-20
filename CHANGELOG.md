@@ -7,6 +7,16 @@ public API may still change between minor versions.
 
 ## [Unreleased]
 
+### Added
+
+- **A zero-configuration local regression workflow.** The new `dpk` executable is a short alias
+  for `dprovenancekit`; `dpk record` atomically pins the newest known-good run to
+  `.dprovenance/baseline.sqlite`, `dpk compare` prints the latest candidate diff without failing
+  on drift, and `dpk gate` applies the same comparison with a CI-safe exit code. Calling
+  `traced_run(context_id="...")` without an explicit store now owns and deterministically closes
+  a SQLite store at `DPROV_DB` or `.dprovenance/traces.sqlite`, while the existing explicit-store
+  and run-id/context CLI interfaces remain compatible.
+
 ### Security
 
 - **The standalone HTML visualizer now escapes trace data.** `render_trace_html`

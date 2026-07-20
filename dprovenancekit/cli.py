@@ -2,7 +2,7 @@
 
 Mirrors the Swift ``DProvenanceKitCLI``. Usage::
 
-    dprovenancekit <demo|gate|anomalies|runs|ui|ingest|export|sync|evaluate|diagnose|stability>
+    dpk <record|compare|gate|demo|anomalies|runs|ui|ingest|export|sync>
 """
 
 from __future__ import annotations
@@ -19,6 +19,9 @@ from .alignment_config import (
 from .alignment_engine import TraceAlignmentEngine, VerificationCaptureMode
 from .benchmark import BenchmarkRunner, DeterministicBoundary
 from .corpus import DProvenanceCorpus
+
+_DEFAULT_TRACE_DB = ".dprovenance/traces.sqlite"
+_DEFAULT_BASELINE_DB = ".dprovenance/baseline.sqlite"
 
 
 def _make_engine(callback) -> TraceAlignmentEngine:
@@ -46,41 +49,202 @@ def _print_case_line(c) -> None:
     )
 
 
-def _run_gate(argv) -> int:
-    """``dprovenancekit gate`` — fail when a candidate run regresses against a golden run.
+def _select_run_id(store, run_id_text, context_id, role, db_path):
+    """Resolve an explicit id, newest context match, or newest run in a store."""
+    import uuid
 
-    Server-less: loads the golden and candidate runs from local WAL SQLite database(s) — one
-    shared ``--db``, or separate ``--golden-db`` / ``--candidate-db`` (e.g. a restored baseline
-    vs. this PR's run) — and runs the library's own :class:`RegressionGate`. Exit codes mirror
-    ``server/dprov_gate.py``::
+    if run_id_text:
+        try:
+            return uuid.UUID(run_id_text)
+        except ValueError:
+            print(f"error: --{role} must be a valid run id (UUID)", file=sys.stderr)
+            return None
 
-        0  no regression (gate passed)
-        1  regression detected
-        2  usage / run-not-found error
+    for row in store.list_run_metadata():
+        if context_id is not None and row.context_id != context_id:
+            continue
+        try:
+            return uuid.UUID(row.run_id)
+        except ValueError:
+            continue  # malformed row (foreign/corrupted db) — skip it
+
+    if context_id is None:
+        print(f"error: no runs found in {db_path} ({role})", file=sys.stderr)
+    else:
+        print(
+            f"error: no run with context id '{context_id}' in {db_path} ({role})",
+            file=sys.stderr,
+        )
+    return None
+
+
+def _run_record(argv) -> int:
+    """``dpk record`` — pin the newest recorded run as the local golden baseline."""
+    import argparse
+    import os
+    import sqlite3
+    import tempfile
+    from pathlib import Path
+
+    from .event import AnyTraceableEvent
+    from .sqlite_store import SQLiteTraceStore
+
+    ap = argparse.ArgumentParser(
+        prog="dpk record",
+        description="Pin the newest recorded agent run as a local golden baseline.",
+    )
+    ap.add_argument(
+        "--db",
+        default=os.environ.get("DPROV_DB") or _DEFAULT_TRACE_DB,
+        help=f"recorded-run database (default: {_DEFAULT_TRACE_DB})",
+    )
+    ap.add_argument(
+        "--baseline",
+        default=_DEFAULT_BASELINE_DB,
+        help=f"baseline file to create or replace (default: {_DEFAULT_BASELINE_DB})",
+    )
+    selector = ap.add_mutually_exclusive_group()
+    selector.add_argument("--run", help="specific known-good run id to pin")
+    selector.add_argument(
+        "--context", help="pin the newest run with this context id"
+    )
+    args = ap.parse_args(argv)
+
+    source_path = Path(args.db)
+    baseline_path = Path(args.baseline)
+    if not source_path.exists():
+        print(
+            f"error: no recorded runs found at {source_path}. "
+            "Run code inside traced_run(...) first.",
+            file=sys.stderr,
+        )
+        return 2
+    if source_path.resolve() == baseline_path.resolve():
+        print("error: --baseline must be different from --db", file=sys.stderr)
+        return 2
+
+    try:
+        store = SQLiteTraceStore(AnyTraceableEvent, str(source_path), start_writer=False)
+    except (sqlite3.Error, OSError) as exc:
+        print(f"error: could not open database {source_path}: {exc}", file=sys.stderr)
+        return 2
+    try:
+        run_id = _select_run_id(
+            store, args.run, args.context, "run", str(source_path)
+        )
+        run = store.get_run(run_id) if run_id is not None else None
+    finally:
+        store.close()
+    if run_id is None:
+        return 2
+    if run is None:
+        print(f"error: run not found in {source_path}: {run_id}", file=sys.stderr)
+        return 2
+
+    baseline_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=f".{baseline_path.name}.", suffix=".tmp", dir=str(baseline_path.parent)
+    )
+    os.close(fd)
+    temporary_path = Path(temporary_name)
+
+    source_conn = None
+    baseline_conn = None
+    try:
+        source_uri = source_path.resolve().as_uri() + "?mode=ro"
+        source_conn = sqlite3.connect(source_uri, uri=True)
+        baseline_conn = sqlite3.connect(str(temporary_path))
+        source_conn.backup(baseline_conn)
+        # Keep the atomically-replaced baseline self-contained in its main file. A later
+        # SQLiteTraceStore open switches it back to WAL mode as usual.
+        baseline_conn.execute("PRAGMA journal_mode=DELETE;")
+        with baseline_conn:
+            baseline_conn.execute(
+                "DELETE FROM trace_events WHERE run_id != ? OR run_id IS NULL",
+                (str(run_id),),
+            )
+            baseline_conn.execute(
+                "DELETE FROM runs WHERE run_id != ? OR run_id IS NULL",
+                (str(run_id),),
+            )
+            baseline_conn.execute(
+                "DELETE FROM trace_edges "
+                "WHERE source_id NOT IN (SELECT id FROM trace_events) "
+                "OR target_id NOT IN (SELECT id FROM trace_events)"
+            )
+        baseline_conn.execute("VACUUM;")
+        baseline_conn.close()
+        baseline_conn = None
+        source_conn.close()
+        source_conn = None
+
+        for suffix in ("-wal", "-shm"):
+            stale = Path(str(baseline_path) + suffix)
+            if stale.exists():
+                stale.unlink()
+        os.replace(str(temporary_path), str(baseline_path))
+    except (sqlite3.Error, OSError) as exc:
+        print(f"error: could not write baseline {baseline_path}: {exc}", file=sys.stderr)
+        return 2
+    finally:
+        if baseline_conn is not None:
+            baseline_conn.close()
+        if source_conn is not None:
+            source_conn.close()
+        if temporary_path.exists():
+            temporary_path.unlink()
+
+    print(
+        f"Recorded baseline: {baseline_path}\n"
+        f"  context={run.context_id}  run={run.run_id}  events={len(run.events)}\n"
+        "Run the agent again, then inspect with 'dpk compare' or enforce with 'dpk gate'."
+    )
+    return 0
+
+
+def _run_gate(argv, fail_on_regression=True) -> int:
+    """Compare a candidate run with a golden run; optionally fail on regression.
+
+    The explicit database/run-id interface remains available for CI. With no arguments,
+    the quick workflow reads ``.dprovenance/baseline.sqlite`` and the newest run in
+    ``.dprovenance/traces.sqlite``.
     """
     import argparse
     import json
+    import os
     import sqlite3
-    import uuid
 
     from .alignment_models import RegressionLevel
     from .event import AnyTraceableEvent
     from .sqlite_store import SQLiteTraceStore
     from .testing import RegressionGate
 
+    command = "gate" if fail_on_regression else "compare"
+    description = (
+        "Fail the build when a candidate run regresses against a golden run."
+        if fail_on_regression
+        else "Compare the latest agent run against the local golden baseline."
+    )
     ap = argparse.ArgumentParser(
-        prog="dprovenancekit gate",
-        description="Fail the build when a candidate run regresses against a golden run.",
+        prog=f"dprovenancekit {command}", description=description
     )
     ap.add_argument(
         "--db",
         help="SQLite db holding both runs (shorthand for --golden-db/--candidate-db)",
     )
     ap.add_argument(
-        "--golden-db", help="SQLite db holding the golden run (default: --db)"
+        "--golden-db",
+        "--baseline",
+        dest="golden_db",
+        help=f"SQLite db holding the golden run (quick default: {_DEFAULT_BASELINE_DB})",
     )
     ap.add_argument(
-        "--candidate-db", help="SQLite db holding the candidate run (default: --db)"
+        "--candidate-db",
+        help=f"SQLite db holding the candidate run (quick default: {_DEFAULT_TRACE_DB})",
+    )
+    ap.add_argument(
+        "--context",
+        help="quick-workflow context id to select from both baseline and candidate files",
     )
     ap.add_argument("--golden", help="golden (known-good) run id")
     ap.add_argument(
@@ -121,6 +285,14 @@ def _run_gate(argv) -> int:
     ap.add_argument("--json", action="store_true", help="emit the report as JSON")
     args = ap.parse_args(argv)
 
+    if args.context and (args.golden_context or args.candidate_context):
+        print(
+            "error: --context cannot be combined with --golden-context or "
+            "--candidate-context",
+            file=sys.stderr,
+        )
+        return 2
+
     if args.max_level in ("low", "medium"):
         print(
             f"warning: --max-level {args.max_level} currently behaves like 'none': "
@@ -128,53 +300,75 @@ def _run_gate(argv) -> int:
             file=sys.stderr,
         )
 
-    if bool(args.golden) == bool(args.golden_context):
+    if args.golden and args.golden_context:
         print(
             "error: provide exactly one of --golden or --golden-context",
             file=sys.stderr,
         )
         return 2
-    if bool(args.candidate) == bool(args.candidate_context):
+    if args.candidate and args.candidate_context:
         print(
             "error: provide exactly one of --candidate or --candidate-context",
             file=sys.stderr,
         )
         return 2
 
-    try:
-        golden_id = uuid.UUID(args.golden) if args.golden else None
-        candidate_id = uuid.UUID(args.candidate) if args.candidate else None
-    except ValueError:
-        print(
-            "error: --golden/--candidate must be valid run ids (UUIDs)", file=sys.stderr
+    legacy_selector = any(
+        (
+            args.golden,
+            args.golden_context,
+            args.candidate,
+            args.candidate_context,
         )
-        return 2
-
-    golden_db = args.golden_db or args.db
-    candidate_db = args.candidate_db or args.db
-    if not golden_db or not candidate_db:
+    )
+    if legacy_selector and not any((args.db, args.golden_db, args.candidate_db)):
         print(
             "error: provide --db (or both --golden-db and --candidate-db)",
             file=sys.stderr,
         )
         return 2
 
-    def _resolve_context(store, context_id, role, db_path):
-        # list_run_metadata is newest-first, so the first match is the latest run.
-        for row in store.list_run_metadata():
-            if row.context_id != context_id:
-                continue
-            try:
-                return uuid.UUID(row.run_id)
-            except ValueError:
-                continue  # malformed row (foreign/corrupted db) — skip it
+    golden_db = args.golden_db or args.db or _DEFAULT_BASELINE_DB
+    candidate_db = args.candidate_db or args.db or (
+        os.environ.get("DPROV_DB") or _DEFAULT_TRACE_DB
+    )
+    same_database = os.path.abspath(golden_db) == os.path.abspath(candidate_db)
+    golden_context = args.golden_context or args.context
+    candidate_context = args.candidate_context or args.context
+
+    if same_database and not (args.golden or golden_context):
         print(
-            f"error: no run with context id '{context_id}' in {db_path} ({role})",
+            "error: provide exactly one of --golden or --golden-context",
             file=sys.stderr,
         )
-        return None
+        return 2
+    if same_database and not (args.candidate or candidate_context):
+        print(
+            "error: provide exactly one of --candidate or --candidate-context",
+            file=sys.stderr,
+        )
+        return 2
+    if same_database and args.context:
+        print(
+            "error: --context requires separate baseline and candidate databases; "
+            "use --golden-context/--candidate-context for one shared --db",
+            file=sys.stderr,
+        )
+        return 2
+
+    for path in {golden_db, candidate_db}:
+        if not os.path.exists(path):
+            hint = (
+                " Run 'dpk record' after recording a known-good run first."
+                if path == golden_db
+                else " Run code inside traced_run(...) first."
+            )
+            print(f"error: no such database: {path}.{hint}", file=sys.stderr)
+            return 2
 
     opened = {}
+    golden = None
+    candidate = None
     try:
         for path in {golden_db, candidate_db}:
             try:
@@ -184,14 +378,16 @@ def _run_gate(argv) -> int:
             except (sqlite3.Error, OSError) as exc:
                 print(f"error: could not open database {path}: {exc}", file=sys.stderr)
                 return 2
-        if golden_id is None:
-            golden_id = _resolve_context(
-                opened[golden_db], args.golden_context, "golden", golden_db
-            )
-        if candidate_id is None:
-            candidate_id = _resolve_context(
-                opened[candidate_db], args.candidate_context, "candidate", candidate_db
-            )
+        golden_id = _select_run_id(
+            opened[golden_db], args.golden, golden_context, "golden", golden_db
+        )
+        candidate_id = _select_run_id(
+            opened[candidate_db],
+            args.candidate,
+            candidate_context,
+            "candidate",
+            candidate_db,
+        )
         if golden_id is None or candidate_id is None:
             return 2
         golden = opened[golden_db].get_run(golden_id)
@@ -240,6 +436,8 @@ def _run_gate(argv) -> int:
     else:
         print(report.summary())
 
+    if not fail_on_regression:
+        return 0
     return 0 if report.passed else 1
 
 
@@ -783,7 +981,7 @@ def _finite_only(value):
 
 
 _USAGE = (
-    "Usage: dprovenancekit <demo|gate|anomalies|runs|ui|ingest|export|sync"
+    "Usage: dprovenancekit <record|compare|gate|demo|anomalies|runs|ui|ingest|export|sync"
     "|evaluate|diagnose|stability>"
 )
 
@@ -792,8 +990,10 @@ _HELP = """DProvenanceKit — record, diff, and gate AI agent runs.
 {usage}
 
 Commands:
+  record     pin the latest recorded run as the local golden baseline
+  compare    inspect the latest run against the baseline; always exit 0 on a diff
+  gate       compare the latest run against the baseline; exit 1 on regression
   demo       run the installed end-to-end regression demo
-  gate       compare a run against a golden baseline; exit 1 on regression
   anomalies  run anomaly rules over recorded runs
   runs       list runs in a trace database
   ui         serve the local trace viewer (binds 127.0.0.1)
@@ -830,6 +1030,10 @@ def main(argv=None) -> int:
         return demo_main(argv[1:])
     if argv and argv[0] == "export":
         return _run_export(argv[1:])
+    if argv and argv[0] == "record":
+        return _run_record(argv[1:])
+    if argv and argv[0] == "compare":
+        return _run_gate(argv[1:], fail_on_regression=False)
     if argv and argv[0] == "gate":
         return _run_gate(argv[1:])
     if argv and argv[0] == "anomalies":

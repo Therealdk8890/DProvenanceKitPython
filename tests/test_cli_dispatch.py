@@ -23,7 +23,18 @@ def test_help_exits_0_and_lists_commands(capsys):
     code = main(["--help"])
     captured = capsys.readouterr()
     assert code == 0
-    for command in ("demo", "gate", "anomalies", "runs", "ui", "ingest", "export", "sync"):
+    for command in (
+        "record",
+        "compare",
+        "gate",
+        "demo",
+        "anomalies",
+        "runs",
+        "ui",
+        "ingest",
+        "export",
+        "sync",
+    ):
         assert command in captured.out
 
 

@@ -1,0 +1,8 @@
+{"id": "greeting", "prompt": "How should I greet a new customer in a support chat?"}
+{"id": "refund", "prompt": "What is a reasonable refund window for a digital product?"}
+{"id": "units", "prompt": "How many meters are in a kilometer?"}
+{"id": "capital", "prompt": "What is the capital of France?"}
+{"id": "password", "prompt": "What makes a password strong?"}
+{"id": "summary", "prompt": "Summarize the benefits of unit testing in one sentence."}
+{"id": "email", "prompt": "Write a one-line out-of-office reply."}
+{"id": "advice", "prompt": "Give one tip for staying focused while working from home."}

@@ -39,6 +39,9 @@ dev = ["pytest>=7.0", "fastapi", "httpx", "IPython", "pytest-asyncio", "langchai
 # needed to wire DProvenanceKit into the corresponding framework.
 langchain = ["langchain-core>=0.2"]
 openai-agents = ["openai-agents>=0.1"]
+# The OpenAI Python SDK, used by the examples/model_drift live client. The core stays pure
+# standard library; this extra is only needed to run a drift check against a live OpenAI model.
+openai = ["openai>=1.0"]
 llama-index = ["llama-index-core"]
 # The adapter is a crewai event-bus listener (crewai.events.BaseEventListener), verified
 # against the public `crewai.events` API stabilized in the 1.x line. It does NOT use

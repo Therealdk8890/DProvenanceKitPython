@@ -16,6 +16,10 @@ public API may still change between minor versions.
   `traced_run(context_id="...")` without an explicit store now owns and deterministically closes
   a SQLite store at `DPROV_DB` or `.dprovenance/traces.sqlite`, while the existing explicit-store
   and run-id/context CLI interfaces remain compatible.
+- **An `all` convenience extra.** `pip install dprovenancekit[all]` installs every framework
+  adapter (LangChain, OpenAI Agents, LlamaIndex, CrewAI, Google GenAI, FastAPI, Jupyter, MCP) in
+  one step. It requires Python ≥ 3.10 (three of those adapters declare that floor) and is heavy
+  (CrewAI pulls chromadb/onnxruntime); on 3.9, or for a lean install, pick the specific extras.
 
 ### Security
 

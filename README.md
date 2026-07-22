@@ -3,6 +3,8 @@
 [![CI](https://github.com/Therealdk8890/DProvenanceKitPython/actions/workflows/ci.yml/badge.svg)](https://github.com/Therealdk8890/DProvenanceKitPython/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/dprovenancekit)](https://pypi.org/project/dprovenancekit/)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/dprovenancekit?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/dprovenancekit)
+[![Python versions](https://img.shields.io/pypi/pyversions/dprovenancekit)](https://pypi.org/project/dprovenancekit/)
+[![License](https://img.shields.io/pypi/l/dprovenancekit)](LICENSE)
 [![Listed in the official OpenAI Agents SDK docs](https://img.shields.io/badge/OpenAI%20Agents%20SDK-listed%20in%20the%20official%20docs-412991)](https://github.com/openai/openai-agents-python/blob/main/docs/tracing.md#external-tracing-processors-list)
 
 **Your agent skipped its verification step. The final answer still looked right, so every eval and
@@ -574,8 +576,8 @@ application owns storage or needs a different backend.
 python -m pytest
 ```
 
-380+ tests. A default run (core plus whichever adapters you have installed) is ~380; CI's full
-matrix is higher. Coverage spans Swift-parity tests ported from the original suite, cross-language
+~440 tests in the suite. A default run (core plus whichever adapters you have installed) executes
+~380 and skips the rest; CI's full matrix runs them all. Coverage spans Swift-parity tests ported from the original suite, cross-language
 conformance checks against the frozen Trace Specification v1 vectors, per-adapter integration tests
 (LangChain, OpenAI Agents SDK, LlamaIndex, CrewAI), instrumentation-layer tests, regression-gate
 tests, facade and visualizer tests, ecosystem integration tests (FastAPI, Jupyter, MCP), and the

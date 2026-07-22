@@ -21,7 +21,7 @@ standard library. Framework adapters live behind optional extras (`.[langchain]`
 Run the same checks CI runs:
 
 ```bash
-python -m pytest -q          # full test suite (currently ~430 tests, a few seconds)
+python -m pytest -q          # full test suite (currently ~440 tests, a few seconds)
 python -m ruff check dprovenancekit/
 python -m mypy dprovenancekit/
 ```

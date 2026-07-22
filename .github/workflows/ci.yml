@@ -67,8 +67,10 @@ jobs:
         pip install -e ".[dev]"
     - name: Run tests
       # -rs surfaces skipped tests (e.g. importorskip-guarded integration tests) in the log
-      # so a silently-skipping suite is visible rather than looking fully green.
-      run: python -m pytest -rs
+      # so a silently-skipping suite is visible rather than looking fully green. --cov prints
+      # a coverage summary for the package on every leg; there is deliberately no
+      # --cov-fail-under, so coverage is measured and visible but never gates the build.
+      run: python -m pytest -rs --cov=dprovenancekit --cov-report=term-missing:skip-covered
 
   # The default `test` job installs only `.[dev]` (which includes langchain-core, so the
   # LangChain integration tests run there). The OpenAI Agents, LlamaIndex, and CrewAI

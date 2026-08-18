@@ -569,7 +569,7 @@ def test_real_crew_kickoff_records_a_run(monkeypatch, tmp_path):
         backstory="A meticulous researcher",
         llm=llm,
         verbose=False,
-        max_iter=2                      
+        max_iter=2,
     )
     task = Task(
         description="Summarize the latest in AI agent testing",

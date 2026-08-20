@@ -373,7 +373,8 @@ class SQLiteTraceStore(TraceStore):
                     start_time INTEGER,
                     end_time INTEGER,
                     event_count INTEGER,
-                    fingerprint TEXT
+                    fingerprint TEXT,
+                    audit_metadata TEXT
                 );
                 """)
             db.execute("""
@@ -395,6 +396,7 @@ class SQLiteTraceStore(TraceStore):
             for alter in (
                 "ALTER TABLE trace_events ADD COLUMN span_id TEXT;",
                 "ALTER TABLE trace_events ADD COLUMN parent_span_id TEXT;",
+                "ALTER TABLE runs ADD COLUMN audit_metadata TEXT;",
             ):
                 try:
                     db.execute(alter)

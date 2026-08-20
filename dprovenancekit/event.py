@@ -119,6 +119,7 @@ class RunRow:
     end_time: int
     event_count: int
     fingerprint: str
+    audit_metadata: Optional[str] = None
 
 
 @dataclass(frozen=True)

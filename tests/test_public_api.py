@@ -36,7 +36,7 @@ EXPECTED_PUBLIC = {
     "AlignmentFinding", "AlignmentFindingKind",
     "BenchmarkRunner", "DProvenanceCorpus",
     "RegressionGate", "RegressionReport", "RegressionError", "assert_no_regression",
-    "exact_equality_evaluator", "run_fingerprint",
+    "exact_equality_evaluator", "run_fingerprint", "gated_run",
     "render_report_html", "render_trace_html",
     "TracedEvent", "traced", "traced_run", "record_event",
     "trace",

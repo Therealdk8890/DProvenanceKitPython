@@ -207,6 +207,7 @@ from .testing import (
     assert_no_regression,
     exact_equality_evaluator,
     run_fingerprint,
+    gated_run,
 )
 from .report import render_report_html
 from .visualizer import render_trace_html
@@ -328,6 +329,7 @@ __all__ = [
     "assert_no_regression",
     "exact_equality_evaluator",
     "run_fingerprint",
+    "gated_run",
     # Rendering
     "render_report_html",
     "render_trace_html",

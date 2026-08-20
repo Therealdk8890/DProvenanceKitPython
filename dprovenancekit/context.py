@@ -37,3 +37,21 @@ class TraceContext:
     parent_span_id: ContextVar[Optional[str]] = ContextVar(
         "dprov_parent_span_id", default=None
     )
+
+from dataclasses import dataclass
+
+
+@dataclass
+class ComplianceRunContext:
+    """Enterprise audit-trail metadata attached to a single run.
+
+    Provides formal fields for regulatory compliance: who triggered the run,
+    under which tenant and jurisdiction, and which policy version was active.
+    Serialized as JSON into the ``audit_metadata`` column of the ``runs`` table
+    so every trace carries cryptographically linked provenance.
+    """
+
+    user_id: Optional[str] = None
+    tenant_id: Optional[str] = None
+    policy_version: Optional[str] = None
+    jurisdiction: Optional[str] = None

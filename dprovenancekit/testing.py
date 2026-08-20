@@ -282,4 +282,98 @@ __all__ = [
     "assert_no_regression",
     "exact_equality_evaluator",
     "run_fingerprint",
+    "gated_run",
 ]
+
+import os
+import uuid as _uuid
+from functools import wraps
+from pathlib import Path
+from typing import Any, Callable
+
+from .sqlite_store import SQLiteTraceStore
+from .store import InMemoryTraceStore
+from .instrument import traced_run
+
+
+def gated_run(
+    baseline_name: str,
+    baseline_dir: str = "goldens",
+    **gate_kwargs,
+) -> Callable:
+    """Decorator that records a trace and gates it against a golden baseline.
+
+    Decorate any agent entry-point function.  On the first run (or when
+    ``DPROV_UPDATE_GOLDEN=1`` is set) the trace is persisted as the golden
+    baseline.  On subsequent runs the candidate trace is diffed against the
+    golden and :func:`assert_no_regression` is called automatically.
+
+    Usage::
+
+        from dprovenancekit.testing import gated_run
+
+        @gated_run("my-research-agent")
+        def run_agent():
+            ...
+
+    Record/update the baseline::
+
+        DPROV_UPDATE_GOLDEN=1 python -m pytest tests/
+
+    Any extra keyword arguments are forwarded to
+    :class:`RegressionGate` (e.g. ``max_regression_level``,
+    ``allow_divergent_steps``).
+    """
+
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs) -> Any:
+            update_mode = os.environ.get("DPROV_UPDATE_GOLDEN") == "1"
+            base_path = Path(baseline_dir)
+            base_path.mkdir(parents=True, exist_ok=True)
+            db_path = base_path / f"{baseline_name}.sqlite"
+
+            # If updating or no baseline exists yet, record a new golden.
+            if update_mode or not db_path.exists():
+                store = SQLiteTraceStore(str(db_path))
+                try:
+                    with traced_run(store, context_id=baseline_name):
+                        result = func(*args, **kwargs)
+                finally:
+                    store.close()
+                print(
+                    f"[dprovenancekit] Saved new golden baseline to {db_path}"
+                )
+                return result
+
+            # Otherwise, run in memory and gate against the golden.
+            golden_store = SQLiteTraceStore(str(db_path))
+            candidate_store = InMemoryTraceStore()
+            try:
+                with traced_run(candidate_store, context_id=baseline_name):
+                    result = func(*args, **kwargs)
+
+                # Retrieve runs.
+                golden_rows = list(golden_store.list_run_metadata())
+                if not golden_rows:
+                    raise ValueError(
+                        f"No golden runs found in {db_path}"
+                    )
+                golden = golden_store.get_run(
+                    _uuid.UUID(golden_rows[0].run_id)
+                )
+
+                candidate_rows = list(candidate_store.list_run_metadata())
+                candidate = candidate_store.get_run(
+                    _uuid.UUID(candidate_rows[0].run_id)
+                )
+
+                # Gate.
+                assert_no_regression(golden, candidate, **gate_kwargs)
+            finally:
+                golden_store.close()
+            return result
+
+        return wrapper
+
+    return decorator

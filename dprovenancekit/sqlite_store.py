@@ -373,7 +373,8 @@ class SQLiteTraceStore(TraceStore):
                     start_time INTEGER,
                     end_time INTEGER,
                     event_count INTEGER,
-                    fingerprint TEXT
+                    fingerprint TEXT,
+                    audit_metadata TEXT
                 );
                 """)
             db.execute("""
@@ -395,6 +396,7 @@ class SQLiteTraceStore(TraceStore):
             for alter in (
                 "ALTER TABLE trace_events ADD COLUMN span_id TEXT;",
                 "ALTER TABLE trace_events ADD COLUMN parent_span_id TEXT;",
+                "ALTER TABLE runs ADD COLUMN audit_metadata TEXT;",
             ):
                 try:
                     db.execute(alter)
@@ -522,7 +524,7 @@ class SQLiteTraceStore(TraceStore):
         """
         self.flush()
         rows = self._db.query(
-            "SELECT run_id, context_id, start_time, end_time, event_count, fingerprint "
+            "SELECT run_id, context_id, start_time, end_time, event_count, fingerprint, audit_metadata "
             "FROM runs ORDER BY start_time DESC, run_id DESC"
         )
         return [
@@ -533,6 +535,7 @@ class SQLiteTraceStore(TraceStore):
                 end_time=int(r[3] or 0),
                 event_count=int(r[4] or 0),
                 fingerprint=r[5] or "",
+                audit_metadata=r[6] if len(r) > 6 else None,
             )
             for r in rows
             if r[0] is not None

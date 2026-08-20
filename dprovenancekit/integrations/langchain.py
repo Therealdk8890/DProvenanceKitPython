@@ -271,12 +271,14 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
         link_lifecycle: bool = True,
         record_chains: bool = True,
         canonical: bool = False,
+        enforce_rules: Optional[Dict[str, str]] = None,
     ) -> None:
         self._run = active_run
         self._capture = capture_payloads
         self._link = link_lifecycle
         self._record_chains = record_chains
         self._canonical = canonical
+        self._enforce_rules = enforce_rules or {}
         # LangChain run_id (str) -> the trace event id recorded for that node's *start*.
         self._start_event: Dict[str, uuid.UUID] = {}
 
@@ -527,6 +529,16 @@ class DProvenanceCallbackHandler(_BaseCallbackHandler):  # type: ignore[misc,val
         attrs: Dict[str, Any] = {"tool": name}
         if self._capture and input_str is not None:
             attrs["input"] = _truncate(str(input_str))
+            
+        if self._enforce_rules and name in self._enforce_rules:
+            rule = self._enforce_rules[name]
+            self._run.record(
+                type_name=f"[[RULE: {rule}]]",
+                priority=TracePriority.STRUCTURAL,
+                engine=name,
+                attributes={"rule_enforcement": True}
+            )
+
         self._on_start(
             LCEventType.TOOL_STARTED,
             TracePriority.STRUCTURAL,

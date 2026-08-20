@@ -508,6 +508,77 @@ Copy-paste CI setups live in [`examples/ci/`](examples/ci/): a cloud-sync
 [examples/ci README](examples/ci/README.md) for the baseline-management and
 `db-path` routing notes.
 
+### Zero-config decorator: `@gated_run`
+
+For the simplest possible setup, decorate your agent's entry-point function and
+DProvenanceKit handles recording, baseline management, and gating automatically:
+
+```python
+from dprovenancekit.testing import gated_run
+
+@gated_run("my-research-agent")
+def run_agent():
+    # your agent logic here — @traced, adapters, record_event all work
+    ...
+
+run_agent()  # first run creates the golden baseline
+run_agent()  # subsequent runs gate against it
+```
+
+Record or update the golden baseline by setting an environment variable:
+
+```bash
+DPROV_UPDATE_GOLDEN=1 python my_agent.py   # saves the golden baseline
+python my_agent.py                          # gates against it
+```
+
+Extra keyword arguments are forwarded to `RegressionGate`
+(`max_regression_level`, `allow_divergent_steps`, etc.).
+
+### Automatic rule enforcement in adapters
+
+The LangChain adapter can now automatically inject structural rule-check events
+when specific tools are invoked, turning the adapter from a passive observer into
+an active compliance enforcer:
+
+```python
+from dprovenancekit.integrations.langchain import DProvenanceTracer
+
+tracer = DProvenanceTracer(
+    store,
+    enforce_rules={
+        "verify_contract": "Evidence Check Must Run",
+        "legal_review":    "Legal Approval Required",
+    },
+)
+```
+
+When `verify_contract` is called, the adapter automatically records a
+`[[RULE: Evidence Check Must Run]]` event at `STRUCTURAL` priority — making it
+part of the run's fingerprint. If a future candidate run skips that tool, the
+gate catches the missing rule-check event and fails.
+
+### Enterprise audit trail
+
+For regulated environments, attach compliance metadata to any run via
+`ComplianceRunContext`:
+
+```python
+from dprovenancekit.context import ComplianceRunContext
+
+ctx = ComplianceRunContext(
+    user_id="analyst-42",
+    tenant_id="acme-corp",
+    policy_version="v2.1",
+    jurisdiction="EU",
+)
+```
+
+The `SQLiteTraceStore` schema includes an `audit_metadata` column on the `runs`
+table, so every trace carries formal provenance linked to a business context —
+who triggered it, under which tenant, which policy version was active, and in
+what jurisdiction.
+
 ---
 
 ## Example: regression testing

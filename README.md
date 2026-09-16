@@ -7,6 +7,8 @@
 [![License](https://img.shields.io/pypi/l/dprovenancekit)](LICENSE)
 [![Listed in the official OpenAI Agents SDK docs](https://img.shields.io/badge/OpenAI%20Agents%20SDK-listed%20in%20the%20official%20docs-412991)](https://github.com/openai/openai-agents-python/blob/main/docs/tracing.md#external-tracing-processors-list)
 
+> **Positioning:** Local-first AI reasoning observability — record, diff, attest, and CI-gate the decision path. Complements OpenTelemetry and LangSmith; does not replace them.
+
 **Your agent skipped its verification step. The final answer still looked right, so every eval and
 snapshot test passed. DProvenanceKit — regression testing for AI agents — caught the skipped
 step and failed the PR that caused it.**
@@ -33,7 +35,7 @@ anomaly rules, and a shareable HTML report, then prints copy-paste commands for 
 
 **Guides:** [Regression testing for AI agents](https://dprovenance.dev/guides/regression-testing-for-ai-agents/) ·
 [A CI gate for LLM agents](https://dprovenance.dev/guides/ci-gate-for-llm-agents/) ·
-[DProvenanceKit vs LangSmith](https://dprovenance.dev/compare/dprovenancekit-vs-langsmith/) ·
+[DProvenanceKit alongside LangSmith](https://dprovenance.dev/compare/dprovenancekit-vs-langsmith/) ·
 [OpenAI Agents SDK integration](https://dprovenance.dev/openai-agents/)
 
 **It's not just the library** — it ships the surfaces that make reasoning regressions actionable:

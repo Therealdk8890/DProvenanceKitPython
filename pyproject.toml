@@ -46,7 +46,7 @@ llama-index = ["llama-index-core"]
 # The adapter is a crewai event-bus listener (crewai.events.BaseEventListener), verified
 # against the public `crewai.events` API stabilized in the 1.x line. It does NOT use
 # langchain — CrewAI dropped that dependency in 0.85.0.
-crewai = ["crewai>=1.0.0"]
+crewai = ["crewai>=1.0.0,<2.0.0"]
 google-genai = ["google-genai"]
 fastapi = ["fastapi", "starlette"]
 jupyter = ["ipython"]
@@ -58,7 +58,7 @@ all = [
     "langchain-core>=0.2",
     "openai-agents>=0.1",
     "llama-index-core",
-    "crewai>=1.0.0",
+    "crewai>=1.0.0,<2.0.0",
     "google-genai",
     "fastapi",
     "starlette",

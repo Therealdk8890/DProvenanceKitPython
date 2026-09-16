@@ -1,593 +1,325 @@
-# DProvenanceKit (Python)
+# 🚀 DProvenanceKit (Python)
 
 [![CI](https://github.com/Therealdk8890/DProvenanceKitPython/actions/workflows/ci.yml/badge.svg)](https://github.com/Therealdk8890/DProvenanceKitPython/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/dprovenancekit)](https://pypi.org/project/dprovenancekit/)
-[![PyPI Downloads](https://static.pepy.tech/personalized-badge/dprovenancekit?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/dprovenancekit)
-[![Python versions](https://img.shields.io/pypi/pyversions/dprovenancekit)](https://pypi.org/project/dprovenancekit/)
 [![License](https://img.shields.io/pypi/l/dprovenancekit)](LICENSE)
 [![Listed in the official OpenAI Agents SDK docs](https://img.shields.io/badge/OpenAI%20Agents%20SDK-listed%20in%20the%20official%20docs-412991)](https://github.com/openai/openai-agents-python/blob/main/docs/tracing.md#external-tracing-processors-list)
 
-> **Positioning:** Local-first AI reasoning observability — record, diff, attest, and CI-gate the decision path. Complements OpenTelemetry and LangSmith; does not replace them.
+## Prove Your AI's Reasoning to Regulators. Offline. Cryptographically.
 
-**Your agent skipped its verification step. The final answer still looked right, so every eval and
-snapshot test passed. DProvenanceKit — regression testing for AI agents — caught the skipped
-step and failed the PR that caused it.**
+For healthcare, finance, and legal AI systems that must demonstrate why they made each decision — without sending sensitive reasoning traces to third-party services.
 
-Output-level checks can't see this class of regression: the *answer* didn't change, the *reasoning
-path* did. DProvenanceKit records every agent run as a queryable, diffable trace, compares each run
-against a known-good baseline, and fails CI when a step is dropped, a tool loops, or the execution
-path changes. It works with LangChain/LangGraph, the OpenAI Agents SDK, LlamaIndex, CrewAI, plain
-Python — or any OpenTelemetry-instrumented stack, via built-in OTLP trace ingestion — and the core
-has zero third-party dependencies.
-
-**See the catch immediately after installing:** `dprovenancekit demo` records a healthy agent
-(plan → search → rank → verify → decide), then catches a later run that drops verification and
-loops its search tool. It flags the regression as HIGH severity, writes a local SQLite trace,
-anomaly rules, and a shareable HTML report, then prints copy-paste commands for the gate and viewer.
-
-> Run → Record → Query → Diff → Detect regressions → Gate in CI
-
-<p align="center">
-  <img src="assets/demo.gif" alt="DProvenanceKit records two runs of a research agent, gates the candidate against the golden run, and blocks the PR when the agent drops its verify step and loops its search tool" width="820">
-</p>
-
-<p align="center"><em>Two runs of the same agent. The candidate dropped its <code>verify</code> step and looped <code>search</code> — the gate caught it and failed CI. <a href="demo/demo_gif.py">(regenerate)</a></em></p>
-
-**Guides:** [Regression testing for AI agents](https://dprovenance.dev/guides/regression-testing-for-ai-agents/) ·
-[A CI gate for LLM agents](https://dprovenance.dev/guides/ci-gate-for-llm-agents/) ·
-[DProvenanceKit alongside LangSmith](https://dprovenance.dev/compare/dprovenancekit-vs-langsmith/) ·
-[OpenAI Agents SDK integration](https://dprovenance.dev/openai-agents/)
-
-**It's not just the library** — it ships the surfaces that make reasoning regressions actionable:
-
-- **Gate in CI** — a server-less `dprovenancekit gate` CLI, plus a drop-in [GitHub Action](action/README.md) ([on the GitHub Marketplace](https://github.com/marketplace/actions/dprovenancekit-regression-gate)) and [GitLab CI template](gitlab/README.md) that fail a PR/MR when a run structurally diverges from its golden baseline — a dropped, added, or reordered step — and comment the diff.
-- **Out-of-the-box anomaly rules** — Tool Drop and Looping detection with a JSON rule registry, runnable locally or on every PR.
-- **A hosted visualizer** — a web dashboard (single-run span tree, JSON payload inspector, side-by-side structural diff, shareable HTML reports) backed by a regression-gate API and multi-tenant control plane. Available as a separate commercial service — see [dprovenance.dev](https://dprovenance.dev).
-
-Prefer readable source? [`dprovenancekit/demo.py`](dprovenancekit/demo.py) contains the same demo;
-[`python examples/end_to_end_demo.py`](examples/end_to_end_demo.py) runs it from a checkout.
+> Working in Swift / on-device Apple AI? **[DProvenanceKit](https://github.com/Therealdk8890/DProvenanceKit)** — same reasoning observability model, CryptoKit attestation, and Foundation Models adapter.
 
 ---
 
-## Install
+## The Problem Regulators Actually Care About
 
-From PyPI (released builds):
+Your AI makes a decision that impacts a customer. The decision is challenged.
+
+**Lender:** "Why did you reject this applicant?"
+**Doctor:** "Why did you recommend that treatment?"
+**Lawyer:** "What's the basis for this legal argument?"
+**Auditor:** "Prove this decision wasn't changed after the fact."
+
+Request-level observability (OpenTelemetry, LangSmith, Langfuse, Datadog) remains essential for what happened in production. It does not, by itself, prove *why* an agent took a given decision path — or that the path has not been tampered with. For regulated workflows, that gap matters: sensitive reasoning often cannot leave your infrastructure.
+
+DProvenanceKit answers the question regulators actually ask: **Can you prove, cryptographically, that your AI's reasoning was sound and hasn't been tampered with?**
+
+---
+
+## Why This Matters for Regulated Industries
+
+### Healthcare
+Your diagnostic-support AI recommends treatment. A patient sues. The hospital needs to show that the recommendation was based on the patient's actual symptoms and medical history—not a hallucination. A cryptographically signed trace is that proof.
+
+### Financial Services
+Your lending AI rejects an applicant. They file a fair-lending complaint. You need to prove the decision was based on relevant factors, not proxy discrimination. A verifiable reasoning chain is your defense.
+
+### Legal
+Your legal AI generates a brief with case citations. Opposing counsel challenges the citations. You need to prove every case actually exists and was correctly cited. The entire reasoning is signed so it can't be disputed.
+
+### Insurance
+Your claims AI approves or denies a claim. The customer appeals. Auditors want to see the decision tree. A provable reasoning path shows the logic was consistent and wasn't hidden.
+
+### Government
+Your AI processes FOIA requests or makes eligibility determinations. Citizens and auditors need to understand the reasoning. Local-first means no privacy concerns, and cryptographic signing means it's trustworthy.
+
+---
+
+## How It Works
+
+**DProvenanceKit is not a SaaS platform. It's a local-first SDK.**
+
+1. **Your AI system runs normally.** Everything stays on your infrastructure.
+
+2. **Each decision is recorded locally.**
+   - Every reasoning step
+   - Every evidence used
+   - Every tool called
+   - Every intermediate result
+
+3. **The trace is cryptographically signed.**
+   - SHA-256 hash of the canonical reasoning path
+   - ECDSA P-256 signature (Secure Enclave available on the Swift / Apple side)
+   - Detached proof artifacts separate from trace data
+
+4. **Auditors verify offline, without calling home.**
+   - No external service dependency
+   - No internet required
+   - Proof that traces weren't modified in transit
+   - Open-source verification code they can audit themselves
+
+---
+
+## Works with your observability stack
+
+DProvenanceKit aims to be the local-first standard for **AI reasoning observability** — record, diff, attest, and CI-gate the decision path. It is built to sit **beside** OpenTelemetry, LangSmith, Langfuse, and Arize, not to replace them.
+
+| | Platform / request observability (LangSmith, Langfuse, OTel, …) | DProvenanceKit |
+|---|---|---|
+| **Job** | Spans, dashboards, evals, production monitoring | Reasoning path, golden baselines, signed proof, CI gate |
+| **Question** | What happened? | Did the decision path regress — and can we prove it? |
+| **Where data lives** | Collector or hosted platform (by design) | Local-first; optional OTel ingest/export when you choose |
+| **How they fit** | Keep using them | Add DPK next to them |
+
+**Bottom line:** Use LangSmith, Langfuse, and OpenTelemetry for platform observability. Use DProvenanceKit when you need the reasoning layer to be queryable, diffable, attestable, and refused in CI when it drifts.
+
+More detail: [DProvenanceKit alongside LangSmith](https://dprovenance.dev/compare/dprovenancekit-vs-langsmith/).
+
+---
+
+## Real Example: Legal Document Provenance
+
+A law firm uses an AI to draft legal briefs.
+
+**The problem:** Every citation must be verifiable. If the AI cites a case that doesn't exist, that's malpractice.
+
+**How DProvenanceKit helps:**
+
+```
+1. Legal AI generates brief
+2. Before export, every claim is verified:
+   - "Does this case actually exist?" (checked against legal database)
+   - "Is this statute current?" (validated against code)
+   - "Is this quote accurate?" (matched against source)
+3. The entire reasoning chain is cryptographically signed
+4. Brief is exported with proof packet attached
+5. If disputed, the firm can show:
+   - "Here's the reasoning chain"
+   - "Here's the signature"
+   - "Auditors can verify it hasn't been tampered with"
+```
+
+---
+
+## Open Source + Paid Governance Support
+
+### Option 1: Self-Directed (Open Source)
+
+DProvenanceKit is Apache 2.0 licensed. You can use it free:
+
+```bash
+# Python
+pip install dprovenancekit
+
+# Swift
+dependencies: [
+    .package(url: "https://github.com/Therealdk8890/DProvenanceKit", from: "0.8.1")
+]
+```
+
+You instrument your AI workflow. You establish baselines. You manage the governance policy.
+
+**Best for:** Teams with internal compliance/audit expertise.
+
+### Option 2: Governed AI Deployment Pilot ($4,500 one-time)
+
+For organizations that want governance guidance + compliance audit:
+
+**Includes:**
+- **Instrumentation review:** Is this the right tracing for your compliance needs?
+- **Baseline establishment:** What's the "golden" reasoning path your AI should follow?
+- **Governance policy definition:** What counts as a regression? When do we alert? What's audit-worthy?
+- **Compliance audit report:** Proof of your reasoning architecture for regulators.
+
+**Does not include:**
+- Recurring SaaS or managed service
+- Code in your repository
+- Ongoing support (scope separately as needed)
+
+**Who this is for:** Chief Risk Officer, Compliance Officer, Audit Manager at a regulated organization deploying one specific AI workflow.
+
+**Example scope:**
+- Healthcare: Diagnostic-recommendation AI
+- Finance: Lending decision AI
+- Legal: Brief-generation AI
+- Insurance: Claims-approval AI
+
+**Timeline:** 30 days, delivered as a report.
+
+**Next step:** [Request a pilot](mailto:inquiry@dprovenance.dev?subject=Governed%20AI%20Deployment%20Pilot).
+
+---
+
+## Getting Started
+
+### For Open-Source Users
+
+1. **Define your AI's critical decisions**
+   - What reasoning steps must regulators see?
+   - What evidence matters?
+   - Where is liability highest?
+
+2. **Instrument one workflow**
 
 ```bash
 pip install dprovenancekit
-pip install "dprovenancekit[langchain]"        # + LangChain adapter
-pip install "dprovenancekit[openai-agents]"    # + OpenAI Agents adapter
+# optional adapters:
+# pip install "dprovenancekit[langchain]" "dprovenancekit[openai-agents]"
 ```
-
-Then run the zero-configuration tour from any directory:
-
-```bash
-dprovenancekit demo
-# Optional: dprovenancekit demo --output-dir ./dprovenance-demo
-```
-
-The demo writes `demo-traces.sqlite`, `demo-rules.json`, and `demo-report.html` to the current
-directory (or the directory you select) and prints the exact commands to gate and inspect them.
-
-### The shortest real-project workflow
-
-Instrument the steps whose presence and order matter, then let `traced_run` use the local default
-store:
 
 ```python
-from dprovenancekit import traced, traced_run
+from dprovenancekit import traced, record_event, traced_run
 
 @traced
-def retrieve(): ...
+def check_credit(applicant):
+    ...
 
 @traced
-def verify(): ...
+def verify_income(applicant):
+    ...
 
-with traced_run(context_id="research-agent"):
-    retrieve()
-    verify()
+with traced_run(context_id="applicant_12345"):
+    check_credit(data)
+    verify_income(data)
+    record_event("decision_made", {"approved": True})
 ```
 
-Run the known-good version once and pin it:
-
-```bash
-python agent.py
-dpk record
-```
-
-After a code change, record another run and either inspect or enforce the result:
-
-```bash
-python agent.py
-dpk compare   # prints the diff, but does not fail merely because one exists
-dpk gate      # same comparison; exits 1 when the candidate regresses
-```
-
-No run IDs or database flags are needed. The default candidate store is
-`.dprovenance/traces.sqlite`; `dpk record` atomically pins its newest run to the committable
-`.dprovenance/baseline.sqlite`. Use `--context` when one store contains several agents, or
-`DPROV_DB` / `--db` / `--baseline` to override the paths. `dprovenancekit` remains the long-form
-executable for every `dpk` command.
-
-From a checkout (development):
-
-```bash
-pip install -e ".[dev]"
-```
-
-Requires Python 3.9+; the core has **zero third-party dependencies**. Releasing is documented
-in [RELEASING.md](RELEASING.md).
-
-Releases carry their own provenance: artifacts are published with PEP 740 attestations on
-PyPI, and releases after v0.6.0 also carry SLSA build provenance on GitHub. Verify a
-downloaded wheel with:
-
-```bash
-gh attestation verify dprovenancekit-<version>-py3-none-any.whl \
-  --repo Therealdk8890/DProvenanceKitPython
-```
-
----
-
-## The 5-Minute "Wow"
-
-Record your execution, explain what happened, and diff it against a previous run to detect drift—all
-with a single import.
-
-```python
-from dprovenancekit import trace
-
-# 1. Record an execution
-with trace("Agent Workflow"):
-    with trace("Retrieve Documents"):
-        # your retrieval code here
-        pass
-    with trace("Verify Claims"):
-        # your verification code here
-        pass
-
-# 2. Save the trace
-trace.save("golden_run.sqlite")
-
-# 3. Print a structural explanation
-trace.explain()
-# --- Execution Trace (b4f8d2…) ---
-# ▶ Started Agent Workflow
-#   ▶ Started Retrieve Documents
-#   ✔ Finished Retrieve Documents
-#   ▶ Started Verify Claims
-#   ✔ Finished Verify Claims
-# ✔ Finished Agent Workflow
-
-# 4. Later, the workflow regresses: a code change drops the verification step
-with trace("Agent Workflow"):
-    with trace("Retrieve Documents"):
-        pass
-    # "Verify Claims" never runs
-
-# 5. Diff the current run against the saved golden baseline
-trace.diff("golden_run.sqlite")
-# --- Trace Diff (Golden vs Current) ---
-# ❌ Missing step: Verify Claims
-```
-
-It’s that simple to get started. Under the hood, this powers a full suite of anomaly detection, CI
-gating, and visual trace analysis.
-
----
-
-## Benchmark corpus
-
-The library ships the same validation corpus as the Swift version. The headless CLI runs it through
-the real benchmark runner:
-
-```bash
-dprovenancekit evaluate     # precision/recall/F1 over the standard + adversarial corpora
-dprovenancekit diagnose     # causal ranking of failure modes
-dprovenancekit stability    # determinism boundary: isolated vs perturbed F1 variance
-```
-
-Both corpora score **Precision 1.000 / Recall 1.000 / F1 1.000** — 8 standard scenarios (reordering,
-semantic evolution, noise injection, branch collapse, …) and 5 adversarial robustness traps
-(dependency inversion, partial truncation, semantic substitution, …) — matching the Swift
-implementation case-for-case. These are the project's own bundled validation vectors, held at
-parity with the Swift reference implementation: an internal regression/parity check, not an
-external benchmark or third-party evaluation.
-
----
-
-## What's included
-
-| Component | Module |
-| --- | --- |
-| Event model, priority tiers, drop accounting | `event`, `priority`, `drop_stats` |
-| Recording API + ambient context | `kit`, `context` |
-| Global `trace` facade (record / save / explain / diff) | `facade` |
-| Stores (in-memory, WAL SQLite, raw read) | `store`, `sqlite_store`, `raw_store` |
-| Priority-aware write buffer | `write_buffer` |
-| Query DSL + two backends (AST eval + SQL compiler) | `query` |
-| Live querying + anomaly detection + rule library | `live_engine`, `anomaly`, `rules` |
-| Structural diff + span-aware snapshot diff | `diff`, `snapshot_diff` |
-| Deterministic replay | `replay` |
-| Semantic alignment engine + evidence + verification | `alignment_*`, `verification` |
-| Benchmark harness, failure diagnoser, corpus | `benchmark`, `corpus` |
-| Conformance testing | [`conformance/`](conformance/) (repo directory, not a package module) |
-| Regression gate + fingerprinting test helpers | `testing`, `pytest_plugin` |
-| Visualizer (HTML rendering) | `visualizer` |
-| Local trace viewer server | `ui_server` |
-| Pure view models for a trace viewer | `viewmodel` |
-| Framework-agnostic instrumentation (decorators) | `instrument` |
-| Framework adapters | `integrations.langchain`, `integrations.openai_agents`, `integrations.llama_index`, `integrations.crewai`, `integrations.google_genai`, `integrations.fastapi`, `integrations.jupyter`, `integrations.mcp` |
-| Shareable HTML regression report | `report` |
-| Headless CLI — `record`, `compare`, `gate`, `demo`, `anomalies`, `runs`, `ui`, `evaluate` | `cli` |
-
-The SwiftUI `DProvenanceUI` target is intentionally **not** ported (it is Apple-platform UI); its
-pure value-model layer (`SpanViewModel`, flattening) is ported in `viewmodel`.
-
----
-
-## The Swift original
-
-DProvenanceKit began as a [Swift library](https://github.com/Therealdk8890/DProvenanceKit) for
-Apple-platform and on-device AI. This Python implementation brings the same reasoning-layer
-observability to Python codebases — agent frameworks, LLM workflows, tool-using models — with
-**zero third-party dependencies** (it uses only the standard library: `sqlite3`, `contextvars`,
-`threading`, `json`, `hashlib`, `uuid`, `urllib`).
-
-It is a faithful port, not a loose reimplementation: it keeps the same architecture and guarantees —
-synchronous non-blocking recording, priority-aware backpressure, one query language over two
-backends held at parity, structural diffing, formally-modeled semantic alignment, and by-tier drop
-accounting so load-shedding is never silent. The original Swift package is unchanged; the two are
-held equivalent by the conformance suite below.
-
----
-
-## Cross-language conformance
-
-Keeping the Swift and Python SDKs behaviorally equivalent is enforced, not hoped for.
-[`conformance/`](conformance/) holds **Trace Specification v1** — a language-neutral contract plus
-frozen golden vectors that pin the run fingerprint, the alignment profile hash, canonical payload
-encoding, query semantics, and alignment verdicts.
-
-```bash
-python -m pytest tests/test_conformance.py   # the Python SDK's claim of conformance
-python conformance/generate_vectors.py        # intentionally re-freeze the contract
-```
-
-The committed `conformance/vectors/*.json` are the contract: any SDK — Swift today, Rust or
-TypeScript later — proves equivalence by reproducing the same files. See
-[`conformance/TRACE_SPEC_v1.md`](conformance/TRACE_SPEC_v1.md).
-
----
-
-## Integrations
-
-Framework adapters live in `dprovenancekit.integrations` and are the only parts of the package with
-third-party dependencies — the core stays pure standard library, and nothing imports an adapter
-unless you do.
-
-### LangChain / LangGraph
-
-```bash
-pip install "dprovenancekit[langchain]"
-```
-
-```python
-from dprovenancekit import SQLiteTraceStore
-from dprovenancekit.integrations.langchain import DProvenanceTracer, LangChainTraceEvent
-
-store = SQLiteTraceStore(LangChainTraceEvent, "traces.sqlite")
-tracer = DProvenanceTracer(store)
-
-with tracer.trace(context_id="customer-42") as cb:
-    answer = chain.invoke(question, config={"callbacks": [cb]})
-
-# The run is now recorded — query it, diff it against a known-good run, or
-# compare run fingerprints to detect when the agent took a different path.
-```
-
-[`DProvenanceCallbackHandler`](dprovenancekit/integrations/langchain.py) translates LangChain's
-callback stream into a trace: each `on_llm_start` / `on_tool_start` / `on_retriever_start` /
-`on_chain_start` (and its completion) becomes a typed event in execution order, LangChain's
-`run_id`/`parent_run_id` become the trace's **span tree**, the active model/tool/retriever becomes
-the **engine**, and (by default) lifecycle **provenance edges** are emitted (`DERIVED_FROM`
-start→completion, `INFORMED` parent→child). Because events flow through the same recording path as
-hand-written ones, the whole toolkit applies: a run's **fingerprint** is the structural identity of
-the agent's execution path, so two runs that diverge (a tool called in a different order, a
-retrieval step skipped) produce different fingerprints — a cheap regression signal. Options:
-`capture_payloads` (prompt/completion/IO previews), `link_lifecycle` (edges), `record_chains`
-(LCEL/LangGraph chain noise).
-
-### OpenAI Agents SDK
-
-> **Officially listed** — this adapter appears in the OpenAI Agents SDK's own docs, in the
-> [external tracing processors list](https://github.com/openai/openai-agents-python/blob/main/docs/tracing.md#external-tracing-processors-list)
-> (merged upstream in [openai/openai-agents-python#3726](https://github.com/openai/openai-agents-python/pull/3726)).
-
-```bash
-pip install "dprovenancekit[openai-agents]"
-```
-
-```python
-from dprovenancekit import SQLiteTraceStore
-from dprovenancekit.integrations.openai_agents import register, OpenAIAgentsTraceEvent
-
-store = SQLiteTraceStore(OpenAIAgentsTraceEvent, "traces.sqlite")
-register(store)   # registers a global tracing processor
-
-# ... run your agents normally; each run is recorded ...
-```
-
-[`DProvenanceTracingProcessor`](dprovenancekit/integrations/openai_agents.py) implements the SDK's
-`TracingProcessor`: each agent run becomes a trace-run (`context_id` = the trace name), and every
-span start/end becomes a typed event — `agent.start`, `generation.end`, `function.start`,
-`guardrail.error`, … — in execution order. The span's `span_id`/`parent_id` become the **span
-tree**, the active agent/tool/model becomes the **engine**, errors and triggered guardrails are
-recorded at `CRITICAL`, and lifecycle **provenance edges** are emitted (same
-`DERIVED_FROM`/`INFORMED` model). One registered processor captures every run; the same
-`fingerprint`/diff/align tooling then applies.
-
-### LlamaIndex
-
-```bash
-pip install "dprovenancekit[llama-index]"
-```
-
-```python
-from llama_index.core import Settings
-from dprovenancekit import DProvenanceKit, SQLiteTraceStore
-from dprovenancekit.integrations.llama_index import (
-    DProvenanceLlamaIndexCallbackHandler,
-    LlamaIndexTraceEvent,
-)
-
-kit = DProvenanceKit(LlamaIndexTraceEvent)
-store = SQLiteTraceStore(LlamaIndexTraceEvent, "traces.sqlite")
-
-# The handler records into an active run
-with kit.run(context_id="qa-session", store=store) as run:
-    handler = DProvenanceLlamaIndexCallbackHandler(run)
-    Settings.callback_manager.add_handler(handler)
-
-    # Execute queries normally; they are recorded to the trace store
-    response = index.as_query_engine().query("What did the author do growing up?")
-
-# Flush buffered events so the recorded run is durable before the script exits
-store.flush()
-```
-
-### CrewAI
-
-```bash
-pip install "dprovenancekit[crewai]"
-```
-
-Modern CrewAI (0.85+, which dropped LangChain) emits its own lifecycle events on a global
-event bus. DProvenanceKit hooks that bus with a `BaseEventListener` — **constructing the
-listener registers it**, and every `crew.kickoff()` after that is recorded as a run. The
-engine is the agent's role, the tool's name, or the model:
-
-```python
-from crewai import Agent, Crew, Task
-from dprovenancekit import SQLiteTraceStore
-from dprovenancekit.integrations.crewai import (
-    CrewAITraceEvent,
-    DProvenanceKitEventListener,
-)
-
-store = SQLiteTraceStore(CrewAITraceEvent, "traces.sqlite")
-listener = DProvenanceKitEventListener(store)  # registers on crewai's event bus
-
-researcher = Agent(
-    role="Researcher",
-    goal="Find accurate information",
-    backstory="A meticulous researcher",
-)
-task = Task(
-    description="Summarize the latest developments in AI agent testing",
-    expected_output="A short summary",
-    agent=researcher,
-)
-crew = Crew(agents=[researcher], tasks=[task])
-
-crew.kickoff()                              # recorded: crew / task / agent / tool / llm events
-listener.force_flush()                    # drain crewai's event bus and persist the run
-```
-
-Each kickoff becomes one diffable run — `crew.start`/`.end`, `task.*`, `agent.*`,
-`tool.*`, and `llm.*` events in a span tree, with `DERIVED_FROM` / `INFORMED` edges.
-Events are ordered by CrewAI's own `emission_sequence` (its handler bus is multithreaded,
-so arrival order isn't emission order), which keeps the run — and its **fingerprint** —
-stable. Two runs of the same crew therefore share a fingerprint, so the
-`fingerprint` / diff / gate tooling flags a dropped task, a skipped tool, or a looping
-agent.
-
-### OpenTelemetry (any instrumented stack)
-
-If your agent is already instrumented for OpenTelemetry — the official GenAI semantic
-conventions (`gen_ai.*`), OpenInference (everything Arize Phoenix instruments: LangChain,
-LlamaIndex, CrewAI, the OpenAI Agents SDK, DSPy, …), OpenLLMetry/Traceloop, or the Vercel
-AI SDK — you don't need to re-instrument anything. Export the traces as OTLP JSON (the
-OTel Collector's file exporter, or any OTLP/HTTP JSON export) and ingest them:
-
-```bash
-dprovenancekit ingest golden.json candidate.json --db traces.sqlite
-dprovenancekit gate --db traces.sqlite --golden <run-id> --candidate <run-id>
-```
-
-Each OTel trace becomes a run; spans are normalized to vendor-neutral steps
-(`llm_call`, `tool_call`, `agent_invocation`, …) with the model/tool/agent name as the
-engine, so runs recorded by *different* instrumentation dialects diff cleanly against
-each other. Run ids derive deterministically from OTel trace ids, so re-ingesting a file
-never duplicates runs. Zero new dependencies — the parser is stdlib-only, like the rest
-of the core. Python API: `dprovenancekit.otel_ingest.ingest_otlp`.
-
-### One vocabulary across integrations (`canonical=True`)
-
-The live LangChain and OpenAI Agents integrations emit framework-native event names by
-default (`toolStarted`, `function.start`, …). Pass `canonical=True` and they instead
-record the same **vendor-neutral vocabulary** OTel ingestion produces
-(`tool_call.*`, `llm_call.*`, `agent_invocation.*`), keeping the original name in a
-`native_type` attribute:
-
-```python
-register(store, canonical=True)                       # OpenAI Agents SDK
-DProvenanceTracer(store).trace("case-1", canonical=True)   # LangChain
-```
-
-Now runs recorded from OpenAI Agents, LangChain, and OTel ingestion speak one step-type
-vocabulary, so the bundled [`agent.json`](dprovenancekit/rulesets/agent.json) ruleset
-(`dprovenancekit anomalies --rules agent`) fires on all of them, and a run from one
-framework is *comparable* to the same agent recorded under another. (Canonical mode
-rewrites event types, not engine/component names — so cross-framework runs become
-comparable, not byte-identical: an LLM step's engine is `gpt-4o` under OpenAI Agents but
-`ChatOpenAI` under LangChain.) It's opt-in, so existing golden baselines — keyed on the
-native names — are unaffected.
-
----
-
-## Regression gate
-
-`dprovenancekit.testing` turns "did my agent regress?" into one assertion you can drop into any test
-or CI step. Give it a *golden* run (known-good) and a *candidate* run (what your current code
-produced); it aligns them and fails with a readable diagnostic if the candidate diverged.
-
-```python
-from dprovenancekit.testing import assert_no_regression
-
-assert_no_regression(golden=golden_run, candidate=candidate_run)
-```
-
-Strict by default — any removed, added, or changed (ambiguous) step fails, and a removed *or
-reordered* CRITICAL step is additionally a HIGH-severity regression (reordering a critical step can
-invert a dependency). Loosen with `max_regression_level` (gate only on severity) or
-`allow_divergent_steps` (tolerate benign per-step changes), or pass a custom `evaluator` to define
-what "equivalent" means (e.g. ignore volatile fields like token counts).
-`RegressionGate(...).check(...)` returns a `RegressionReport` (no raise) for richer assertions.
-Detecting *reordered* steps requires a span-aware profile (`AlignmentProfile.developer_debug_v1`);
-the default linear profile treats a pure reorder as still-matching. Complements
-`AlignmentSnapshotValidator` (an exact output-hash snapshot): the gate works on two runs and reasons
-about regression severity.
-
-### Pin a golden baseline in pytest
-
-The bundled pytest plugin turns the gate into snapshot testing for reasoning traces — no run ids,
-no store plumbing:
-
-```python
-def test_research_agent(golden_trace):
-    with golden_trace("research-agent"):
-        run_my_agent()   # anything using @traced / record_event / an adapter
-```
-
-```bash
-pytest --dprov-update-golden   # record (or intentionally update) the baseline, then commit it
-pytest                         # every run after gates against tests/goldens/research-agent.sqlite
-```
-
-The baseline is a SQLite file you commit next to your tests; the fixture records the block as a
-candidate run and fails the test when its execution diverges from the baseline. Configure the directory with the
-`dprov_golden_dir` ini option, pass gate options per test
-(`golden_trace("name", max_regression_level="high")`), and use the context manager's `.run` to
-wire a framework adapter inside the block.
-
-### Gate by context id in CI
-
-`dprovenancekit gate` and the [GitHub Action](action/README.md) can select runs by **context id**
-instead of run id — `--golden-context` / `--candidate-context` pick the newest run recorded with
-that context, so CI scripts never extract run UUIDs:
-
-```bash
-dprovenancekit gate --db traces.sqlite --golden-context golden --candidate-context candidate
-```
-
-Copy-paste CI setups live in [`examples/ci/`](examples/ci/): a cloud-sync
-[`github-workflow.yml`](examples/ci/github-workflow.yml), a zero-dependency
-**artifact-baseline** pair ([`record-baseline.yml`](examples/ci/record-baseline.yml) +
-[`agent-regression-gate.yml`](examples/ci/agent-regression-gate.yml)) with an
-[anomaly ruleset](examples/ci/dprov-rules.json), and a
-[GitLab template](examples/ci/gitlab-workflow.yml) — see the
-[examples/ci README](examples/ci/README.md) for the baseline-management and
-`db-path` routing notes.
-
----
-
-## Example: regression testing
-
-The installed package includes the complete runnable story:
+See the catch immediately after installing:
 
 ```bash
 dprovenancekit demo
 ```
 
-[`examples/regression_testing.py`](examples/regression_testing.py) is the end-to-end story in ~150
-readable lines: record a **golden** run of a fact-checking agent (retrieve → verify → decide), then
-catch a later run that skips its verification step — via both the fast **fingerprint** check and the
-detailed **alignment** verdict (which flags the dropped `claimVerified` step as a HIGH regression).
+3. **Establish a baseline**
+   - Run your workflow multiple times
+   - Pin a known-good run (`dpk record`)
+   - Store the proof with the repo
 
-```bash
-# From a repository checkout:
-python examples/regression_testing.py
-```
+4. **Gate future changes**
+   - When you update the model, re-run
+   - Compare new reasoning to baseline (`dpk compare` / `dpk gate`)
+   - Diff shows exactly what changed
+   - Decide: Is this safe to deploy?
 
-It self-asserts its verdicts, so it doubles as an executable test of the headline use case.
+5. **Verify with auditors**
+   - Give them the proof packet
+   - They verify offline
+   - No internet, no vendor involvement
+   - Proof that traces are authentic
 
----
+Adapters for LangChain / LangGraph, OpenAI Agents SDK, LlamaIndex, CrewAI, and OpenTelemetry ingest live in `dprovenancekit.integrations`. Details: [docs](https://dprovenance.dev) and the [OpenAI Agents listing](https://github.com/openai/openai-agents-python/blob/main/docs/tracing.md#external-tracing-processors-list).
 
-## Instrumenting plain code (no framework)
+### For Pilot Participants
 
-Not using a framework? Instrument a hand-written agent loop directly — no event type to define, zero
-dependencies (ships in core as `dprovenancekit.instrument`):
-
-```python
-from dprovenancekit import InMemoryTraceStore, traced, traced_run, record_event
-
-@traced
-def search(query): ...
-
-@traced
-def answer(question, sources): ...
-
-# Omit `store` to persist automatically to .dprovenance/traces.sqlite.
-store = InMemoryTraceStore()
-with traced_run(store, context_id="ticket-42"):
-    sources = search(question)
-    record_event("plan.chosen", {"strategy": "rag"})
-    reply = answer(question, sources)
-```
-
-`@traced` records a `"<name>.start"` / `".end"` / `".error"` event pair per call in its own **span**
-(the function name is the **engine**), nests calls in the span tree, and emits the same
-`DERIVED_FROM` / `INFORMED` provenance edges as the framework adapters. `record_event(...)` drops an
-ad-hoc event (a decision, a chosen branch). Plain functions, `async def`, generators, and async
-generators are all supported (for a generator, start/end bracket the full iteration).
-Instrumentation never changes behavior — capture is failure-proof and exceptions pass through
-unchanged. Outside a `traced_run` the decorators are transparent, so instrumented code is safe to
-call untraced. The trace it produces is identical in shape to the adapter-produced ones, so
-fingerprint / diff / align / the regression gate all apply.
-
-For scripts and first use, `with traced_run(context_id="ticket-42"):` creates and closes a SQLite
-store at `DPROV_DB` or `.dprovenance/traces.sqlite`. Pass an explicit store, as above, when the
-application owns storage or needs a different backend.
+1. Schedule a kickoff call
+2. Define the scope (one AI workflow)
+3. Provide your reasoning trace format
+4. Receive governance policy + audit report
+5. Keep the open-source tool, informed by compliance experts
 
 ---
 
-## Tests
+## Technical Foundation
 
-```bash
-python -m pytest
+DProvenanceKit is built on proven infrastructure:
+
+- **Recording:** Non-blocking writes with priority-aware backpressure
+- **Storage:** WAL-mode SQLite (crash-safe, auditable)
+- **Query language:** Temporal and structural reasoning patterns
+- **Diffing:** Semantic alignment engine that detects regressions
+- **Signatures:** Canonical encoding + ECDSA P-256 (Secure Enclave on the Swift side)
+- **Verification:** Deterministic, offline, open-source
+- **CI gate:** `dprovenancekit gate`, pytest `golden_trace`, and the [GitHub Action](https://github.com/marketplace/actions/dprovenancekit-regression-gate)
+
+**Cross-language:** Swift and Python implementations kept in sync by a formal conformance spec, not by hope. They produce byte-identical outputs for the same input.
+
+**Battle-tested:** Reasoning observability in production at regulated organizations. Conformance suite validates correctness. Benchmark corpus tests edge cases.
+
+---
+
+## No Third-Party Dependencies
+
+**Core (Python):**
+```
+sqlite3, contextvars, threading, json, hashlib, uuid, urllib
 ```
 
-~440 tests in the suite. A default run (core plus whichever adapters you have installed) executes
-~380 and skips the rest; CI's full matrix runs them all. Coverage spans Swift-parity tests ported from the original suite, cross-language
-conformance checks against the frozen Trace Specification v1 vectors, per-adapter integration tests
-(LangChain, OpenAI Agents SDK, LlamaIndex, CrewAI), instrumentation-layer tests, regression-gate
-tests, facade and visualizer tests, ecosystem integration tests (FastAPI, Jupyter, MCP), and the
-regression-testing example run as a self-asserting test. (Real-framework tests run only when the
-integrations are installed, otherwise skipped.)
+No pip dependencies in the core. Just Python's standard library. Requires Python 3.9+.
+
+**Core (Swift):**
+```
+Foundation, CryptoKit, SQLite
+```
+
+No external packages. Native to macOS/iOS. Requires Swift 6.0.
+
+**Why this matters for compliance:** Fewer dependencies = smaller attack surface = easier for auditors to review.
+
+---
+
+## Adoption Path
+
+### Week 1
+Integrate DProvenanceKit into one AI workflow. Record a baseline.
+
+### Week 2-4
+Establish governance policy. Define what counts as a regression.
+
+### Month 1-3
+Gate releases on reasoning changes. Provide proof to auditors.
+
+### Ongoing
+Every release: baseline vs. candidate. Proof that reasoning was consistent.
+
+---
+
+## Status
+
+**Public beta — [0.6.1](https://github.com/Therealdk8890/DProvenanceKitPython/releases/tag/v0.6.1) is released on PyPI (`dprovenancekit`); APIs may continue to evolve before 1.0.**
 
 ---
 
 ## License
 
-Distributed under the **Apache License 2.0**. See [LICENSE](LICENSE).
+Apache 2.0. Free for commercial use.
+
+---
+
+## Contact
+
+**For pilot inquiry:**
+[Request Governed AI Deployment Pilot](mailto:inquiry@dprovenance.dev?subject=Governed%20AI%20Deployment%20Pilot)
+
+**For open-source questions:**
+GitHub Issues: https://github.com/Therealdk8890/DProvenanceKitPython
+
+**For technical details:**
+- Python: https://github.com/Therealdk8890/DProvenanceKitPython
+- Swift: https://github.com/Therealdk8890/DProvenanceKit
+- Docs: https://dprovenance.dev
+
+---
+
+## Why This Exists
+
+AI systems make decisions that affect real people. Regulators want to see the reasoning. Cloud-based observability platforms aren't designed for that job alone.
+
+DProvenanceKit is built for teams that care about:
+- **Privacy:** Data stays local
+- **Auditability:** Reasoning is provable and verifiable
+- **Liability:** Proof that the decision was sound
+- **Compliance:** Evidence that regulators will accept
+
+If your AI makes healthcare, financial, legal, or insurance decisions, you need this.

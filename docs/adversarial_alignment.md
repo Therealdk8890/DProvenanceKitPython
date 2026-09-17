@@ -33,21 +33,36 @@ Verdict under optimal pairing reuses `DefaultAlignmentInterpreter` plus a
 test-local copy of the engine’s regression-risk derivation (removed / reordered /
 changed criticals) — still without patching production sources.
 
-## Pathological generators
+## Pathological generators (v2)
 
-Covered in `tests/adversarial_alignment/generators.py`:
+Covered in `tests/adversarial_alignment/generators.py` (~58 cases):
 
-- duplicate event types / repeated tool calls
-- near-identical payloads
-- inserted decoys / deleted events / reorders
-- equally scored candidates / one-to-many collisions
-- threshold-boundary scores (`0.749999`, `0.75`, `0.750001`)
-- critical vs structural priority mix
-- semantic evaluator disagreeing with weighted payload equality (hook + `SemanticLabel_v1`)
-- long traces with repeated patterns
-- graded greedy trap (asymmetric scores where greedy ≠ optimal)
+| Category | Coverage |
+|----------|----------|
+| `duplicates` | duplicate types, nested/interleaved same-type blocks |
+| `near_identical` | trailing whitespace/tab, double space, prefix drift + decoy exact |
+| `insert_delete` | decoys, deletes, bulk noise inserts, every-other delete |
+| `reorder` | triple swap, full reverse, adjacent swap cascade |
+| `ties` | 1×8 … 8×12 equal-score grids, ties with exact anchors |
+| `collisions` | one-to-many, rotate-3, many-to-one, chain-5, graded greedy traps (2×2 / 3×3 / 4×4 / steal) |
+| `threshold` | below/at/above semantic threshold, near-miss extras, mixed pair |
+| `priority_mix` | critical↔structural shuffle, critical reorder with noise, structural lookalike, all-structural |
+| `long` | legacy ~30 + **50 / 100 / 150 / 200** repeated patterns |
+| `semantic_hook` | `SemanticLabel_v1` disagree with payload equality (2- and 3-cluster) |
+| `fuzz` | seeded deterministic families (`seeds=1,2,3,7,11,42,99,123`), n∈[50,200] |
 
-## Metrics
+## Metrics (local run against main package sources)
+
+Command: `python -m pytest tests/test_adversarial_alignment.py -v`
+
+| Metric | v1 (~15 cases) | **v2 (58 cases)** |
+|--------|----------------|-------------------|
+| **disagreement_rate** | 0.067 | **0.207** |
+| **verdict_flip_rate** | 0.000 | **0.000** |
+| **high_none_flip_rate** | 0.000 | **0.000** |
+
+Pairing disagreements observed on graded traps, some long (150/200) traces, and
+most fuzz seeds — informative, not failures. No ExactEquality `HIGH`↔`none` flips.
 
 Emitted in pytest output and `adversarial_alignment_report.json`:
 
@@ -63,26 +78,18 @@ Emitted in pytest output and `adversarial_alignment_report.json`:
 - Unexpected `HIGH`↔`none` flips on **ExactEquality_v1** cases: **FAIL**.
 - Graded / semantic-hook cases are separate evaluators and do not trip the
   ExactEquality hard invariant.
+- Suite size must be ≥ 40 cases (`MIN_SUITE_CASES`).
 
-## Swift hooks
+## Swift port
 
-Full XCTest port is deferred (no Mac CI in this change). To mirror the suite:
-
-1. Add `Tests/DProvenanceKitTests/AdversarialAlignmentTests.swift`.
-2. Reuse production `AlignmentConfiguration.scoreMatch` / `combinedScore`.
-3. Implement Hungarian in a test-only helper (or call a tiny shared fixture).
-4. Compare `DefaultTraceMatcher.match` bindings vs optimal; re-run interpretation
-   / risk using the same critical remove-reorder-changed rules as
-   `TraceAlignmentEngine` (see `RegressionRiskSoundnessTests` /
-   `LinearCriticalReorderTests`).
-5. Keep generators isomorphic to the Python `Case` catalog for cross-language
-   disagreement-rate comparison.
-
-Until then, treat the Python suite + this document as the source of truth for
-adversarial coverage.
+XCTest port lives in `Therealdk8890/DProvenanceKit` under
+`Tests/DProvenanceKitTests/AdversarialAlignment*` (branch
+`test/adversarial-alignment-xctest`). Generators mirror this catalog for
+cross-language disagreement-rate comparison. Production `DefaultTraceMatcher`
+remains the default; optimal assignment is test-only.
 
 ## Running
 
 ```bash
-pytest tests/test_adversarial_alignment.py -v
+python -m pytest tests/test_adversarial_alignment.py -v
 ```

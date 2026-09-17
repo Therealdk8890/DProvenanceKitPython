@@ -275,6 +275,16 @@ state kinds.
 
 ---
 
+## 10.3 What v1 does *not* pin (cross-language)
+
+Crypto attestation, Secure Enclave keys, fuzzy equivalence evaluators, load-shed
+tallies, and undecoded-cloud quarantine counts are **out of Trace Spec v1 vector
+scope**. See [`CROSS_LANGUAGE_GAPS.md`](CROSS_LANGUAGE_GAPS.md) for the honest
+inventory: attestation is Swift-only today; do not invent Python attestation
+vectors until a real signer lands.
+
+---
+
 ## 11. Conformance checklist for a new SDK
 
 A Rust / TypeScript / … SDK is v1-conformant when, reading the same `vectors/*.json`:

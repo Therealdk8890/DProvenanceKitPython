@@ -133,6 +133,21 @@ def gen_run_fingerprint() -> dict:
             "description": "Single event.",
             "events": [{"type": "promptGenerated", "engine": "Planner"}],
         },
+        {
+            "description": "Empty engine string is part of the signature (distinct from 'Unknown').",
+            "events": [
+                {"type": "promptGenerated", "engine": ""},
+                {"type": "finalDecisionMade", "engine": ""},
+            ],
+        },
+        {
+            "description": "Repeated identical (type, engine) steps still fold in commit order.",
+            "events": [
+                {"type": "documentEvaluated", "engine": "Planner"},
+                {"type": "documentEvaluated", "engine": "Planner"},
+                {"type": "finalDecisionMade", "engine": "Planner"},
+            ],
+        },
     ]
     cases = []
     for spec in samples:
@@ -213,6 +228,35 @@ def _query_cases():
         {
             "description": "Any run that reached a final decision.",
             "dsl": {"type": "containsStep", "step": "finalDecisionMade"},
+        },
+        {
+            "description": "finalDecisionMade occurs at or after the first documentEvaluated.",
+            "dsl": {
+                "type": "after",
+                "step": "documentEvaluated",
+                "followedBy": "finalDecisionMade",
+            },
+        },
+        {
+            "description": "OR: Auditor engine OR never reached a final decision.",
+            "dsl": {
+                "type": "or",
+                "nodes": [
+                    {"type": "engineNameEquals", "name": "Auditor"},
+                    {"type": "missingStep", "step": "finalDecisionMade"},
+                ],
+            },
+        },
+        {
+            "description": "NOT: runs that never reached a final decision.",
+            "dsl": {
+                "type": "not",
+                "node": {"type": "containsStep", "step": "finalDecisionMade"},
+            },
+        },
+        {
+            "description": "Exact context id match.",
+            "dsl": {"type": "contextIDEquals", "id": "run-complete"},
         },
     ]
 
@@ -406,6 +450,61 @@ def gen_alignment_verdict() -> dict:
             "comparison": [
                 {"type": "finalDecisionMade", "attributes": {"approved": True}},
                 {"type": "documentEvaluated", "attributes": {"doc": "A"}},
+            ],
+        },
+        {
+            "description": "STRUCTURAL (non-critical) steps reordered -> states show reordered "
+            "but regression stays none (only CRITICAL reorder elevates).",
+            "profile": "developer_debug_v1",
+            "base": [
+                {"type": "documentEvaluated", "attributes": {"doc": "A"}, "priority": 2},
+                {"type": "finalDecisionMade", "attributes": {"approved": True}, "priority": 2},
+            ],
+            "comparison": [
+                {"type": "finalDecisionMade", "attributes": {"approved": True}, "priority": 2},
+                {"type": "documentEvaluated", "attributes": {"doc": "A"}, "priority": 2},
+            ],
+        },
+        {
+            "description": "Two critical steps removed from comparison -> HIGH (0.95).",
+            "profile": "strict_audit_v1",
+            "base": [
+                {"type": "documentEvaluated", "attributes": {"doc": "A"}},
+                {"type": "conflictDetected"},
+                {"type": "finalDecisionMade", "attributes": {"approved": True}},
+            ],
+            "comparison": [
+                {"type": "documentEvaluated", "attributes": {"doc": "A"}},
+            ],
+        },
+        {
+            "description": "One critical step removed and a different step added -> HIGH (removed drives).",
+            "profile": "developer_debug_v1",
+            "base": [
+                {"type": "documentEvaluated", "attributes": {"doc": "A"}},
+                {"type": "conflictDetected"},
+                {"type": "finalDecisionMade", "attributes": {"approved": True}},
+            ],
+            "comparison": [
+                {"type": "documentEvaluated", "attributes": {"doc": "A"}},
+                {"type": "alternateCheck"},
+                {"type": "finalDecisionMade", "attributes": {"approved": True}},
+            ],
+        },
+        {
+            "description": "TELEMETRY payload differs but is filtered by minimum_priority=STRUCTURAL "
+            "-> identical structural spine, no regression.",
+            "profile": "strict_audit_v1",
+            "minimum_priority": "STRUCTURAL",
+            "base": [
+                {"type": "tokenStats", "attributes": {"n": 10}, "priority": 0},
+                {"type": "documentEvaluated", "attributes": {"doc": "A"}},
+                {"type": "finalDecisionMade", "attributes": {"approved": True}},
+            ],
+            "comparison": [
+                {"type": "tokenStats", "attributes": {"n": 99}, "priority": 0},
+                {"type": "documentEvaluated", "attributes": {"doc": "A"}},
+                {"type": "finalDecisionMade", "attributes": {"approved": True}},
             ],
         },
     ]

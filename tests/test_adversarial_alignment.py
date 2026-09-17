@@ -1,6 +1,6 @@
 """Adversarial alignment suite: production greedy matcher vs optimal assignment.
 
-Does NOT modify the production TraceAlignmentEngine / DefaultTraceMatcher.
+Does NOT change the production TraceAlignmentEngine / DefaultTraceMatcher.
 Answers: how often does the production matcher disagree with a globally optimal
 bipartite assignment, and when it disagrees, can that flip the regression verdict
 (especially HIGH vs none for remove/reorder/changed criticals)?
@@ -28,9 +28,12 @@ from tests.adversarial_alignment.compare import (
     run_suite,
 )
 from tests.adversarial_alignment.generators import (
+    SPECIAL_EVALUATOR_CASES,
     all_generator_cases,
     greedy_trap_assignment,
+    greedy_trap_family,
     semantic_evaluator_disagree_hooks,
+    semantic_hook_family,
 )
 from tests.adversarial_alignment.optimal_assignment import (
     greedy_bindings,
@@ -45,6 +48,7 @@ from tests.adversarial_alignment.optimal_assignment import (
 PAIRING_DISAGREEMENT_BUDGET = 1.0  # allow all pairing disagreements
 VERDICT_FLIP_BUDGET = 0.25  # allow some MEDIUM/LOW nuance; HIGH↔none tracked separately
 UNEXPECTED_HIGH_NONE_FLIP_BUDGET = 0.0  # hard fail on ExactEquality HIGH↔none flips
+MIN_SUITE_CASES = 40
 
 
 def _exact_equality_config(profile: AlignmentProfile = None) -> AlignmentConfiguration:
@@ -57,22 +61,42 @@ def _exact_equality_config(profile: AlignmentProfile = None) -> AlignmentConfigu
 
 
 def _graded_trap_config() -> AlignmentConfiguration:
-    """Payload-graded evaluator that realizes the classic greedy trap."""
+    """Payload-graded evaluator that realizes classic greedy ≠ optimal traps."""
 
-    # Intended score matrix (after type weight in strict_audit: type 0.5 + payload*0.5):
-    #   b0-c0: payload 0.8 → total 0.5+0.4 = 0.9
-    #   b0-c1: payload 0.6 → total 0.5+0.3 = 0.8
-    #   b1-c0: payload 0.7 → total 0.5+0.35 = 0.85
-    #   b1-c1: payload 0.0 → total 0.5 (still >= 0.4 bind floor)
-    # Wait — type always matches so type contrib is always 0.5. For b1-c1 we need
-    # below-threshold OR low enough that optimal prefers (0,1)+(1,0).
-    # Optimal wants max weight: (0,1)+(1,0) = 0.8+0.85 = 1.65 vs greedy (0,0)=0.9 then
-    # (1,1)=0.5 → 1.4. So greedy and optimal both assign both — but different pairs.
+    # 2×2 classic:
+    #   b0-c0: 0.8 → total 0.9; b0-c1: 0.6 → 0.8
+    #   b1-c0: 0.7 → 0.85; b1-c1: 0.0 → 0.5
+    # Optimal: (0,1)+(1,0)=1.65; greedy: (0,0)+(1,1)=1.4
     grades = {
         ("b0", "c0"): 0.8,
         ("b0", "c1"): 0.6,
         ("b1", "c0"): 0.7,
         ("b1", "c1"): 0.0,
+        # 3×3: greedy prefers diagonal locals; optimal rotates.
+        ("t3_b0", "t3_c0"): 0.9,
+        ("t3_b0", "t3_c1"): 0.75,
+        ("t3_b0", "t3_c2"): 0.1,
+        ("t3_b1", "t3_c0"): 0.8,
+        ("t3_b1", "t3_c1"): 0.2,
+        ("t3_b1", "t3_c2"): 0.7,
+        ("t3_b2", "t3_c0"): 0.15,
+        ("t3_b2", "t3_c1"): 0.85,
+        ("t3_b2", "t3_c2"): 0.55,
+        # 4×4 sparse trap (high on a greedy-attracting column that starves others).
+        ("t4_b0", "t4_c0"): 0.95,
+        ("t4_b0", "t4_c1"): 0.7,
+        ("t4_b1", "t4_c0"): 0.9,
+        ("t4_b1", "t4_c2"): 0.75,
+        ("t4_b2", "t4_c1"): 0.85,
+        ("t4_b2", "t4_c3"): 0.65,
+        ("t4_b3", "t4_c2"): 0.8,
+        ("t4_b3", "t4_c3"): 0.2,
+        # Steal-column: greedy takes (0,0)=0.92 leaving b1 with weak c1;
+        # optimal (0,1)+(1,0) wins on total weight.
+        ("steal_b0", "steal_c0"): 0.84,
+        ("steal_b0", "steal_c1"): 0.7,
+        ("steal_b1", "steal_c0"): 0.8,
+        ("steal_b1", "steal_c1"): 0.05,
     }
 
     def graded(a, b):
@@ -88,7 +112,6 @@ def _graded_trap_config() -> AlignmentConfiguration:
 
 def _semantic_label_config() -> AlignmentConfiguration:
     def by_label(a, b):
-        # Disagree with payload equality: score by semantic_label clusters.
         if getattr(a, "semantic_label", "") and a.semantic_label == getattr(
             b, "semantic_label", ""
         ):
@@ -118,7 +141,6 @@ def _boundary_config(threshold: float) -> AlignmentConfiguration:
         alignment_mode=AlignmentMode.LINEAR,
     )
 
-    # Map body strings to forced similarity values around the threshold.
     forced = {
         "sim-lo": 0.749999,
         "sim-eq": 0.75,
@@ -126,7 +148,6 @@ def _boundary_config(threshold: float) -> AlignmentConfiguration:
     }
 
     def eval_sim(a, b):
-        # Use comparison body as the forced similarity key when present.
         key = getattr(b, "body", "")
         if key in forced:
             return forced[key]
@@ -143,9 +164,15 @@ def _boundary_config(threshold: float) -> AlignmentConfiguration:
     return AlignmentConfiguration(profile, evaluator)
 
 
+def _config_for_case(case) -> AlignmentConfiguration:
+    if case.name.startswith("greedy_trap") or (case.notes or "").startswith("graded"):
+        return _graded_trap_config()
+    if case.category == "semantic_hook" or case.name.startswith("semantic_"):
+        return _semantic_label_config()
+    return _exact_equality_config()
+
+
 def test_hungarian_maximizes_known_trap():
-    # Classic: greedy would take (0,0)=5 leaving row1 empty of col0;
-    # optimal takes (0,1)=4 + (1,0)=4 = 8.
     matrix = [
         [5.0, 4.0],
         [4.0, 0.0],
@@ -163,7 +190,6 @@ def test_greedy_trap_disagreement_and_score():
     greedy = greedy_bindings(config, base, comp)
     optimal = optimal_bindings(config, base, comp)
     assert total_score(optimal) + 1e-9 >= total_score(greedy)
-    # With the graded landscape, pairings should differ.
     g_pairs = {(b.base_event_id, b.comparison_event_id) for b in greedy}
     o_pairs = {(b.base_event_id, b.comparison_event_id) for b in optimal}
     assert g_pairs != o_pairs
@@ -172,6 +198,15 @@ def test_greedy_trap_disagreement_and_score():
     )
     assert metrics.pairing_disagrees
     assert metrics.optimal_score_sum >= metrics.production_score_sum - 1e-9
+
+
+@pytest.mark.parametrize("trap", greedy_trap_family(), ids=lambda c: c.name)
+def test_graded_trap_family_optimal_dominates(trap):
+    config = _graded_trap_config()
+    metrics = evaluate_case(
+        config, trap.name, trap.category, trap.base, trap.comparison, notes=trap.notes
+    )
+    assert metrics.optimal_score_sum + 1e-9 >= metrics.production_score_sum
 
 
 def test_threshold_boundary_forced_scores():
@@ -195,7 +230,6 @@ def test_threshold_boundary_forced_scores():
             assert result.regression_risk.level is RegressionLevel.HIGH
         elif label == "at":
             assert abs(score - 0.75) < 1e-9
-            # score >= threshold → not "changed beyond equivalence"
             assert result.regression_risk.level is RegressionLevel.NONE
         else:
             assert score > 0.75
@@ -209,76 +243,79 @@ def test_semantic_evaluator_disagree_hook():
     metrics = evaluate_case(
         config, case.name, case.category, case.base, case.comparison, notes=case.notes
     )
-    # Labels cross-match → optimal/greedy should both bind cluster-aligned pairs;
-    # ExactEquality would treat paraphrases as changed. This documents the hook works.
     assert metrics.production_pair_count == 2
     assert metrics.optimal_pair_count == 2
     assert not metrics.high_none_flip
 
 
+@pytest.mark.parametrize("case", semantic_hook_family(), ids=lambda c: c.name)
+def test_semantic_hook_family_binds(case):
+    metrics = evaluate_case(
+        _semantic_label_config(),
+        case.name,
+        case.category,
+        case.base,
+        case.comparison,
+        notes=case.notes,
+    )
+    assert metrics.production_pair_count >= 1
+    assert not metrics.high_none_flip
+
+
 @pytest.fixture(scope="module")
 def exact_equality_suite_report(tmp_path_factory):
-    config = _exact_equality_config()
-    cases = [
-        c
-        for c in all_generator_cases()
-        if c.name != "greedy_trap_assignment"  # needs graded evaluator
-        and c.name != "semantic_evaluator_disagree"  # needs label evaluator
-    ]
-    # Add threshold boundary cases under developer_debug profile separately? Keep ExactEquality.
-    report = run_suite(config, cases)
+    cases = all_generator_cases()
+    report_cases = []
+    for case in cases:
+        config = _config_for_case(case)
+        report_cases.append(
+            evaluate_case(
+                config,
+                case.name,
+                case.category,
+                case.base,
+                case.comparison,
+                notes=getattr(case, "notes", "") or "",
+            )
+        )
 
-    # Also run graded trap + semantic hook as extra rows for the artifact.
-    trap = greedy_trap_assignment()
-    report.cases.append(
-        evaluate_case(
-            _graded_trap_config(),
-            trap.name,
-            trap.category,
-            trap.base,
-            trap.comparison,
-            notes="graded",
-        )
-    )
-    sem = semantic_evaluator_disagree_hooks()
-    report.cases.append(
-        evaluate_case(
-            _semantic_label_config(),
-            sem.name,
-            sem.category,
-            sem.base,
-            sem.comparison,
-            notes=sem.notes,
-        )
-    )
+    from tests.adversarial_alignment.compare import SuiteReport
+
+    report = SuiteReport(cases=report_cases)
 
     out_dir = Path(tmp_path_factory.getbasetemp())
     artifact = out_dir / "adversarial_alignment_report.json"
     artifact.write_text(report.dumps(), encoding="utf-8")
-    # Also write under workspace-friendly path when present.
-    workspace_report = Path("/workspace/dpk-adversarial/adversarial_alignment_report.json")
-    try:
-        workspace_report.parent.mkdir(parents=True, exist_ok=True)
-        workspace_report.write_text(report.dumps(), encoding="utf-8")
-    except OSError:
-        pass
-    print("\n=== ADVERSARIAL ALIGNMENT METRICS ===")
-    print(json.dumps(report.to_dict(), indent=2)[:4000])
+    for path in (
+        Path("/workspace/dpk-adversarial-v2/adversarial_alignment_report.json"),
+        Path("/workspace/dpk-adversarial/adversarial_alignment_report.json"),
+    ):
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(report.dumps(), encoding="utf-8")
+        except OSError:
+            pass
+    print("\n=== ADVERSARIAL ALIGNMENT METRICS (v2) ===")
+    summary = {
+        "n_cases": report.n,
+        "disagreement_rate": report.disagreement_rate,
+        "verdict_flip_rate": report.verdict_flip_rate,
+        "high_none_flip_rate": report.high_none_flip_rate,
+        "categorized_failures": report.categorized_failures(),
+    }
+    print(json.dumps(summary, indent=2))
     print(f"report_artifact={artifact}")
     return report
 
 
 def test_suite_metrics_within_budget(exact_equality_suite_report):
     report = exact_equality_suite_report
-    assert report.n >= 10
+    assert report.n >= MIN_SUITE_CASES, f"expected ≥{MIN_SUITE_CASES} cases, got {report.n}"
     assert report.disagreement_rate <= PAIRING_DISAGREEMENT_BUDGET
     assert report.verdict_flip_rate <= VERDICT_FLIP_BUDGET
 
-    # ExactEquality_v1 cases only for the hard HIGH↔none invariant.
     exact_cases = [
-        c
-        for c in report.cases
-        if c.name not in ("greedy_trap_assignment", "semantic_evaluator_disagree")
+        c for c in report.cases if c.name not in SPECIAL_EVALUATOR_CASES
     ]
     unexpected = [c for c in exact_cases if c.high_none_flip]
     if unexpected:
@@ -290,7 +327,8 @@ def test_suite_metrics_within_budget(exact_equality_suite_report):
     print(
         f"disagreement_rate={report.disagreement_rate:.3f} "
         f"verdict_flip_rate={report.verdict_flip_rate:.3f} "
-        f"high_none_flip_rate={report.high_none_flip_rate:.3f}"
+        f"high_none_flip_rate={report.high_none_flip_rate:.3f} "
+        f"n={report.n}"
     )
 
 
@@ -301,7 +339,15 @@ def test_optimal_score_dominates_greedy(exact_equality_suite_report):
 
 def test_categorized_failure_cases_printed(exact_equality_suite_report, capsys):
     cats = exact_equality_suite_report.categorized_failures()
-    # Always print for CI logs even when empty.
     print("categorized_failures=", json.dumps(cats, indent=2))
-    # Soft assertion: structure is a dict keyed by category.
     assert isinstance(cats, dict)
+
+
+def test_generator_catalog_has_long_and_fuzz_coverage():
+    cases = all_generator_cases()
+    names = {c.name for c in cases}
+    cats = {c.category for c in cases}
+    assert any(n.startswith("long_repeated_") for n in names)
+    assert any(n.startswith("fuzz_seed_") for n in names)
+    assert "ties" in cats and "collisions" in cats and "fuzz" in cats
+    assert len(cases) >= MIN_SUITE_CASES

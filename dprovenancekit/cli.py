@@ -2,7 +2,7 @@
 
 Mirrors the Swift ``DProvenanceKitCLI``. Usage::
 
-    dpk <record|compare|gate|demo|anomalies|runs|ui|ingest|export|sync>
+    dpk <record|compare|gate|demo|anomalies|runs|ui|ingest|export|sync|attest>
 """
 
 from __future__ import annotations
@@ -980,9 +980,146 @@ def _finite_only(value):
     return value
 
 
+
+def _run_attest(argv) -> int:
+    """``dpk attest sign|verify`` — DPK-BINARY-V1 software P-256 attestation."""
+    import argparse
+    import base64
+    import json
+    from pathlib import Path
+
+    ap = argparse.ArgumentParser(
+        prog="dpk attest",
+        description=(
+            "Sign or verify a DPK-BINARY-V1 attestation document "
+            "(interoperable with Swift TraceAttestation). Requires dprovenancekit[crypto]."
+        ),
+    )
+    sub = ap.add_subparsers(dest="action", required=True)
+
+    sp_verify = sub.add_parser("verify", help="verify an attestation JSON document")
+    sp_verify.add_argument("--in", dest="inp", required=True, help="attestation JSON path")
+    sp_verify.add_argument(
+        "--trusted-key",
+        action="append",
+        default=[],
+        help="optional trusted key ID (repeatable); when set, key must match",
+    )
+
+    sp_sign = sub.add_parser("sign", help="sign an attestable-trace JSON document")
+    sp_sign.add_argument(
+        "--in",
+        dest="inp",
+        required=True,
+        help="JSON with attestable trace (full document or {trace: ...} or bare trace)",
+    )
+    sp_sign.add_argument("--out", required=True, help="output attestation document path")
+    sp_sign.add_argument(
+        "--key",
+        help="optional 32-byte P-256 private key as base64 (CryptoKit rawRepresentation); "
+        "generated ephemerally if omitted",
+    )
+    sp_sign.add_argument(
+        "--issued-at",
+        type=int,
+        default=None,
+        help="optional issuedAtUnixMicroseconds (default: now)",
+    )
+
+    args = ap.parse_args(argv)
+
+    try:
+        from .attestation import (
+            AttestableTrace,
+            SoftwareTraceAttestationKey,
+            TraceAttestationDocument,
+            signed_document,
+        )
+    except ImportError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    if args.action == "verify":
+        path = Path(args.inp)
+        if not path.is_file():
+            print(f"error: attestation file not found: {path}", file=sys.stderr)
+            return 2
+        try:
+            doc = TraceAttestationDocument.decode_json(path.read_bytes())
+        except Exception as exc:
+            print(f"error: failed to decode attestation: {exc}", file=sys.stderr)
+            return 2
+        trusted = set(args.trusted_key) if args.trusted_key else None
+        result = doc.verify(trusted_key_ids=trusted)
+        if result.is_valid:
+            print(
+                "valid  keyID={}  trust={}".format(result.key_id, result.trust.value)
+            )
+            return 0
+        print(
+            "invalid  keyID={}  failure={}".format(
+                result.key_id, result.failure.value if result.failure else "unknown"
+            ),
+            file=sys.stderr,
+        )
+        return 1
+
+    # sign
+    path = Path(args.inp)
+    if not path.is_file():
+        print(f"error: input file not found: {path}", file=sys.stderr)
+        return 2
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        print(f"error: failed to read input JSON: {exc}", file=sys.stderr)
+        return 2
+    if "trace" in raw and "attestation" in raw:
+        trace = AttestableTrace.from_wire(raw["trace"])
+    elif "trace" in raw:
+        trace = AttestableTrace.from_wire(raw["trace"])
+    elif "events" in raw and "runID" in raw:
+        trace = AttestableTrace.from_wire(raw)
+    else:
+        print(
+            "error: input must be a TraceAttestationDocument, {trace: ...}, "
+            "or AttestableTrace JSON",
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.key:
+        try:
+            key_bytes = base64.b64decode(args.key)
+            key = SoftwareTraceAttestationKey.from_raw_representation(key_bytes)
+        except Exception as exc:
+            print(f"error: invalid --key: {exc}", file=sys.stderr)
+            return 2
+    else:
+        key = SoftwareTraceAttestationKey()
+
+    try:
+        doc = signed_document(
+            trace, key, issued_at_unix_microseconds=args.issued_at
+        )
+    except Exception as exc:
+        print(f"error: signing failed: {exc}", file=sys.stderr)
+        return 2
+
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(doc.json_bytes(pretty=True))
+    print(
+        "signed  keyID={}  digest={}  out={}".format(
+            doc.attestation.key_id, doc.attestation.trace_digest, out
+        )
+    )
+    return 0
+
+
 _USAGE = (
     "Usage: dprovenancekit <record|compare|gate|demo|anomalies|runs|ui|ingest|export|sync"
-    "|evaluate|diagnose|stability>"
+    "|attest|evaluate|diagnose|stability>"
 )
 
 _HELP = """DProvenanceKit — record, diff, and gate AI agent runs.
@@ -1000,6 +1137,7 @@ Commands:
   ingest     import OpenTelemetry (OTLP JSON) traces as runs
   export     export runs as JSON
   sync       upload runs to DProvenanceKit Cloud
+  attest     sign or verify a DPK-BINARY-V1 attestation JSON document
   evaluate   run the bundled benchmark corpus (default)
   diagnose   causal ranking of benchmark failure modes
   stability  benchmark determinism boundary check
@@ -1046,6 +1184,8 @@ def main(argv=None) -> int:
         return _run_ingest(argv[1:])
     if argv and argv[0] == "sync":
         return _run_sync(argv[1:])
+    if argv and argv[0] == "attest":
+        return _run_attest(argv[1:])
 
     mode = argv[0] if argv else "evaluate"
     if mode not in ("evaluate", "diagnose", "stability"):

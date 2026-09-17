@@ -34,7 +34,7 @@ dependencies = []
 # silently skipping them. The CrewAI integration test needs `crewai`, which is heavy
 # (chromadb, onnxruntime, …) and requires Python >=3.10, so it is intentionally left out
 # of `dev` and runs only where crewai is installed (importorskip skips it otherwise).
-dev = ["pytest>=7.0", "pytest-cov", "fastapi", "httpx", "IPython", "pytest-asyncio", "langchain-core>=0.2"]
+dev = ["pytest>=7.0", "pytest-cov", "fastapi", "httpx", "IPython", "pytest-asyncio", "langchain-core>=0.2", "cryptography>=41.0"]
 # Framework adapters. The core package stays pure standard library; these extras are only
 # needed to wire DProvenanceKit into the corresponding framework.
 langchain = ["langchain-core>=0.2"]
@@ -51,6 +51,9 @@ google-genai = ["google-genai"]
 fastapi = ["fastapi", "starlette"]
 jupyter = ["ipython"]
 mcp = ["mcp"]
+# Software ECDSA P-256 (DER) for DPK-BINARY-V1 attestation. Core stays stdlib-only;
+# install this extra to sign/verify attestation documents interoperable with Swift.
+crypto = ["cryptography>=41.0"]
 # Convenience aggregate: every framework adapter in one install. Requires Python >= 3.10
 # (openai-agents, llama-index, and crewai declare that floor) and is heavy (crewai pulls
 # chromadb/onnxruntime). On 3.9, or for a lean install, pick the specific extras above.

@@ -9,6 +9,14 @@ public API may still change between minor versions.
 
 ### Added
 
+- **DPK-BINARY-V1 software attestation (MVP).** Optional extra `dprovenancekit[crypto]`
+  (`cryptography`) adds ECDSA P-256 DER sign/verify that matches Swift
+  `TraceAttestation` byte-for-byte. API: `dprovenancekit.attestation` /
+  `dpk attest sign|verify`. Ships the Swift golden vector
+  `attestation-v1.json` under `conformance/vectors/` and `tests/fixtures/`.
+  Proof packs and Secure Enclave remain Swift-only (see
+  `conformance/CROSS_LANGUAGE_GAPS.md`).
+
 - **A zero-configuration local regression workflow.** The new `dpk` executable is a short alias
   for `dprovenancekit`; `dpk record` atomically pins the newest known-good run to
   `.dprovenance/baseline.sqlite`, `dpk compare` prints the latest candidate diff without failing

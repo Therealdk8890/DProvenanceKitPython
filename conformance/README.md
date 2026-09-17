@@ -76,3 +76,10 @@ into v1: §2 made explicit that sorting is *required* (the Swift store now sets 
 and the alignment vectors now pin an explicit `id` per event (the canonical ordering
 tiebreaks on `(sequence, id)`, so the vector must carry the ids for any SDK to reproduce it).
 
+## Known gaps (honest)
+
+See [`CROSS_LANGUAGE_GAPS.md`](CROSS_LANGUAGE_GAPS.md). Crypto attestation vectors
+are **Swift-only** today; fuzzy evaluators and shed/undecoded behavior are not
+part of the v1 golden corpus. Expand shared vectors — do not rewrite production
+matchers — when closing the next gap.
+

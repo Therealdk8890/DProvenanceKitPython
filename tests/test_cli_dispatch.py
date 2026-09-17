@@ -34,6 +34,7 @@ def test_help_exits_0_and_lists_commands(capsys):
         "ingest",
         "export",
         "sync",
+        "attest",
     ):
         assert command in captured.out
 

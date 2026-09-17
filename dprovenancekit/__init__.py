@@ -217,6 +217,23 @@ from .instrument import TracedEvent, traced, traced_run, record_event
 # High-level Facade API
 from .facade import trace
 
+# Trace attestation (DPK-BINARY-V1); signing/verify need dprovenancekit[crypto]
+from .attestation import (
+    AttestableTrace,
+    AttestableTraceEvent,
+    SoftwareTraceAttestationKey,
+    TraceAttestation,
+    TraceAttestationDocument,
+    TraceAttestationError,
+    TraceAttestationTrust,
+    TraceAttestationVerification,
+    TraceAttestationVerificationFailure,
+    TraceAttestationVerifier,
+    attest,
+    signed_document,
+    trace_digest_hex,
+)
+
 try:
     __version__ = _distribution_version("dprovenancekit")
 except _PackageNotFoundError:
@@ -338,4 +355,18 @@ __all__ = [
     "record_event",
     # High-level facade
     "trace",
+    # Attestation (DPK-BINARY-V1)
+    "AttestableTrace",
+    "AttestableTraceEvent",
+    "SoftwareTraceAttestationKey",
+    "TraceAttestation",
+    "TraceAttestationDocument",
+    "TraceAttestationError",
+    "TraceAttestationTrust",
+    "TraceAttestationVerification",
+    "TraceAttestationVerificationFailure",
+    "TraceAttestationVerifier",
+    "attest",
+    "signed_document",
+    "trace_digest_hex",
 ]

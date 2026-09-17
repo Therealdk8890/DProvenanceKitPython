@@ -9,7 +9,7 @@
 
 For teams in healthcare, finance, and legal building AI systems that need a local-first record of *which instrumented steps ran*, and a regression gate when that path drifts — without sending sensitive traces to a third-party SaaS by default.
 
-> Working in Swift / on-device Apple AI? **[DProvenanceKit](https://github.com/Therealdk8890/DProvenanceKit)** — same recording / diff / gate model, plus CryptoKit attestation (`DPK-BINARY-V1` + ECDSA P-256 DER), proof packs, and a Foundation Models adapter. **Python does not yet sign traces.**
+> Working in Swift / on-device Apple AI? **[DProvenanceKit](https://github.com/Therealdk8890/DProvenanceKit)** — same recording / diff / gate model, plus CryptoKit attestation (`DPK-BINARY-V1` + ECDSA P-256 DER), proof packs, and a Foundation Models adapter. **Python can sign/verify the same `DPK-BINARY-V1` format** via `pip install dprovenancekit[crypto]` (software P-256; no Secure Enclave / proof packs).
 
 ---
 
@@ -24,7 +24,7 @@ Your AI makes a decision that impacts a customer. The decision is challenged.
 
 Request-level observability (OpenTelemetry, LangSmith, Langfuse, Datadog) remains essential for what happened in production. It does not, by itself, give you a **queryable, diffable, locally retained record of the instrumented decision path** — or a CI check that refuses merge when that path regresses. For regulated workflows, that gap matters: sensitive reasoning often cannot leave your infrastructure.
 
-DProvenanceKit (Python) is built to close the recording / diff / gate part of that gap. Cryptographic attestation and proof packs live in the **Swift** SDK today.
+DProvenanceKit (Python) closes the recording / diff / gate gap locally. Software `DPK-BINARY-V1` attestation is available via the optional `[crypto]` extra; proof packs and Secure Enclave remain Swift-only.
 
 This package does **not** prove that model reasoning was “sound,” that every claim in a payload is true, or that a regulator will accept a trace as sufficient evidence. For the signed-artifact threat model (Swift), read [ATTESTATION — What it does not establish](https://github.com/Therealdk8890/DProvenanceKit/blob/main/docs/ATTESTATION.md#what-it-does-not-establish) (also summarized on [dprovenance.dev](https://dprovenance.dev)).
 
@@ -64,9 +64,9 @@ Eligibility and records workflows often cannot ship raw reasoning to a hosted Sa
    - Diff a candidate run against a golden baseline
    - Fail CI when the path regresses beyond policy (`dprovenancekit gate`, pytest `golden_trace`, or the [GitHub Action](https://github.com/marketplace/actions/dprovenancekit-regression-gate))
 
-4. **Attest offline when you need a signature — on Swift.**
-   - Python does **not** cryptographically sign traces today
-   - Swift uses `DPK-BINARY-V1` + ECDSA P-256 (DER), optional Secure Enclave, and proof packs
+4. **Attest offline when you need a signature.**
+   - Python: `pip install dprovenancekit[crypto]` then `dpk attest sign|verify` (software P-256, same `DPK-BINARY-V1` bytes as Swift)
+   - Swift: CryptoKit + optional Secure Enclave + proof packs
    - Same Trace Spec for fingerprints / query / alignment across languages
 
 ---
@@ -79,7 +79,7 @@ Eligibility and records workflows often cannot ship raw reasoning to a hosted Sa
 | Semantic diff + golden baselines | Yes | Yes |
 | CI regression gate | Yes | Yes |
 | Framework adapters | Foundation Models (+ OTel bridge) | LangChain, OpenAI Agents, LlamaIndex, CrewAI, OTel ingest |
-| Trace attestation (`DPK-BINARY-V1` + P-256 DER) | **Yes** | **Not yet** |
+| Trace attestation (`DPK-BINARY-V1` + P-256 DER) | **Yes** | **MVP yes** (`[crypto]` extra; software keys) |
 | Proof packs | **Yes** | **Not yet** |
 | Secure Enclave–backed keys | **Yes** (Apple platforms) | N/A |
 
@@ -232,8 +232,8 @@ dprovenancekit demo
    - Decide: Is this safe to deploy?
 
 5. **When you need cryptographic attestation**
-   - Use the [Swift SDK](https://github.com/Therealdk8890/DProvenanceKit) to sign and verify
-   - Or wait for a Python port of attestation / proof packs
+   - Python: `pip install dprovenancekit[crypto]` and `dpk attest sign|verify`
+   - Swift: full CryptoKit path + proof packs / Secure Enclave in the [Swift SDK](https://github.com/Therealdk8890/DProvenanceKit)
    - Limits: [ATTESTATION.md](https://github.com/Therealdk8890/DProvenanceKit/blob/main/docs/ATTESTATION.md#what-it-does-not-establish)
 
 Adapters for LangChain / LangGraph, OpenAI Agents SDK, LlamaIndex, CrewAI, and OpenTelemetry ingest live in `dprovenancekit.integrations`. Details: [docs](https://dprovenance.dev) and the [OpenAI Agents listing](https://github.com/openai/openai-agents-python/blob/main/docs/tracing.md#external-tracing-processors-list).
@@ -255,7 +255,7 @@ Adapters for LangChain / LangGraph, OpenAI Agents SDK, LlamaIndex, CrewAI, and O
 - **Query language:** Temporal and structural reasoning patterns
 - **Diffing:** Semantic alignment engine that detects regressions
 - **CI gate:** `dprovenancekit gate`, pytest `golden_trace`, and the [GitHub Action](https://github.com/marketplace/actions/dprovenancekit-regression-gate)
-- **Attestation / proof packs:** Swift-only today — `DPK-BINARY-V1` + ECDSA P-256 (DER); see [Swift ATTESTATION.md](https://github.com/Therealdk8890/DProvenanceKit/blob/main/docs/ATTESTATION.md). Python does not claim JCS/RFC 8785, Detached JWS, or local signing.
+- **Attestation:** Both SDKs — `DPK-BINARY-V1` + ECDSA P-256 (DER); see [Swift ATTESTATION.md](https://github.com/Therealdk8890/DProvenanceKit/blob/main/docs/ATTESTATION.md) and `dprovenancekit.attestation`. Python MVP is software keys only (`[crypto]`). **Proof packs / Secure Enclave:** Swift-only. Neither claims JCS/RFC 8785 or Detached JWS.
 
 **Cross-language:** Swift and Python stay aligned via a formal Trace Spec and shared conformance vectors (fingerprint, query, profile hash, alignment). Payload bytes need not match across languages; see [TRACE_SPEC §2](conformance/TRACE_SPEC_v1.md).
 

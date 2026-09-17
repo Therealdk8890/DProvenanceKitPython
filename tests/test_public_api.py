@@ -40,6 +40,12 @@ EXPECTED_PUBLIC = {
     "render_report_html", "render_trace_html",
     "TracedEvent", "traced", "traced_run", "record_event",
     "trace",
+    # Attestation (DPK-BINARY-V1 MVP)
+    "AttestableTrace", "AttestableTraceEvent", "SoftwareTraceAttestationKey",
+    "TraceAttestation", "TraceAttestationDocument", "TraceAttestationError",
+    "TraceAttestationTrust", "TraceAttestationVerification",
+    "TraceAttestationVerificationFailure", "TraceAttestationVerifier",
+    "attest", "signed_document", "trace_digest_hex",
 }
 
 # A representative sample of symbols removed from __all__ in the curation that must remain

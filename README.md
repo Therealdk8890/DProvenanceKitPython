@@ -220,6 +220,9 @@ See the catch immediately after installing:
 dprovenancekit demo
 ```
 
+Full record → baseline → gate (HIGH fail) → attest → verify walkthrough:
+[`examples/e2e_decision_path/`](examples/e2e_decision_path/) (`pip install -e ".[crypto]"` then `python -m examples.e2e_decision_path`).
+
 3. **Establish a baseline**
    - Run your workflow multiple times
    - Pin a known-good run (`dpk record`)

@@ -79,7 +79,7 @@ Eligibility and records workflows often cannot ship raw reasoning to a hosted Sa
 | Semantic diff + golden baselines | Yes | Yes |
 | CI regression gate | Yes | Yes |
 | Framework adapters | Foundation Models (+ OTel bridge) | LangChain, OpenAI Agents, LlamaIndex, CrewAI, OTel ingest |
-| Trace attestation (`DPK-BINARY-V1` + P-256 DER) | **Yes** | **MVP yes** (`[crypto]` extra; software keys) |
+| Trace attestation (`DPK-BINARY-V1` + P-256 DER) | **Yes** | **MVP yes** (`[crypto]` extra; software keys; **0.7.0+**) |
 | Proof packs | **Yes** | **Not yet** |
 | Secure Enclave–backed keys | **Yes** (Apple platforms) | N/A |
 
@@ -98,7 +98,7 @@ DProvenanceKit aims to be the local-first layer for **AI decision-path observabi
 | **Where data lives** | Collector or hosted platform (by design) | Local-first; optional OTel ingest/export when you choose |
 | **How they fit** | Keep using them | Add DPK next to them |
 
-**Bottom line:** Use LangSmith, Langfuse, and OpenTelemetry for platform observability. Use DProvenanceKit when you need the decision path to be queryable, diffable, and refused in CI when it drifts. Use the Swift SDK when you also need offline cryptographic attestation.
+**Bottom line:** Use LangSmith, Langfuse, and OpenTelemetry for platform observability. Use DProvenanceKit when you need the decision path to be queryable, diffable, and refused in CI when it drifts. Use `dprovenancekit[crypto]` for software attestation; use the Swift SDK when you also need proof packs or Secure Enclave keys.
 
 More detail: [DProvenanceKit alongside LangSmith](https://dprovenance.dev/compare/dprovenancekit-vs-langsmith/).
 
@@ -295,7 +295,7 @@ Integrate DProvenanceKit into one AI workflow. Record a baseline.
 Establish governance policy. Define what counts as a regression.
 
 ### Month 1-3
-Gate releases on reasoning-path changes. Add Swift attestation in the pipeline if you need signed exports.
+Gate releases on instrumented-path changes. Use `dprovenancekit[crypto]` for software attestation; add Swift when you need proof packs or Secure Enclave.
 
 ### Ongoing
 Every release: baseline vs. candidate. A clear record of whether the instrumented path stayed consistent.
@@ -304,7 +304,7 @@ Every release: baseline vs. candidate. A clear record of whether the instrumente
 
 ## Status
 
-**Public beta — [0.6.1](https://github.com/Therealdk8890/DProvenanceKitPython/releases/tag/v0.6.1) is released on PyPI (`dprovenancekit`); APIs may continue to evolve before 1.0.**
+**Public beta — [0.7.0](https://github.com/Therealdk8890/DProvenanceKitPython/releases/tag/v0.7.0) on PyPI (`dprovenancekit`) adds MVP `DPK-BINARY-V1` software attestation via `dprovenancekit[crypto]`. APIs may continue to evolve before 1.0. Wheels older than 0.7.0 do not include attestation.**
 
 ---
 

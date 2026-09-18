@@ -20,6 +20,8 @@ oracle; the Swift `ConformanceHarness` vendors the same JSON and
 
 ## Attestation (DPK-BINARY-V1) — implemented on both (MVP)
 
+**Released in Python `0.7.0`** on PyPI as `dprovenancekit[crypto]` (software P-256). Prior PyPI `0.6.1` wheels do **not** include attestation — use `>=0.7.0`.
+
 | Surface | Status |
 | --- | --- |
 | Canonical `DPK-BINARY-V1` encoding + SHA-256 trace digest | **Both** — Python `dprovenancekit.attestation` matches Swift `TraceAttestationCanonicalizer`. |

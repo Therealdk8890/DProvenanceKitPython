@@ -61,7 +61,7 @@ jobs:
 | `comment` | `true` | Post a sticky summary comment on the PR. |
 | `anomaly-rules` | `""` | Path to a JSON rules config. When set, runs the out-of-the-box anomaly rules over the candidate run. |
 | `fail-on-anomaly` | `false` | Fail the job when an anomaly rule fires. |
-| `install-spec` | `dprovenancekit==0.7.0` | pip requirement to install the gate from (pin a version or point at a VCS URL). |
+| `install-spec` | `dprovenancekit==0.7.1` | pip requirement to install the gate from (pin a version or point at a VCS URL). |
 | `python-version` | `3.x` | Python to set up. |
 | `github-token` | `${{ github.token }}` | Token used to post the comment. |
 | `dprov-api-key` | `""` | API key for **customer BYO** cloud sync (pull golden). There is **no** hosted DPK service. |

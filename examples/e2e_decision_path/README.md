@@ -7,7 +7,7 @@ Instrument → Record → Baseline → Compare → Gate → Attest → Verify
 ```
 
 The demo records a clean baseline path, pins it with `dpk record`, then records a
-candidate that **drops the CRITICAL `claimVerified` step**. `dpk gate` exits non-zero
+candidate that **drops the CRITICAL `verify_account_status` step**. `dpk gate` exits non-zero
 with severity **HIGH**. Separately, the baseline run is exported as an attestable trace,
 signed with `dpk attest sign`, and verified with `dpk attest verify`.
 

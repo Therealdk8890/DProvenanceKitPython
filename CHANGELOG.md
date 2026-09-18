@@ -7,7 +7,12 @@ public API may still change between minor versions.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- `docs/PRODUCT_LAYERS.md` — OSS vs commercial matrix and license firewall.
+- `dpk init` scaffold + CRITICAL-step removal headline in gate summary.
+- e2e fixtures renamed to `verify_account_status` for the DX hook.
+
+
 
 ## [0.7.0] — 2026-09-18
 

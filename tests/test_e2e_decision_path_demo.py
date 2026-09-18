@@ -31,7 +31,8 @@ def test_e2e_decision_path_demo_gate_fail_and_attest_ok(tmp_path, capsys, monkey
     assert "GATE_LEVEL=high" in out
     assert "ATTEST_VERIFY=valid" in out
     assert "DEMO_OK" in out
-    assert "claimVerified" in out
+    assert "verify_account_status" in out
+    assert "REGRESSION / CRITICAL step removed: verify_account_status" in out
     assert (tmp_path / "traces.sqlite").exists()
     assert (tmp_path / "baseline.sqlite").exists()
     assert (tmp_path / "baseline_attestation.json").exists()

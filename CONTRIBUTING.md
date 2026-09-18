@@ -53,3 +53,19 @@ under Added / Changed / Fixed / Security.
 ## Releasing
 
 Maintainer process is documented in [RELEASING.md](RELEASING.md).
+
+
+## License firewall (do not merge Platform code here)
+
+This repository is **Apache-2.0 only**. Do **not** merge proprietary AI Assurance
+Platform / Premium / Cloud control-plane code into it.
+
+- Commercial code lives in separate repos (`DProvenanceKit-Premium`,
+  `dprovenancekit-server`) under a **proprietary** license.
+- Those products may **depend on** this SDK; they must **not** relicense it.
+- If a PR adds hosted federation, org RBAC, retention lifecycle, or paid-only
+  policy backends, reject it here and route it to the commercial repos.
+- See [docs/PRODUCT_LAYERS.md](docs/PRODUCT_LAYERS.md) for the free/commercial matrix.
+
+Optional CI note: commercial repos may check for proprietary `LICENSE` headers on
+new Platform paths; this Apache repo should never gain a proprietary tree.

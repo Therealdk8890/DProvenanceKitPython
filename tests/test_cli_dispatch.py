@@ -24,6 +24,7 @@ def test_help_exits_0_and_lists_commands(capsys):
     captured = capsys.readouterr()
     assert code == 0
     for command in (
+        "init",
         "record",
         "compare",
         "gate",

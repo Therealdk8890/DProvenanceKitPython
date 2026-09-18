@@ -301,6 +301,7 @@ def test_report_summary_is_readable():
     assert "FAIL" in summary
     assert "verified" in summary
     assert "removed" in summary
+    assert "REGRESSION / CRITICAL step removed:" in summary
 
 
 def test_module_level_assert_raises_on_regression():

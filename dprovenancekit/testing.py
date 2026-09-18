@@ -131,13 +131,22 @@ class RegressionReport:
         return out
 
     def summary(self) -> str:
-        lines = [
+        lines = []
+        # DX headline: make CRITICAL-path removals obvious in the first five minutes.
+        if not self.passed and "Critical reasoning steps removed:" in (self.reasoning or ""):
+            steps = self.reasoning.split("Critical reasoning steps removed:", 1)[1].strip()
+            lines.append(f"REGRESSION / CRITICAL step removed: {steps}")
+        elif not self.passed:
+            lines.append("REGRESSION")
+        lines.extend(
+            [
             f"Regression gate: {'PASS' if self.passed else 'FAIL'}",
             f"  severity: {self.regression_level.value} (strength {self.strength:.2f}); "
             f"max allowed: {self.max_regression_level.value}",
             f"  fingerprint: {'match' if self.fingerprint_match else 'differs'} "
             f"({self.golden_fingerprint[:12]}… vs {self.candidate_fingerprint[:12]}…)",
-        ]
+            ]
+        )
         semantic_key = AlignmentStateKind.SEMANTIC_MATCH.value
         divergent = {k: v for k, v in self.steps_by_change.items() if k != semantic_key}
         accepted = self.steps_by_change.get(semantic_key, [])

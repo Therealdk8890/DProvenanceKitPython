@@ -2,7 +2,7 @@
 
 Mirrors the Swift ``DProvenanceKitCLI``. Usage::
 
-    dpk <record|compare|gate|demo|anomalies|runs|ui|ingest|export|sync|attest>
+    dpk <init|record|compare|gate|demo|anomalies|runs|ui|ingest|export|sync|attest>
 """
 
 from __future__ import annotations
@@ -1117,8 +1117,153 @@ def _run_attest(argv) -> int:
     return 0
 
 
+def _run_init(argv) -> int:
+    """``dpk init`` — scaffold a minimal local-first project stub.
+
+    Creates ``.dprovenance/``, a tiny account-status agent stub, and a README
+    that gets you to a CRITICAL-step regression in the first five minutes.
+    Does not contact any network service.
+    """
+    import argparse
+    from pathlib import Path
+
+    ap = argparse.ArgumentParser(
+        prog="dpk init",
+        description="Scaffold a minimal DProvenanceKit project (local-first, offline).",
+    )
+    ap.add_argument(
+        "directory",
+        nargs="?",
+        default=".",
+        help="project directory to create or use (default: current directory)",
+    )
+    ap.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite scaffold files if they already exist",
+    )
+    args = ap.parse_args(argv)
+
+    root = Path(args.directory).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    dprov = root / ".dprovenance"
+    dprov.mkdir(parents=True, exist_ok=True)
+    (dprov / ".gitkeep").touch()
+
+    agent = root / "agent_stub.py"
+    readme = root / "DPK_QUICKSTART.md"
+    if agent.exists() and not args.force:
+        print(
+            f"error: {agent} already exists (pass --force to overwrite)",
+            file=sys.stderr,
+        )
+        return 2
+    if readme.exists() and not args.force:
+        print(
+            f"error: {readme} already exists (pass --force to overwrite)",
+            file=sys.stderr,
+        )
+        return 2
+
+    agent.write_text(
+        '"""Minimal account-status path — baseline vs CRITICAL-step regression.\n'
+        "\n"
+        "Run from this directory after ``pip install dprovenancekit``::\n"
+        "\n"
+        "    python agent_stub.py\n"
+        '"""\n'
+        "\n"
+        "from __future__ import annotations\n"
+        "\n"
+        "import json\n"
+        "from pathlib import Path\n"
+        "\n"
+        "from dprovenancekit import DProvenanceKit, TracePriority\n"
+        "from dprovenancekit.event import AnyTraceableEvent\n"
+        "from dprovenancekit.sqlite_store import SQLiteTraceStore\n"
+        "from dprovenancekit.testing import RegressionGate\n"
+        "\n"
+        "\n"
+        "def _record(store, steps, context_id: str):\n"
+        "    kit = DProvenanceKit(AnyTraceableEvent)\n"
+        "    with kit.run(context_id=context_id, store=store) as run:\n"
+        "        for step_type, priority, detail in steps:\n"
+        "            payload = AnyTraceableEvent(\n"
+        "                type_identifier_value=step_type,\n"
+        "                priority_value=int(priority),\n"
+        "                raw_json=json.dumps({\"detail\": detail}, sort_keys=True),\n"
+        "            )\n"
+        "            with kit.with_engine(\"Agent\"):\n"
+        "                kit.record(payload)\n"
+        "        return run.run_id\n"
+        "\n"
+        "\n"
+        "def main() -> int:\n"
+        "    baseline_steps = [\n"
+        '        ("retrieve_account_context", TracePriority.STRUCTURAL, "account snapshot"),\n'
+        '        ("verify_account_status", TracePriority.CRITICAL, "status=active"),\n'
+        '        ("decide_account_action", TracePriority.CRITICAL, "approved"),\n'
+        "    ]\n"
+        "    candidate_steps = [\n"
+        '        ("retrieve_account_context", TracePriority.STRUCTURAL, "account snapshot"),\n'
+        '        ("decide_account_action", TracePriority.CRITICAL, "approved"),\n'
+        "    ]\n"
+        "\n"
+        '    db = Path(".dprovenance") / "traces.sqlite"\n'
+        "    db.parent.mkdir(parents=True, exist_ok=True)\n"
+        "    if db.exists():\n"
+        "        db.unlink()\n"
+        "\n"
+        "    store = SQLiteTraceStore(AnyTraceableEvent, str(db), start_writer=False)\n"
+        "    try:\n"
+        '        golden_id = _record(store, baseline_steps, "account.baseline")\n'
+        '        candidate_id = _record(store, candidate_steps, "account.candidate")\n'
+        "        golden = store.get_run(golden_id)\n"
+        "        candidate = store.get_run(candidate_id)\n"
+        "    finally:\n"
+        "        store.close()\n"
+        "\n"
+        "    report = RegressionGate().check(golden, candidate)\n"
+        "    print(report.summary())\n"
+        "    return 0 if report.passed else 1\n"
+        "\n"
+        "\n"
+        'if __name__ == "__main__":\n'
+        "    raise SystemExit(main())\n"
+    )
+
+    readme.write_text(
+        "# DProvenanceKit — five-minute DX hook\n"
+        "\n"
+        "Local-first evidence engine (Apache-2.0). Nothing here uploads by default.\n"
+        "\n"
+        "## Show a CRITICAL-step regression\n"
+        "\n"
+        "```bash\n"
+        "pip install dprovenancekit\n"
+        "python agent_stub.py\n"
+        "```\n"
+        "\n"
+        "Expected headline:\n"
+        "\n"
+        "```\n"
+        "REGRESSION / CRITICAL step removed: verify_account_status\n"
+        "```\n"
+        "\n"
+        "Product layers (OSS vs commercial): see `docs/PRODUCT_LAYERS.md` in the SDK repos.\n"
+    )
+
+    print(f"Initialized DProvenanceKit project at {root}")
+    print(f"  {dprov}/")
+    print(f"  {agent.name}")
+    print(f"  {readme.name}")
+    print("Next: python agent_stub.py")
+    return 0
+
+
+
 _USAGE = (
-    "Usage: dprovenancekit <record|compare|gate|demo|anomalies|runs|ui|ingest|export|sync"
+    "Usage: dprovenancekit <init|record|compare|gate|demo|anomalies|runs|ui|ingest|export|sync"
     "|attest|evaluate|diagnose|stability>"
 )
 
@@ -1127,6 +1272,7 @@ _HELP = """DProvenanceKit — record, diff, and gate AI agent runs.
 {usage}
 
 Commands:
+  init       scaffold a minimal local-first project (DX hook stub)
   record     pin the latest recorded run as the local golden baseline
   compare    inspect the latest run against the baseline; always exit 0 on a diff
   gate       compare the latest run against the baseline; exit 1 on regression
@@ -1162,6 +1308,8 @@ def main(argv=None) -> int:
         print(__version__)
         return 0
 
+    if argv and argv[0] == "init":
+        return _run_init(argv[1:])
     if argv and argv[0] == "demo":
         from .demo import main as demo_main
 

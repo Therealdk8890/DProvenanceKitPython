@@ -7,6 +7,11 @@ public API may still change between minor versions.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.7.0] — 2026-09-18
+
+
 ### Added
 
 - **End-to-end decision-path demo.** `examples/e2e_decision_path/` (also `scripts/e2e_demo.py`) walks Instrument → Record → Baseline → Gate → Attest → Verify using the public `dpk` CLI. Deliberately drops a CRITICAL step so the gate fails HIGH, then signs/verifies the baseline with `dpk attest` (`[crypto]`). Covered by `tests/test_e2e_decision_path_demo.py`.
@@ -215,6 +220,7 @@ Baseline for this changelog. See the Git history and
 [GitHub releases](https://github.com/Therealdk8890/DProvenanceKitPython/releases) for earlier
 changes.
 
-[Unreleased]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Therealdk8890/DProvenanceKitPython/releases/tag/v0.6.0

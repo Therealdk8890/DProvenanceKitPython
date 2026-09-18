@@ -9,6 +9,8 @@ public API may still change between minor versions.
 
 ### Added
 
+- **End-to-end decision-path demo.** `examples/e2e_decision_path/` (also `scripts/e2e_demo.py`) walks Instrument → Record → Baseline → Gate → Attest → Verify using the public `dpk` CLI. Deliberately drops a CRITICAL step so the gate fails HIGH, then signs/verifies the baseline with `dpk attest` (`[crypto]`). Covered by `tests/test_e2e_decision_path_demo.py`.
+
 - **DPK-BINARY-V1 software attestation (MVP).** Optional extra `dprovenancekit[crypto]`
   (`cryptography`) adds ECDSA P-256 DER sign/verify that matches Swift
   `TraceAttestation` byte-for-byte. API: `dprovenancekit.attestation` /

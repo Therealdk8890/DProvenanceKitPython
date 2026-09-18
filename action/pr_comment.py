@@ -57,7 +57,7 @@ def render_comment(report, dashboard_url=None):
         lines.extend([
             "> [!WARNING]",
             f"> **Regression Detected** (Severity: {level})",
-            "> Review the agent reasoning changes below.",
+            "> Review the agent decision-path changes below.",
             ""
         ])
 
@@ -84,9 +84,10 @@ def render_comment(report, dashboard_url=None):
     else:
         lines.append("- No per-step changes (all exact matches).")
 
-    reasoning = report.get("reasoning")
-    if reasoning:
-        lines += ["", f"_{_one_line(reasoning)}_"]
+    # Report field key remains "reasoning" (engine schema); surface as decision-path note.
+    decision_path_note = report.get("reasoning")
+    if decision_path_note:
+        lines += ["", f"_{_one_line(decision_path_note)}_"]
     return "\n".join(lines)
 
 

@@ -1,20 +1,22 @@
 # DProvenanceKit regression gate — GitHub Action
 
-A composite action that fails a pull request when an agent's reasoning regresses against a
-golden run, and posts a sticky summary comment with the diff. It wraps the server-less
-`dprovenancekit gate` CLI, so it runs fully local — no hosted backend required.
+A composite action that fails a pull request when an agent's **instrumented decision path**
+regresses against a golden run, and posts a sticky summary comment with the diff. It wraps the
+server-less `dprovenancekit gate` CLI, so it runs fully local — **no hosted DProvenanceKit
+service** and no API keys for the default path.
 
-> **Published on the GitHub Marketplace** as
+> **Prefer the Marketplace Action** for production CI:
+> `uses: Therealdk8890/dprovenancekit-action@v1.1.2` (or pin a commit SHA such as
+> `bc37c684bd4343f172afd801d6f6ecd54cf4dbdd`). Published as
 > [DProvenanceKit regression gate](https://github.com/marketplace/actions/dprovenancekit-regression-gate).
-> The canonical path is `uses: Therealdk8890/dprovenancekit-action@v1` (a dedicated repo with the
-> same files). This in-repo copy is referenced as
-> `Therealdk8890/DProvenanceKitPython/action@main` (this repo's release tags are SDK versions —
-> there is no `v1` tag here).
+> This in-repo `action/` tree is a **legacy / duplicate** copy kept for reference; prefer the
+> dedicated Action repo. Path here is `Therealdk8890/DProvenanceKitPython/action@main` (this
+> repo's release tags are SDK versions — there is no `v1` tag here).
 
 ## Usage
 
 ```yaml
-name: reasoning-regression
+name: decision-path-regression
 on: pull_request
 
 permissions:
@@ -59,9 +61,12 @@ jobs:
 | `comment` | `true` | Post a sticky summary comment on the PR. |
 | `anomaly-rules` | `""` | Path to a JSON rules config. When set, runs the out-of-the-box anomaly rules over the candidate run. |
 | `fail-on-anomaly` | `false` | Fail the job when an anomaly rule fires. |
-| `install-spec` | `dprovenancekit` | pip requirement to install the gate from (pin a version or point at a VCS URL). |
+| `install-spec` | `dprovenancekit==0.7.0` | pip requirement to install the gate from (pin a version or point at a VCS URL). |
 | `python-version` | `3.x` | Python to set up. |
 | `github-token` | `${{ github.token }}` | Token used to post the comment. |
+| `dprov-api-key` | `""` | API key for **customer BYO** cloud sync (pull golden). There is **no** hosted DPK service. |
+| `dprov-api-url` | `""` | Customer BYO cloud base URL. **Required** when `dprov-api-key` is set (fail closed if empty — no default host). |
+| `dashboard-url` | `""` | Optional URL linked from the PR comment (customer-supplied). |
 
 ## Outputs
 
@@ -127,11 +132,20 @@ an artifact, plus a PR job that restores it and gates — see
 the `db-path` routing rule there: the anomaly step reads **only** `db-path`, so the candidate
 run must live in `db-path` (with the restored baseline in `golden-db`).
 
+## Cloud sync (customer BYO only)
+
+There is **no** DProvenanceKit-hosted API. Optional `dprov-api-key` / `dprov-api-url` exist
+only so a customer can pull a golden from **their own** sync endpoint.
+
+- Default path: leave both empty — local gate only.
+- If `dprov-api-key` is set, you **must** also set `dprov-api-url`. An empty URL **fails
+  closed** (exit 1); the Action will not invent `https://api.dprovenance.dev` or any other host.
+- Cloud sync still requires `golden-run-id` (context-only selection is local).
+
 ## Notes
 
 - **Fork PRs:** `GITHUB_TOKEN` is read-only on pull requests from forks, so the comment step
   is skipped with a notice rather than failing the job. The gate verdict (and job
   pass/fail) is unaffected.
-- The action reads databases in the standard type-erased format the library's stores and the
-  hosted backend produce.
+- The action reads databases in the standard type-erased format the library's stores produce.
 

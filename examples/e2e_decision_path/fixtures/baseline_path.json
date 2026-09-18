@@ -1,22 +1,22 @@
 {
   "context_id": "decision-path.baseline",
-  "description": "Clean instrumented decision path: retrieve → verify (CRITICAL) → decide (CRITICAL).",
+  "description": "Clean instrumented decision path: retrieve → verify_account_status (CRITICAL) → decide (CRITICAL).",
   "steps": [
     {
       "engine": "Retriever",
-      "type": "sourcesRetrieved",
+      "type": "retrieve_account_context",
       "priority": "structural",
-      "detail": "3 policy sources"
+      "detail": "account + KYC snapshot"
     },
     {
       "engine": "Verifier",
-      "type": "claimVerified",
+      "type": "verify_account_status",
       "priority": "critical",
-      "detail": "2 of 3 sources agree"
+      "detail": "status=active, sanctions=clear"
     },
     {
       "engine": "Decider",
-      "type": "decisionMade",
+      "type": "decide_account_action",
       "priority": "critical",
       "detail": "approved"
     }

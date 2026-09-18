@@ -1,16 +1,16 @@
 {
   "context_id": "decision-path.candidate-regressed",
-  "description": "Deliberate regression: CRITICAL claimVerified step removed (still decides).",
+  "description": "Deliberate regression: CRITICAL verify_account_status step removed (still decides).",
   "steps": [
     {
       "engine": "Retriever",
-      "type": "sourcesRetrieved",
+      "type": "retrieve_account_context",
       "priority": "structural",
-      "detail": "3 policy sources"
+      "detail": "account + KYC snapshot"
     },
     {
       "engine": "Decider",
-      "type": "decisionMade",
+      "type": "decide_account_action",
       "priority": "critical",
       "detail": "approved"
     }

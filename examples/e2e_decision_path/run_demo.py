@@ -191,7 +191,7 @@ def run_demo(
         # ── 3. Record regressed candidate ────────────────────────────────────
         _banner(emit, 3, "Record candidate with CRITICAL-path regression")
         emit(f"  fixture steps: {step_types('candidate_regressed')}")
-        emit("  regression: removed claimVerified (CRITICAL)")
+        emit("  regression: removed verify_account_status (CRITICAL)")
         store = SQLiteTraceStore(AnyTraceableEvent, traces_db, start_writer=False)
         try:
             candidate_id = record_path(store, "candidate_regressed")
@@ -241,6 +241,11 @@ def run_demo(
                 f"passed={passed} level={level}"
             )
             return 1
+        human = str(report.get("summary") or "").strip()
+        if human:
+            emit("")
+            emit(human)
+            emit("")
         emit(f"  {MARKER_GATE_FAIL}")
         emit(f"  {MARKER_GATE_LEVEL}")
         emit(f"  removed/changed critical path caught (exit={gate_code})")

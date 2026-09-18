@@ -7,12 +7,12 @@ public API may still change between minor versions.
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-09-18
+
 ### Added
 - `docs/PRODUCT_LAYERS.md` — OSS vs commercial matrix and license firewall.
 - `dpk init` scaffold + CRITICAL-step removal headline in gate summary.
 - e2e fixtures renamed to `verify_account_status` for the DX hook.
-
-
 
 ## [0.7.0] — 2026-09-18
 
@@ -225,7 +225,8 @@ Baseline for this changelog. See the Git history and
 [GitHub releases](https://github.com/Therealdk8890/DProvenanceKitPython/releases) for earlier
 changes.
 
-[Unreleased]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Therealdk8890/DProvenanceKitPython/releases/tag/v0.6.0

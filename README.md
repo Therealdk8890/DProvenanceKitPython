@@ -65,7 +65,7 @@ Eligibility and records workflows often cannot ship raw reasoning to a hosted Sa
 3. **Compare and gate.**
    - Diff a candidate run against a golden baseline
    - Fail CI when the path regresses beyond policy (`dprovenancekit gate`, pytest `golden_trace`, or the [GitHub Action](https://github.com/marketplace/actions/dprovenancekit-regression-gate))
-   - Action default pin: `dprovenancekit==0.7.0` (prefer also pinning the Action to a commit SHA — [dprovenancekit-action](https://github.com/Therealdk8890/dprovenancekit-action))
+   - Action default pin: `dprovenancekit==0.7.1` (prefer also pinning the Action to a commit SHA — [dprovenancekit-action](https://github.com/Therealdk8890/dprovenancekit-action))
 
 4. **Attest offline when you need a signature.**
    - Python: `pip install dprovenancekit[crypto]` then `dpk attest sign|verify` (software P-256, same `DPK-BINARY-V1` bytes as Swift)

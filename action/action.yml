@@ -59,7 +59,7 @@ inputs:
   install-spec:
     description: "pip requirement to install the gate from. Default is pinned to the released gate package; override only for deliberate upgrades or VCS installs."
     required: false
-    default: "dprovenancekit==0.7.0"
+    default: "dprovenancekit==0.7.1"
   python-version:
     description: "Python version to set up."
     required: false

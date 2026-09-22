@@ -17,9 +17,11 @@ from dprovenancekit.testing import RegressionGate
 @dataclass(frozen=True)
 class ExternalEvent(TraceableEvent):
     name: str
+
     @property
     def type_identifier(self) -> str:
         return self.name
+
     @property
     def priority(self) -> TracePriority:
         return TracePriority.STRUCTURAL
@@ -45,7 +47,6 @@ def run(names: list[str], engines: list[str] | None = None) -> TraceRun:
 
 
 CASES = [
-    # Novel workflows / deletion regressions
     ("support verification", ["open_ticket", "lookup_account", "verify_identity", "draft_reply"],
      ["open_ticket", "lookup_account", "draft_reply"], True),
     ("finance approval", ["load_invoice", "check_limit", "validate_vendor", "approve_payment"],
@@ -56,18 +57,18 @@ CASES = [
      ["authenticate", "issue_session", "record_audit"], True),
     ("coding review", ["parse_diff", "run_tests", "inspect_failures", "approve_merge"],
      ["parse_diff", "run_tests", "approve_merge"], True),
-    # Replacement / insertion / duplicate / path change
-    ("ops replacement", ["fetch_metrics", "check_threshold", "page_oncall"],
+    ("ops insertion", ["fetch_metrics", "check_threshold", "page_oncall"],
      ["fetch_metrics", "check_threshold", "auto_remediate", "page_oncall"], True),
-    ("legal review replacement", ["extract_clause", "verify_clause", "summarize_risk"],
+    ("legal replacement", ["extract_clause", "verify_clause", "summarize_risk"],
      ["extract_clause", "infer_clause", "summarize_risk"], True),
     ("duplicate tool loop", ["retrieve_record", "validate_record", "write_record"],
      ["retrieve_record", "validate_record", "validate_record", "write_record"], True),
-    ("workflow path swap", ["collect", "normalize", "validate", "publish"],
+    ("workflow reorder", ["collect", "normalize", "validate", "publish"],
      ["collect", "normalize", "publish", "validate"], True),
-    ("engine drift", ["retrieve", "verify", "decide"],
-     ["retrieve", "verify", "decide"], True),
-    # Clean controls
+    ("engine/name drift", ["retrieve", "verify", "decide"],
+     ["retrieve", "verify", "decide_v2"], True),
+    ("novel deletion", ["triage_claim", "cross_check", "request_evidence", "close_claim"],
+     ["triage_claim", "cross_check", "close_claim"], True),
     ("identical support", ["open_ticket", "lookup_account", "verify_identity", "draft_reply"],
      ["open_ticket", "lookup_account", "verify_identity", "draft_reply"], False),
     ("identical finance", ["load_invoice", "check_limit", "validate_vendor", "approve_payment"],
@@ -78,11 +79,8 @@ CASES = [
      ["authenticate", "authorize", "issue_session", "record_audit"], False),
     ("identical coding", ["parse_diff", "run_tests", "inspect_failures", "approve_merge"],
      ["parse_diff", "run_tests", "inspect_failures", "approve_merge"], False),
-    # New vocabulary never used by the bundled corpus
     ("novel vocabulary", ["ingest_satellite", "calibrate_sensor", "validate_orbit", "publish_ephemeris"],
      ["ingest_satellite", "calibrate_sensor", "validate_orbit", "publish_ephemeris"], False),
-    ("novel vocabulary deletion", ["triage_claim", "cross_check", "request_evidence", "close_claim"],
-     ["triage_claim", "cross_check", "close_claim"], True),
 ]
 
 
@@ -95,7 +93,7 @@ def test_independent_cases_outside_bundled_corpus():
         results.append((label, expected_regression, observed_regression, report.reasoning))
         assert observed_regression == expected_regression, (
             f"{label}: expected regression={expected_regression}, "
-            f"got regression={observed_regression}\\n{report.summary()}"
+            f"got regression={observed_regression}\n{report.summary()}"
         )
 
     tp = sum(e and o for _, e, o, _ in results)

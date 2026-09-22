@@ -17,6 +17,8 @@ on a global bus. Two layers are tested:
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from dprovenancekit import InMemoryTraceStore, TracePriority
@@ -250,13 +252,44 @@ def test_real_crew_kickoff_records_a_run(monkeypatch, tmp_path):
 
     from types import SimpleNamespace
 
-    def _fake_create(self, *args, **kwargs):
+    import httpx
+
+    _MOCK_CONTENT = "Hello from the mocked model."
+    _BODY = json.dumps(
+        {
+            "id": "chatcmpl-mock",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "gpt-4o",
+            "choices": [
+                {
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": _MOCK_CONTENT,
+                        "tool_calls": None,
+                        "function_call": None,
+                        "refusal": None,
+                    },
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 11,
+                "completion_tokens": 7,
+                "total_tokens": 18,
+            },
+        }
+    )
+
+    def _parsed():
         msg = SimpleNamespace(
-            content="Hello from the mocked model.",
+            content=_MOCK_CONTENT,
             role="assistant",
             tool_calls=None,
             function_call=None,
             refusal=None,
+            parsed=None,
         )
         choice = SimpleNamespace(message=msg, finish_reason="stop", index=0)
         usage = SimpleNamespace(
@@ -276,17 +309,44 @@ def test_real_crew_kickoff_records_a_run(monkeypatch, tmp_path):
             model="gpt-4o",
             object="chat.completion",
             created=0,
-            model_dump=lambda: {"id": "chatcmpl-mock"},
-            text=lambda: "{}",
-            json=lambda: {"id": "chatcmpl-mock"},
-            http_response=SimpleNamespace(status_code=200, headers={}),
-            parse=lambda: SimpleNamespace(choices=[choice], usage=usage, id="chatcmpl-mock", model="gpt-4o"),
         )
+
+    def _fake_create(self, *args, **kwargs):
+        # CrewAI 1.x calls chat.completions.with_raw_response.create and then
+        # json.loads(raw.text). `.text` must be a str, not a lambda.
+        request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+        http_response = httpx.Response(200, text=_BODY, request=request)
+        parsed = _parsed()
+        return SimpleNamespace(
+            choices=parsed.choices,
+            usage=parsed.usage,
+            id=parsed.id,
+            model=parsed.model,
+            object=parsed.object,
+            created=parsed.created,
+            text=_BODY,
+            json=_BODY,
+            http_response=http_response,
+            parse=lambda: parsed,
+        )
+
+    def _fake_llm_call(self, *args, **kwargs):
+        return _MOCK_CONTENT
 
     monkeypatch.setattr(
         "openai.resources.chat.completions.Completions.create",
         _fake_create,
-        raising=True,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "openai.resources.chat.completions.CompletionsWithRawResponse.create",
+        _fake_create,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "crewai.llms.providers.openai.completion.OpenAICompletion.call",
+        _fake_llm_call,
+        raising=False,
     )
 
     from crewai import Agent, Crew, Task, LLM

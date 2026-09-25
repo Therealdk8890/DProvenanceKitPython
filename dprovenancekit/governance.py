@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Optional
 from uuid import UUID
+import math
 
 from .instrument import record_event
 from .priority import TracePriority
@@ -33,6 +34,8 @@ def record_governance_event(
             raise ValueError(f"{key} must be a non-empty string")
     if "timestamp" in event and (isinstance(event["timestamp"], bool) or not isinstance(event["timestamp"], (int, float))):
         raise ValueError("timestamp must be numeric")
+    if "timestamp" in event and not math.isfinite(event["timestamp"]):
+        raise ValueError("timestamp must be finite")
     if missing:
         raise ValueError(f"governance event missing required fields: {', '.join(missing)}")
 

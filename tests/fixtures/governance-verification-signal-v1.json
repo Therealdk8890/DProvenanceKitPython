@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "disposition": "block",
+  "reportFingerprint": "report-123",
+  "policyFingerprint": "policy-123",
+  "blockingClaimIDs": ["claim-unsafe"],
+  "reviewClaimIDs": [],
+  "supportedClaimCount": 0,
+  "totalClaimCount": 1,
+  "traceID": "trace-1",
+  "runID": "run-1",
+  "actionID": "action-1"
+}

@@ -44,6 +44,23 @@ def test_record_governance_event_rejects_missing_controller_identity():
             raise AssertionError("expected ValueError")
 
 
+def test_record_governance_event_rejects_non_finite_timestamp():
+    import math
+    store = InMemoryTraceStore()
+    with traced_run(store, context_id="agent-1"):
+        for timestamp in (math.nan, math.inf, -math.inf):
+            try:
+                record_governance_event({
+                    "event_id": "evt-1",
+                    "event_type": "verification_evaluated",
+                    "timestamp": timestamp,
+                    "agent_id": "agent-1",
+                })
+            except ValueError as exc:
+                assert "finite" in str(exc)
+            else:
+                raise AssertionError("non-finite timestamp must be rejected")
+
 
 def test_shared_v1_fixture_preserves_wire_fields():
     import json

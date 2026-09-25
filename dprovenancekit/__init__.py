@@ -213,7 +213,7 @@ from .visualizer import render_trace_html
 
 # Framework-agnostic instrumentation (decorators / context manager)
 from .instrument import TracedEvent, traced, traced_run, record_event
-from .governance import record_governance_event
+from .governance import record_governance_event, record_regression_fixture
 
 # High-level Facade API
 from .facade import trace
@@ -354,6 +354,8 @@ __all__ = [
     "traced",
     "traced_run",
     "record_event",
+    "record_governance_event",
+    "record_regression_fixture",
     # High-level facade
     "trace",
     # Attestation (DPK-BINARY-V1)

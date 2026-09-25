@@ -42,3 +42,26 @@ def test_record_governance_event_rejects_missing_controller_identity():
             assert "event_id" in str(exc)
         else:
             raise AssertionError("expected ValueError")
+
+
+
+def test_shared_v1_fixture_preserves_wire_fields():
+    import json
+    from pathlib import Path
+
+    fixture = Path(__file__).parent / "fixtures" / "governance-verification-signal-v1.json"
+    payload = json.loads(fixture.read_text(encoding="utf-8"))
+
+    assert payload == {
+        "version": 1,
+        "disposition": "block",
+        "reportFingerprint": "report-123",
+        "policyFingerprint": "policy-123",
+        "blockingClaimIDs": ["claim-unsafe"],
+        "reviewClaimIDs": [],
+        "supportedClaimCount": 0,
+        "totalClaimCount": 1,
+        "traceID": "trace-1",
+        "runID": "run-1",
+        "actionID": "action-1",
+    }

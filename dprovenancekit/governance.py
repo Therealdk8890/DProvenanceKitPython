@@ -28,6 +28,11 @@ def record_governance_event(
     """
     required = ("event_id", "event_type", "timestamp", "agent_id")
     missing = [key for key in required if key not in event]
+    for key in required:
+        if key in event and key != "timestamp" and (not isinstance(event[key], str) or not event[key]):
+            raise ValueError(f"{key} must be a non-empty string")
+    if "timestamp" in event and (isinstance(event["timestamp"], bool) or not isinstance(event["timestamp"], (int, float))):
+        raise ValueError("timestamp must be numeric")
     if missing:
         raise ValueError(f"governance event missing required fields: {', '.join(missing)}")
 

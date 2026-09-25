@@ -62,6 +62,54 @@ def test_record_governance_event_rejects_non_finite_timestamp():
                 raise AssertionError("non-finite timestamp must be rejected")
 
 
+def test_record_regression_fixture_verifies_controller_fingerprint():
+    import hashlib
+    import json
+
+    fixture = {
+        "version": 1,
+        "incident_id": "agent-1:containment:7",
+        "agent_id": "agent-1",
+        "agent_version": "2026.09.24",
+        "task_context": {"task": "document review"},
+        "action_sequence": ["read_source", "external_send"],
+        "policy_decision": "contain",
+        "evidence_refs": ["trace:123"],
+        "containment_result": "contained",
+        "expected_future_behavior": "deny external_send and contain the runtime",
+    }
+    canonical = json.dumps(fixture, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    envelope = {
+        "schema": "agent-containment/regression-fixture/v1",
+        "fixture": fixture,
+        "fingerprint": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+    }
+    store = InMemoryTraceStore()
+    with traced_run(store, context_id="agent-1") as run:
+        event_id = record_regression_fixture(envelope)
+    assert event_id is not None
+    recorded = store.get_run(run.run_id)
+    payload = recorded.events[0].payload
+    assert payload.type_identifier == "agent_containment.regression_fixture_created"
+    assert payload.attributes["fingerprint"] == envelope["fingerprint"]
+
+
+def test_regression_fixture_fingerprint_mismatch_is_rejected():
+    store = InMemoryTraceStore()
+    envelope = {
+        "schema": "agent-containment/regression-fixture/v1",
+        "fixture": {"version": 1, "incident_id": "i"},
+        "fingerprint": "bad",
+    }
+    with traced_run(store, context_id="agent-1"):
+        try:
+            record_regression_fixture(envelope)
+        except ValueError as exc:
+            assert "fingerprint mismatch" in str(exc)
+        else:
+            raise AssertionError("invalid regression fixture must be rejected")
+
+
 def test_shared_v1_fixture_preserves_wire_fields():
     import json
     from pathlib import Path

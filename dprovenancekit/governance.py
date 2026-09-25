@@ -10,6 +10,9 @@ from __future__ import annotations
 from typing import Any, Mapping, Optional
 from uuid import UUID
 import math
+import hashlib
+import hmac
+import json
 
 from .instrument import record_event
 from .priority import TracePriority
@@ -57,4 +60,32 @@ def record_governance_event(
     )
 
 
-__all__ = ["record_governance_event"]
+def record_regression_fixture(
+    fixture: Mapping[str, Any],
+    *,
+    priority: TracePriority = TracePriority.STRUCTURAL,
+) -> Optional[UUID]:
+    """Record an AgentContainment regression-fixture envelope.
+
+    The fixture remains controller-owned. DProvenanceKit records the artifact
+    identity and contents as provenance; it does not decide whether the
+    regression should be accepted.
+    """
+    if fixture.get("schema") != "agent-containment/regression-fixture/v1":
+        raise ValueError("unsupported regression fixture schema")
+    payload = fixture.get("fixture")
+    fingerprint = fixture.get("fingerprint")
+    if not isinstance(payload, Mapping) or not isinstance(fingerprint, str) or not fingerprint:
+        raise ValueError("regression fixture requires fixture and fingerprint")
+    canonical = json.dumps(dict(payload), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    expected = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    if not hmac.compare_digest(expected, fingerprint):
+        raise ValueError("regression fixture fingerprint mismatch")
+    return record_event(
+        "agent_containment.regression_fixture_created",
+        {"schema": fixture["schema"], "fingerprint": fingerprint, "fixture": canonical},
+        priority=priority,
+    )
+
+
+__all__ = ["record_governance_event", "record_regression_fixture"]

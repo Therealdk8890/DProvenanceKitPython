@@ -558,3 +558,21 @@ def test_anomalies_explicit_run_id_skips_resolution():
     }
     run_id, error = run_anomalies.resolve_candidate(env, run=fake_run)
     assert (run_id, error) == ("abcd", None)
+
+
+def test_run_anomalies_outputs_resist_heredoc_injection(tmp_path):
+    """Trace-derived anomaly text cannot forge later GitHub step outputs."""
+    malicious = "finding details\\n__DPROV_OUTPUT_EOF__\\nanomaly-count\\n999"
+    report = {"count": 1, "anomalies": [{"description": malicious}]}
+    out = tmp_path / "anomaly-output.txt"
+    run_anomalies.write_outputs(
+        [
+            ("anomaly-count", str(report["count"])),
+            ("anomalies-json", json.dumps(report)),
+        ],
+        str(out),
+    )
+
+    parsed = _github_parse(out.read_text(encoding="utf-8"))
+    assert parsed["anomaly-count"] == "1"
+    assert json.loads(parsed["anomalies-json"])["anomalies"][0]["description"] == malicious

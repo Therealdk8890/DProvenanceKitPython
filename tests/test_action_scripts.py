@@ -465,21 +465,17 @@ def test_run_anomalies_publishes_outputs(tmp_path, capsys):
 
 
 def test_run_anomalies_outputs_resist_heredoc_injection(tmp_path):
-    """Trace-derived anomaly text must not forge later GitHub Actions outputs."""
-    malicious_json = (
-        '{"description":"untrusted text\\n__DPROV_OUTPUT_EOF__\\n'
-        'anomaly-count=999"}'
-    )
+    """Multiline output values must not forge later GitHub Actions outputs."""
+    malicious_value = "untrusted text\n__DPROV_OUTPUT_EOF__\nanomaly-count=999"
     out = tmp_path / "out.txt"
     run_anomalies.write_outputs(
-        [("anomaly-count", "1"), ("anomalies-json", malicious_json)],
+        [("anomaly-count", "1"), ("anomalies-json", malicious_value)],
         str(out),
     )
 
     parsed = _github_parse(out.read_text(encoding="utf-8"))
     assert parsed["anomaly-count"] == "1"
     assert "anomaly-count=999" in parsed["anomalies-json"]
-
 
 # ── context-based run selection (golden-context / candidate-context inputs) ──────
 

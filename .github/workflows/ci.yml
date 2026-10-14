@@ -10,6 +10,9 @@ on:
   schedule:
   - cron: '0 6 * * 1'   # Mondays 06:00 UTC
   workflow_dispatch: {}
+permissions:
+  contents: read
+
 jobs:
   # Ruff + mypy gate. Both already pass clean on the codebase, so this locks in that state
   # and blocks regressions. mypy uses ignore_missing_imports (see [tool.mypy] in
@@ -20,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -57,6 +62,8 @@ jobs:
           python-version: '3.12'
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
@@ -98,6 +105,8 @@ jobs:
           tests: tests/integrations/test_crewai.py
     steps:
     - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
     - name: Set up Python 3.12
       uses: actions/setup-python@v5
       with:

@@ -19,15 +19,6 @@ import secrets
 import subprocess
 import sys
 
-def _fresh_delimiter(value: str) -> str:
-    """Return a random GitHub Actions heredoc delimiter absent from value."""
-    lines = value.splitlines()
-    while True:
-        delimiter = f"ghadelimiter_{secrets.token_hex(16)}"
-        if delimiter not in lines:
-            return delimiter
-
-
 def resolve_candidate(env, run=subprocess.run):
     """The candidate run id: explicit, or the newest run for DPROV_CANDIDATE_CONTEXT.
 
@@ -69,14 +60,24 @@ def build_argv(env, candidate=None):
     return argv
 
 
+def _fresh_delimiter(value: str) -> str:
+    """Return a random GitHub output delimiter absent from the value's lines."""
+    lines = str(value).splitlines()
+    while True:
+        delim = f"ghadelimiter_{secrets.token_hex(16)}"
+        if delim not in lines:
+            return delim
+
+
 def write_outputs(pairs, path):
+    """Write multiline outputs using a per-value delimiter that cannot be forged."""
     if not path:
         return
     with open(path, "a", encoding="utf-8") as fh:
         for key, value in pairs:
             value = str(value)
-            delimiter = _fresh_delimiter(value)
-            fh.write(f"{key}<<{delimiter}\n{value}\n{delimiter}\n")
+            delim = _fresh_delimiter(value)
+            fh.write(f"{key}<<{delim}\n{value}\n{delim}\n")
 
 
 def _one_line(value):

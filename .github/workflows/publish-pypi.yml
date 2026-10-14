@@ -7,6 +7,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+
 jobs:
   # Gate the release on a green test suite. A GitHub Release can be cut from any commit,
   # including one that never passed CI; without this gate a broken build would ship to PyPI.
@@ -16,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -36,6 +41,8 @@ jobs:
       contents: read       # explicit: a permissions block resets unlisted scopes to none
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

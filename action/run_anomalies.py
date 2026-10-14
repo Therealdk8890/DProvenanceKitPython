@@ -15,10 +15,17 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import subprocess
 import sys
 
-_DELIM = "__DPROV_OUTPUT_EOF__"
+def _fresh_delimiter(value: str) -> str:
+    """Return a random GitHub Actions heredoc delimiter absent from value."""
+    lines = value.splitlines()
+    while True:
+        delimiter = f"ghadelimiter_{secrets.token_hex(16)}"
+        if delimiter not in lines:
+            return delimiter
 
 
 def resolve_candidate(env, run=subprocess.run):
@@ -67,7 +74,9 @@ def write_outputs(pairs, path):
         return
     with open(path, "a", encoding="utf-8") as fh:
         for key, value in pairs:
-            fh.write(f"{key}<<{_DELIM}\n{value}\n{_DELIM}\n")
+            value = str(value)
+            delimiter = _fresh_delimiter(value)
+            fh.write(f"{key}<<{delimiter}\n{value}\n{delimiter}\n")
 
 
 def _one_line(value):

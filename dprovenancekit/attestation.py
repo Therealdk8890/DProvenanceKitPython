@@ -448,6 +448,16 @@ class TraceAttestationError(Exception):
     """Raised when a trace cannot be signed because it fails structural checks."""
 
 
+def _strict_base64_decode(value: str) -> bytes:
+    """Decode canonical RFC 4648 Base64, rejecting ignored characters and alternate forms."""
+    if not isinstance(value, str):
+        raise ValueError("Base64 value must be text")
+    decoded = base64.b64decode(value, validate=True)
+    if base64.b64encode(decoded).decode("ascii") != value:
+        raise ValueError("non-canonical Base64 encoding")
+    return decoded
+
+
 def _validate_payload_json(payload_json: str) -> bool:
     try:
         json.loads(payload_json)
@@ -688,7 +698,7 @@ class TraceAttestationVerifier:
             return fail(TraceAttestationVerificationFailure.DIGEST_MISMATCH)
 
         try:
-            public_key_data = base64.b64decode(attestation.public_key_base64)
+            public_key_data = _strict_base64_decode(attestation.public_key_base64)
             public_key = ec.EllipticCurvePublicKey.from_encoded_point(
                 ec.SECP256R1(), public_key_data
             )
@@ -705,7 +715,7 @@ class TraceAttestationVerifier:
             trust = TraceAttestationTrust.TRUSTED_KEY
 
         try:
-            signature_data = base64.b64decode(attestation.signature_base64)
+            signature_data = _strict_base64_decode(attestation.signature_base64)
         except Exception:
             return fail(TraceAttestationVerificationFailure.MALFORMED_SIGNATURE)
 

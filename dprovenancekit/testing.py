@@ -15,10 +15,10 @@ CRITICAL step is additionally a HIGH-severity regression. Loosen it with
 ``max_regression_level`` (gate only on severity) and ``allow_divergent_steps`` (tolerate
 benign per-step changes), or pass your own ``evaluator`` to define what "equivalent" means.
 
-Detecting *reordered* steps (the same steps in a different order) requires a span-aware
-profile such as :attr:`AlignmentProfile.developer_debug_v1`. Under the default linear
-profile a pure reorder binds 1:1 and reads as still-matching, so reordering alone does not
-fail the default gate — pass a span-aware profile if order is part of what you're guarding.
+The gate checks inversions among matched steps, so a pure reorder of critical steps is a
+regression under the default profile as well as span-aware profiles. A span-aware profile
+such as :attr:`AlignmentProfile.developer_debug_v1` adds span-aware alignment behavior; it is
+not required for the gate's basic matched-step reorder check.
 
 This complements :class:`~dprovenancekit.alignment_snapshot.AlignmentSnapshotValidator`
 (an exact output-hash snapshot of one alignment): the gate operates on two *runs*, reasons

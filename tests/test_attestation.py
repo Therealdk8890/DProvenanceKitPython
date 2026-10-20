@@ -189,6 +189,26 @@ def test_fail_closed_self_loop():
         attest(bad, key)
 
 
+def test_rejects_non_base64_character_in_public_key(golden_doc: TraceAttestationDocument):
+    wire = copy.deepcopy(golden_doc.to_wire())
+    encoded = wire["attestation"]["publicKeyBase64"]
+    wire["attestation"]["publicKeyBase64"] = encoded[:4] + "!" + encoded[4:]
+
+    result = TraceAttestationDocument.from_wire(wire).verify()
+    assert not result.is_valid
+    assert result.failure == TraceAttestationVerificationFailure.MALFORMED_PUBLIC_KEY
+
+
+def test_rejects_non_base64_character_in_signature(golden_doc: TraceAttestationDocument):
+    wire = copy.deepcopy(golden_doc.to_wire())
+    encoded = wire["attestation"]["signatureBase64"]
+    wire["attestation"]["signatureBase64"] = encoded[:4] + "!" + encoded[4:]
+
+    result = TraceAttestationDocument.from_wire(wire).verify()
+    assert not result.is_valid
+    assert result.failure == TraceAttestationVerificationFailure.MALFORMED_SIGNATURE
+
+
 def test_fail_closed_bad_signature(golden_doc: TraceAttestationDocument):
     wire = copy.deepcopy(golden_doc.to_wire())
     # Flip a byte in the DER signature

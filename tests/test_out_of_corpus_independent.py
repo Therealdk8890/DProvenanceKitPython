@@ -100,7 +100,7 @@ def test_synthetic_structural_regression_smoke_cases():
         results.append((label, expected_regression, observed_regression))
         assert observed_regression == expected_regression, (
             f"{label}: expected regression={expected_regression}, "
-            f"got regression={observed_regression}\\n{report.summary()}"
+            f"got regression={observed_regression}\n{report.summary()}"
         )
 
     tp = sum(expected and observed for _, expected, observed in results)

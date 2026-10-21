@@ -119,7 +119,6 @@ def test_synthetic_structural_regression_smoke_cases():
     assert (tp, fp, fn, tn) == (11, 0, 0, 7)
 
 
-
 def test_ignored_telemetry_can_change_fingerprint_without_failing_gate():
     """The gate compares structural events; the fingerprint identifies the full trace."""
     gate = RegressionGate()
@@ -134,7 +133,6 @@ def test_ignored_telemetry_can_change_fingerprint_without_failing_gate():
     assert not report.fingerprint_match
 
 
-
 def test_custom_evaluator_accepts_a_defined_benign_payload_change():
     """A caller-defined equivalence rule can accept detail changes without hiding step drift."""
     gate = RegressionGate(
@@ -145,9 +143,8 @@ def test_custom_evaluator_accepts_a_defined_benign_payload_change():
             ),
         )
     )
-    rid = uuid.uuid4()
-
     def one_event(detail: str) -> TraceRun:
+        rid = uuid.uuid4()
         event = TraceEvent(
             run_id=rid,
             context_id="synthetic-smoke",

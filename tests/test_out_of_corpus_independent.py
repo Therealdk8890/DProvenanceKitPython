@@ -2,8 +2,9 @@
 
 The examples use hand-authored traces with vocabulary outside the bundled examples.
 They check basic structural divergences across several workflow-shaped sequences.
-Most negative controls are unchanged golden/candidate pairs; the case labels encode
-expected outcomes. This is a deterministic smoke test, not an independent benchmark,
+Most negative controls are unchanged golden/candidate pairs, plus one low-priority
+telemetry insertion control; the case labels encode expected outcomes. This is a
+deterministic smoke test, not an independent benchmark,
 a real-agent evaluation, or evidence of generalization/production accuracy.
 """
 
@@ -26,6 +27,8 @@ class ExternalEvent(TraceableEvent):
 
     @property
     def priority(self) -> TracePriority:
+        if self.name.startswith("telemetry:"):
+            return TracePriority.TELEMETRY
         return TracePriority.STRUCTURAL
 
 
@@ -83,6 +86,8 @@ CASES = [
      ["parse_diff", "run_tests", "inspect_failures", "approve_merge"], False),
     ("unchanged unfamiliar-vocabulary control", ["ingest_satellite", "calibrate_sensor", "validate_orbit", "publish_ephemeris"],
      ["ingest_satellite", "calibrate_sensor", "validate_orbit", "publish_ephemeris"], False),
+    ("low-priority telemetry insertion", ["fetch_metrics", "check_threshold", "page_oncall"],
+     ["fetch_metrics", "telemetry:debug", "check_threshold", "page_oncall"], False),
 ]
 
 
@@ -104,4 +109,4 @@ def test_synthetic_structural_regression_smoke_cases():
     tn = sum((not expected) and (not observed) for _, expected, observed in results)
 
     # These are counts for this fixed synthetic fixture only, not accuracy estimates.
-    assert (tp, fp, fn, tn) == (11, 0, 0, 6)
+    assert (tp, fp, fn, tn) == (11, 0, 0, 7)

@@ -13,13 +13,20 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from dprovenancekit import TraceEvent, TracePriority, TraceRun, TraceableEvent
+from dprovenancekit import (
+    AnyEquivalenceEvaluator,
+    TraceEvent,
+    TracePriority,
+    TraceRun,
+    TraceableEvent,
+)
 from dprovenancekit.testing import RegressionGate
 
 
 @dataclass(frozen=True)
 class ExternalEvent(TraceableEvent):
     name: str
+    detail: str | None = None
 
     @property
     def type_identifier(self) -> str:
@@ -125,3 +132,36 @@ def test_ignored_telemetry_can_change_fingerprint_without_failing_gate():
 
     assert report.passed
     assert not report.fingerprint_match
+
+
+
+def test_custom_evaluator_accepts_a_defined_benign_payload_change():
+    """A caller-defined equivalence rule can accept detail changes without hiding step drift."""
+    gate = RegressionGate(
+        evaluator=AnyEquivalenceEvaluator(
+            evaluator_identifier="same_step_name_test_v1",
+            evaluator=lambda old, new: (
+                1.0 if old.type_identifier == new.type_identifier else 0.0
+            ),
+        )
+    )
+    rid = uuid.uuid4()
+
+    def one_event(detail: str) -> TraceRun:
+        event = TraceEvent(
+            run_id=rid,
+            context_id="synthetic-smoke",
+            engine_name="external-agent",
+            schema_version=1,
+            sequence=0,
+            span_id=None,
+            parent_span_id=None,
+            payload=ExternalEvent("verify_identity", detail=detail),
+        )
+        return TraceRun(run_id=rid, context_id="synthetic-smoke", events=[event])
+
+    report = gate.check(one_event("source=cache"), one_event("source=network"))
+
+    assert report.passed
+    assert report.fingerprint_match
+    assert "semanticMatch" in report.steps_by_change

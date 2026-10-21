@@ -143,6 +143,7 @@ def test_custom_evaluator_accepts_a_defined_benign_payload_change():
             ),
         )
     )
+
     def one_event(detail: str) -> TraceRun:
         rid = uuid.uuid4()
         event = TraceEvent(

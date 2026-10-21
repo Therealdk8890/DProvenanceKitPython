@@ -110,3 +110,18 @@ def test_synthetic_structural_regression_smoke_cases():
 
     # These are counts for this fixed synthetic fixture only, not accuracy estimates.
     assert (tp, fp, fn, tn) == (11, 0, 0, 7)
+
+
+
+def test_ignored_telemetry_can_change_fingerprint_without_failing_gate():
+    """The gate compares structural events; the fingerprint identifies the full trace."""
+    gate = RegressionGate()
+    golden = run(["fetch_metrics", "check_threshold", "page_oncall"])
+    candidate = run(
+        ["fetch_metrics", "telemetry:debug", "check_threshold", "page_oncall"]
+    )
+
+    report = gate.check(golden, candidate)
+
+    assert report.passed
+    assert not report.fingerprint_match

@@ -1229,7 +1229,8 @@ def _run_init(argv) -> int:
         "\n"
         "\n"
         'if __name__ == "__main__":\n'
-        "    raise SystemExit(main())\n"
+        "    raise SystemExit(main())\n",
+        encoding="utf-8",
     )
 
     readme.write_text(
@@ -1250,7 +1251,8 @@ def _run_init(argv) -> int:
         "REGRESSION / CRITICAL step removed: verify_account_status\n"
         "```\n"
         "\n"
-        "Product layers (OSS vs commercial): see `docs/PRODUCT_LAYERS.md` in the SDK repos.\n"
+        "Product layers (OSS vs commercial): see `docs/PRODUCT_LAYERS.md` in the SDK repos.\n",
+        encoding="utf-8",
     )
 
     print(f"Initialized DProvenanceKit project at {root}")

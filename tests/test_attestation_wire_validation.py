@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip("cryptography")
 
-from dprovenancekit.attestation import (
+from dprovenancekit.attestation import (  # noqa: E402
     TraceAttestationDocument,
     TraceAttestationVerificationFailure,
 )

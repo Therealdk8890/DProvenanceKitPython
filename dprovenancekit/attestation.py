@@ -183,14 +183,14 @@ class AttestableTraceEvent:
             run_id=_as_uuid(raw["runID"]),
             context_id=raw["contextID"],
             engine_name=raw["engineName"],
-            schema_version=int(raw["schemaVersion"]),
-            sequence=int(raw["sequence"]),
+            schema_version=_strict_wire_int(raw["schemaVersion"], "schemaVersion"),
+            sequence=_strict_wire_int(raw["sequence"], "sequence", minimum=0, maximum=0xFFFFFFFFFFFFFFFF),
             span_id=raw.get("spanID"),
             parent_span_id=raw.get("parentSpanID"),
             type_identifier=raw["typeIdentifier"],
-            priority=int(raw["priority"]),
+            priority=_strict_wire_int(raw["priority"], "priority"),
             payload_json=raw["payloadJSON"],
-            timestamp_unix_microseconds=int(raw["timestampUnixMicroseconds"]),
+            timestamp_unix_microseconds=_strict_wire_int(raw["timestampUnixMicroseconds"], "timestampUnixMicroseconds"),
         )
 
 
@@ -218,7 +218,12 @@ class AttestableTrace:
 
     @classmethod
     def from_wire(cls, raw: Dict[str, Any]) -> "AttestableTrace":
-        edges_raw = raw.get("edges") or []
+        edges_raw = raw["edges"]
+        if not isinstance(edges_raw, list):
+            raise ValueError("edges must be a JSON array")
+        events_raw = raw["events"]
+        if not isinstance(events_raw, list):
+            raise ValueError("events must be a JSON array")
         edges: List[TraceEdge] = []
         for item in edges_raw:
             edges.append(
@@ -231,7 +236,7 @@ class AttestableTrace:
         return cls(
             run_id=_as_uuid(raw["runID"]),
             context_id=raw["contextID"],
-            events=tuple(AttestableTraceEvent.from_wire(e) for e in raw["events"]),
+            events=tuple(AttestableTraceEvent.from_wire(e) for e in events_raw),
             edges=tuple(edges),
         )
 
@@ -270,15 +275,15 @@ class TraceAttestation:
     @classmethod
     def from_wire(cls, raw: Dict[str, Any]) -> "TraceAttestation":
         return cls(
-            version=int(raw["version"]),
+            version=_strict_wire_int(raw["version"], "version"),
             algorithm=raw["algorithm"],
             canonicalization=raw["canonicalization"],
             run_id=_as_uuid(raw["runID"]),
             context_id=raw["contextID"],
-            event_count=int(raw["eventCount"]),
-            edge_count=int(raw["edgeCount"]),
+            event_count=_strict_wire_int(raw["eventCount"], "eventCount", minimum=0),
+            edge_count=_strict_wire_int(raw["edgeCount"], "edgeCount", minimum=0),
             trace_digest=raw["traceDigest"],
-            issued_at_unix_microseconds=int(raw["issuedAtUnixMicroseconds"]),
+            issued_at_unix_microseconds=_strict_wire_int(raw["issuedAtUnixMicroseconds"], "issuedAtUnixMicroseconds"),
             key_id=raw["keyID"],
             public_key_base64=raw["publicKeyBase64"],
             signature_base64=raw["signatureBase64"],
@@ -315,9 +320,11 @@ class TraceAttestationDocument:
     @classmethod
     def decode_json(cls, data: Union[bytes, str]) -> "TraceAttestationDocument":
         if isinstance(data, bytes):
-            raw = json.loads(data.decode("utf-8"))
+            raw = json.loads(data.decode("utf-8"), parse_constant=_reject_non_json_constant)
         else:
-            raw = json.loads(data)
+            raw = json.loads(data, parse_constant=_reject_non_json_constant)
+        if not isinstance(raw, dict):
+            raise ValueError("attestation document must be a JSON object")
         return cls.from_wire(raw)
 
     def verify(
@@ -458,9 +465,26 @@ def _strict_base64_decode(value: str) -> bytes:
     return decoded
 
 
+def _strict_wire_int(
+    value: Any,
+    field: str,
+    *,
+    minimum: int = -(1 << 63),
+    maximum: int = (1 << 63) - 1,
+) -> int:
+    """Require a JSON integer, excluding booleans and numeric strings."""
+    if type(value) is not int or value < minimum or value > maximum:
+        raise ValueError(f"{field} must be an integer in [{minimum}, {maximum}]")
+    return value
+
+
+def _reject_non_json_constant(value: str) -> None:
+    raise ValueError(f"non-standard JSON numeric constant: {value}")
+
+
 def _validate_payload_json(payload_json: str) -> bool:
     try:
-        json.loads(payload_json)
+        json.loads(payload_json, parse_constant=_reject_non_json_constant)
         return True
     except (TypeError, ValueError, json.JSONDecodeError):
         return False

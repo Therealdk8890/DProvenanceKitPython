@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("cryptography")
+
 from dprovenancekit.attestation import (
     TraceAttestationDocument,
     TraceAttestationVerificationFailure,

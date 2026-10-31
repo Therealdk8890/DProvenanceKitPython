@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import shlex
+import sys
 from dataclasses import dataclass
 
 from .anomaly import AnomalyDetector
@@ -104,7 +105,7 @@ def _record_erased(store, context_id, steps):
 
 def _banner(log, number, title):
     log("")
-    log("── {}. {} ".format(number, title) + "─" * max(2, 60 - len(title)))
+    log("-- {}. {} ".format(number, title) + "-" * max(2, 60 - len(title)))
 
 
 def _display_path(path):
@@ -119,8 +120,8 @@ def run_demo(output_dir, log=print):
 
     _banner(log, 1, "Record two runs of the agent")
     store = InMemoryTraceStore()
-    golden = _record(store, "research-agent · main", GOLDEN_STEPS)
-    candidate = _record(store, "research-agent · PR-42", CANDIDATE_STEPS)
+    golden = _record(store, "research-agent-main", GOLDEN_STEPS)
+    candidate = _record(store, "research-agent-PR-42", CANDIDATE_STEPS)
     log(
         "   golden:    {} steps  {}".format(
             len(golden.events), [e.payload.type_identifier for e in golden.events]
@@ -176,7 +177,7 @@ def run_demo(output_dir, log=print):
     report_path = os.path.join(output_dir, "demo-report.html")
     with open(report_path, "w", encoding="utf-8") as handle:
         handle.write(html)
-    log("   wrote {}  (open it, or Print → Save as PDF)".format(_display_path(report_path)))
+    log("   wrote {}  (open it, or Print -> Save as PDF)".format(_display_path(report_path)))
 
     rules_path = os.path.join(output_dir, "demo-rules.json")
     with open(rules_path, "w", encoding="utf-8") as handle:
@@ -191,8 +192,8 @@ def run_demo(output_dir, log=print):
         except OSError:
             pass
     sql = SQLiteTraceStore(AnyTraceableEvent, db_path, start_writer=False)
-    golden_id = _record_erased(sql, "research-agent · main", GOLDEN_STEPS)
-    candidate_id = _record_erased(sql, "research-agent · PR-42", CANDIDATE_STEPS)
+    golden_id = _record_erased(sql, "research-agent-main", GOLDEN_STEPS)
+    candidate_id = _record_erased(sql, "research-agent-PR-42", CANDIDATE_STEPS)
     sql.close()
 
     db_arg = _display_path(db_path)
@@ -222,7 +223,7 @@ def run_demo(output_dir, log=print):
     assert {a.rule_name for a in anomalies} == {"tool_drop:verify", "looping:search"}
     assert not diff.is_identical
     log("")
-    log("OK — every layer agreed: the candidate regressed (dropped verify, looped search).")
+    log("OK - every layer agreed: the candidate regressed (dropped verify, looped search).")
 
     return {
         "gate_passed": report.passed,
@@ -248,9 +249,18 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     output_dir = args.output_dir or os.environ.get("DPROV_DEMO_OUT") or os.getcwd()
 
-    print("DProvenanceKit — end-to-end demo")
-    print("=" * 64)
-    run_demo(output_dir)
+    def cli_print(message):
+        """Keep CLI output readable in Windows consoles with legacy encodings."""
+        encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+        try:
+            message = str(message).encode(encoding, errors="replace").decode(encoding)
+        except LookupError:
+            message = str(message)
+        print(message)
+
+    cli_print("DProvenanceKit - end-to-end demo")
+    cli_print("=" * 64)
+    run_demo(output_dir, log=cli_print)
     return 0
 
 

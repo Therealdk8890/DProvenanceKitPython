@@ -5,15 +5,32 @@
 [![License](https://img.shields.io/pypi/l/dprovenancekit)](LICENSE)
 [![Listed in the official OpenAI Agents SDK docs](https://img.shields.io/badge/OpenAI%20Agents%20SDK-listed%20in%20the%20official%20docs-412991)](https://github.com/openai/openai-agents-python/blob/main/docs/tracing.md#external-tracing-processors-list)
 
+## Catch AI agent workflow regressions in CI
+
+DProvenanceKit records the steps your code instruments, compares a new run with a known-good baseline, and can fail CI when a critical step disappears or changes. It is an Apache-2.0, local-first SDK that complements your existing tracing stack.
+
 ## Start here
 
-**[dpk-gate-demo](https://github.com/Therealdk8890/dpk-gate-demo)** — same answer, dropped `verify`, path gate fails.
+Install the package and run the complete local demo. It uses sample traces (no model/API calls) and writes its report and database to `.dpk-demo/`:
 
-Green CI: [gate #2](https://github.com/Therealdk8890/dpk-gate-demo/actions/runs/35685130719)
+```bash
+python -m pip install dprovenancekit
+dpk demo --output-dir .dpk-demo
+```
 
-## Tamper-evident records of instrumented AI decision paths — offline-first storage, CI-gated
+The demo intentionally removes a verification step. DPK detects the regression; the demo itself exits successfully when that expected result is found.
 
-For teams in healthcare, finance, and legal building AI systems that need a local-first record of *which instrumented steps ran*, and a regression gate when that path drifts — without sending sensitive traces to a third-party SaaS by default.
+To create a small starter project you can edit:
+
+```bash
+dpk init my-agent-project
+cd my-agent-project
+python agent_stub.py
+```
+
+The starter agent also intentionally omits a critical verification step, so `python agent_stub.py` prints the regression and exits with status `1`. That is the expected gate result. The scaffold is a teaching example; connect the same recording and gate flow to your own agent before using it in CI.
+
+Want to see the gate run on a pull request? Try the [dpk-gate-demo](https://github.com/Therealdk8890/dpk-gate-demo) repository and its [green CI run](https://github.com/Therealdk8890/dpk-gate-demo/actions/runs/35685130719).
 
 > Working in Swift / on-device Apple AI? **[DProvenanceKit](https://github.com/Therealdk8890/DProvenanceKit)** — same recording / diff / gate model, plus CryptoKit attestation (`DPK-BINARY-V1` + ECDSA P-256 DER), proof packs, and a Foundation Models adapter. **Python can sign/verify the same `DPK-BINARY-V1` format** via `pip install dprovenancekit[crypto]` (software P-256; no Secure Enclave / proof packs).
 
@@ -32,7 +49,7 @@ Request-level observability (OpenTelemetry, LangSmith, Langfuse, Datadog) remain
 
 DProvenanceKit (Python) closes the recording / diff / gate gap locally. Software `DPK-BINARY-V1` attestation is available via the optional `[crypto]` extra; proof packs and Secure Enclave remain Swift-only.
 
-**Product layers:** free Apache-2.0 evidence engine vs commercial AI Assurance Platform — see [docs/PRODUCT_LAYERS.md](docs/PRODUCT_LAYERS.md). Five-minute DX hook: `dpk init` then `python agent_stub.py` (or `python -m examples.e2e_decision_path`).
+**Product layers:** free Apache-2.0 SDK vs commercial platform concepts — see [docs/PRODUCT_LAYERS.md](docs/PRODUCT_LAYERS.md). The quickstart above runs from the published package without cloning this repository or installing framework extras.
 
 This package does **not** prove that model reasoning was “sound,” that every claim in a payload is true, or that a regulator will accept a trace as sufficient evidence. For the signed-artifact threat model (Swift), read [ATTESTATION — What it does not establish](https://github.com/Therealdk8890/DProvenanceKit/blob/main/docs/ATTESTATION.md#what-it-does-not-establish) (also summarized on [dprovenance.dev](https://dprovenance.dev)).
 
@@ -223,14 +240,15 @@ with traced_run(context_id="applicant_12345"):
     record_event("decision_made", {"approved": True})
 ```
 
-See the catch immediately after installing:
+See the complete record → compare → gate flow immediately after installing:
 
 ```bash
-dprovenancekit demo
+dpk demo --output-dir .dpk-demo
 ```
 
-Full record → baseline → gate (HIGH fail) → attest → verify walkthrough:
-[`examples/e2e_decision_path/`](examples/e2e_decision_path/) (`pip install -e ".[crypto]"` then `python -m examples.e2e_decision_path`).
+For a starter project you can edit, run `dpk init my-agent-project`, then `cd my-agent-project` and `python agent_stub.py`. That sample deliberately produces a HIGH regression and exits 1 to demonstrate a failing gate.
+
+The repository also contains a deeper record → baseline → gate → attest → verify walkthrough in [`examples/e2e_decision_path/`](examples/e2e_decision_path/). It is intended for contributors working from a clone and requires `pip install -e ".[crypto]"`.
 
 3. **Establish a baseline**
    - Run your workflow multiple times

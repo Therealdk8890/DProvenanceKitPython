@@ -47,7 +47,6 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version:
-        - '3.9'
         - '3.10'
         - '3.11'
         - '3.12'
@@ -58,6 +57,10 @@ jobs:
         # different filesystem/locking semantics may surface real failures that would block
         # launch CI. TODO(follow-up): add a Windows leg once the writer is validated there.
         include:
+        # Python 3.9 is unavailable on the Ubuntu 26.04 image behind ubuntu-latest.
+        # Keep the supported 3.9 Linux floor on the compatible Ubuntu 22.04 image.
+        - os: ubuntu-22.04
+          python-version: '3.9'
         - os: macos-latest
           python-version: '3.12'
     steps:

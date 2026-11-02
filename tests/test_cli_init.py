@@ -51,10 +51,44 @@ def test_init_scaffold_uses_instrumentation_api_and_preserves_existing_database(
         recorded_runs = connection.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
         assert recorded_runs == 1
 
-    scaffold = (project / "agent_stub.py").read_text(encoding="utf-8")
+    scaffold_path = project / "agent_stub.py"
+    scaffold = scaffold_path.read_text(encoding="utf-8")
     assert (
         "from dprovenancekit import TracePriority, record_event, traced, traced_run"
         in scaffold
     )
     assert "SQLiteTraceStore" not in scaffold
     assert ".unlink()" not in scaffold
+
+    monkeypatch.chdir(project)
+    assert main(["record"]) == 0
+
+    second_run = subprocess.run(
+        [sys.executable, "agent_stub.py"],
+        cwd=project,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert second_run.returncode == 0, second_run.stderr
+    assert main(["gate"]) == 0
+
+    # Removing the CRITICAL verification call must make the same gate fail.
+    scaffold_path.write_text(
+        scaffold.replace(
+            "is_active = verify_account_status(account)",
+            "is_active = True  # deliberately bypass verification",
+        ),
+        encoding="utf-8",
+    )
+    regressed_run = subprocess.run(
+        [sys.executable, "agent_stub.py"],
+        cwd=project,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert regressed_run.returncode == 0, regressed_run.stderr
+    assert main(["gate"]) == 1

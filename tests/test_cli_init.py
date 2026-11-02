@@ -12,7 +12,7 @@ from dprovenancekit.cli import main
 
 
 def test_init_scaffold_uses_instrumentation_api_and_preserves_existing_database(
-    tmp_path, capsys
+    tmp_path, capsys, monkeypatch
 ):
     project = tmp_path / "agent-project"
     assert main(["init", str(project)]) == 0

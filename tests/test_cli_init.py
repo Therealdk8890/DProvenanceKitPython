@@ -52,6 +52,9 @@ def test_init_scaffold_uses_instrumentation_api_and_preserves_existing_database(
         assert recorded_runs == 1
 
     scaffold = (project / "agent_stub.py").read_text(encoding="utf-8")
-    assert "from dprovenancekit import TracePriority, record_event, traced, traced_run" in scaffold
+    assert (
+        "from dprovenancekit import TracePriority, record_event, traced, traced_run"
+        in scaffold
+    )
     assert "SQLiteTraceStore" not in scaffold
     assert ".unlink()" not in scaffold

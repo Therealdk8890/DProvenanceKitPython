@@ -1166,92 +1166,90 @@ def _run_init(argv) -> int:
         return 2
 
     agent.write_text(
-        '"""Minimal account-status path — baseline vs CRITICAL-step regression.\n'
-        "\n"
-        "Run from this directory after ``pip install dprovenancekit``::\n"
-        "\n"
-        "    python agent_stub.py\n"
-        '"""\n'
-        "\n"
-        "from __future__ import annotations\n"
-        "\n"
-        "import json\n"
-        "from pathlib import Path\n"
-        "\n"
-        "from dprovenancekit import DProvenanceKit, TracePriority\n"
-        "from dprovenancekit.event import AnyTraceableEvent\n"
-        "from dprovenancekit.sqlite_store import SQLiteTraceStore\n"
-        "from dprovenancekit.testing import RegressionGate\n"
-        "\n"
-        "\n"
-        "def _record(store, steps, context_id: str):\n"
-        "    kit = DProvenanceKit(AnyTraceableEvent)\n"
-        "    with kit.run(context_id=context_id, store=store) as run:\n"
-        "        for step_type, priority, detail in steps:\n"
-        "            payload = AnyTraceableEvent(\n"
-        "                type_identifier_value=step_type,\n"
-        "                priority_value=int(priority),\n"
-        "                raw_json=json.dumps({\"detail\": detail}, sort_keys=True),\n"
-        "            )\n"
-        "            with kit.with_engine(\"Agent\"):\n"
-        "                kit.record(payload)\n"
-        "        return run.run_id\n"
-        "\n"
-        "\n"
-        "def main() -> int:\n"
-        "    baseline_steps = [\n"
-        '        ("retrieve_account_context", TracePriority.STRUCTURAL, "account snapshot"),\n'
-        '        ("verify_account_status", TracePriority.CRITICAL, "status=active"),\n'
-        '        ("decide_account_action", TracePriority.CRITICAL, "approved"),\n'
-        "    ]\n"
-        "    candidate_steps = [\n"
-        '        ("retrieve_account_context", TracePriority.STRUCTURAL, "account snapshot"),\n'
-        '        ("decide_account_action", TracePriority.CRITICAL, "approved"),\n'
-        "    ]\n"
-        "\n"
-        '    db = Path(".dprovenance") / "traces.sqlite"\n'
-        "    db.parent.mkdir(parents=True, exist_ok=True)\n"
-        "    if db.exists():\n"
-        "        db.unlink()\n"
-        "\n"
-        "    store = SQLiteTraceStore(AnyTraceableEvent, str(db), start_writer=False)\n"
-        "    try:\n"
-        '        golden_id = _record(store, baseline_steps, "account.baseline")\n'
-        '        candidate_id = _record(store, candidate_steps, "account.candidate")\n'
-        "        golden = store.get_run(golden_id)\n"
-        "        candidate = store.get_run(candidate_id)\n"
-        "    finally:\n"
-        "        store.close()\n"
-        "\n"
-        "    report = RegressionGate().check(golden, candidate)\n"
-        "    print(report.summary())\n"
-        "    return 0 if report.passed else 1\n"
-        "\n"
-        "\n"
-        'if __name__ == "__main__":\n'
-        "    raise SystemExit(main())\n",
+'''"""Minimal account-status agent instrumented with DProvenanceKit."""
+
+from dprovenancekit import TracePriority, record_event, traced, traced_run
+
+
+@traced(capture_args=False, capture_result=False)
+def retrieve_account_context():
+    return {"account_id": "demo-001", "status": "active"}
+
+
+@traced(
+    priority=TracePriority.CRITICAL,
+    capture_args=False,
+    capture_result=False,
+)
+def verify_account_status(account):
+    return account["status"] == "active"
+
+
+@traced(capture_args=False, capture_result=False)
+def decide_account_action(is_active):
+    return "approved" if is_active else "manual_review"
+
+
+def main() -> None:
+    with traced_run(context_id="account-check") as run:
+        account = retrieve_account_context()
+        is_active = verify_account_status(account)
+        decision = decide_account_action(is_active)
+        record_event("decision_made", {"decision": decision})
+
+    print("Decision: {}".format(decision))
+    print("Recorded run: {}".format(run.run_id))
+    print("Trace database: .dprovenance/traces.sqlite")
+
+
+if __name__ == "__main__":
+    main()
+''',
         encoding="utf-8",
     )
 
     readme.write_text(
-        "# DProvenanceKit — five-minute DX hook\n"
-        "\n"
-        "Local-first evidence engine (Apache-2.0). Nothing here uploads by default.\n"
-        "\n"
-        "## Show a CRITICAL-step regression\n"
-        "\n"
-        "```bash\n"
-        "pip install dprovenancekit\n"
-        "python agent_stub.py\n"
-        "```\n"
-        "\n"
-        "Expected headline:\n"
-        "\n"
-        "```\n"
-        "REGRESSION / CRITICAL step removed: verify_account_status\n"
-        "```\n"
-        "\n"
-        "Product layers (OSS vs commercial): see `docs/PRODUCT_LAYERS.md` in the SDK repos.\n",
+'''# DProvenanceKit — quickstart
+
+This starter uses the public Python instrumentation API. It records locally; it does
+not upload traces.
+
+## 1. Run the agent
+
+~~~bash
+pip install dprovenancekit
+python agent_stub.py
+~~~
+
+The run is stored in .dprovenance/traces.sqlite.
+
+## 2. Pin a known-good baseline
+
+~~~bash
+dpk record
+~~~
+
+## 3. Check a later run
+
+Run the agent again, then compare it with the baseline:
+
+~~~bash
+python agent_stub.py
+dpk gate
+~~~
+
+To see the gate fail, temporarily remove the verify_account_status(account) call
+from main(), run the agent again, and run dpk gate. The missing CRITICAL step
+should be reported as a regression.
+
+## Data capture
+
+The example disables argument and result capture. By default, @traced captures
+summaries of function arguments and results. Review that behavior before enabling it
+for functions that handle personal, confidential, or otherwise sensitive data.
+
+For the API reference and advanced options, see the project README.
+''',
         encoding="utf-8",
     )
 

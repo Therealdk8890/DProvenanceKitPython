@@ -226,13 +226,16 @@ pip install dprovenancekit
 ```python
 from dprovenancekit import traced, record_event, traced_run
 
-@traced
+# Disable argument/result capture unless you have reviewed the data being recorded.
+@traced(capture_args=False, capture_result=False)
 def check_credit(applicant):
     ...
 
-@traced
+@traced(capture_args=False, capture_result=False)
 def verify_income(applicant):
     ...
+
+data = ...  # your applicant data
 
 with traced_run(context_id="applicant_12345"):
     check_credit(data)
@@ -246,7 +249,7 @@ See the complete record → compare → gate flow immediately after installing:
 dpk demo --output-dir .dpk-demo
 ```
 
-For a starter project you can edit, run `dpk init my-agent-project`, then `cd my-agent-project` and `python agent_stub.py`. That sample deliberately produces a HIGH regression and exits 1 to demonstrate a failing gate.
+For a starter project using this same API, run `dpk init my-agent-project`, then `cd my-agent-project` and `python agent_stub.py`. It records a successful run to the default local database without deleting existing traces. Pin it with `dpk record`; after changing your workflow, run it again and use `dpk gate` to check for regressions. The scaffold README also shows how to deliberately remove a CRITICAL step to exercise a failing gate.
 
 The repository also contains a deeper record → baseline → gate → attest → verify walkthrough in [`examples/e2e_decision_path/`](examples/e2e_decision_path/). It is intended for contributors working from a clone and requires `pip install -e ".[crypto]"`.
 

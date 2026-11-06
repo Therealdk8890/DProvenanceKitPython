@@ -334,7 +334,7 @@ Every release: baseline vs. candidate. A clear record of whether the instrumente
 
 ## Status
 
-**Latest published release: [0.7.1](https://github.com/Therealdk8890/DProvenanceKitPython/releases/tag/v0.7.1) on PyPI (`dprovenancekit`).** Version 0.7.0 introduced MVP `DPK-BINARY-V1` software attestation via `dprovenancekit[crypto]`; 0.7.1 adds the `dpk init` starter-project workflow and gate-summary improvements. APIs may continue to evolve before 1.0. Wheels older than 0.7.0 do not include attestation.
+**Latest published release: [0.7.1](https://github.com/Therealdk8890/DProvenanceKitPython/releases/tag/v0.7.1) on PyPI (`dprovenancekit`).** The repository source is being prepared for the corrective `0.9.2` package release; it is not published until the GitHub Release workflow completes successfully. Version 0.7.0 introduced MVP `DPK-BINARY-V1` software attestation via `dprovenancekit[crypto]`; 0.7.1 adds the `dpk init` starter-project workflow and gate-summary improvements. APIs may continue to evolve before 1.0. Wheels older than 0.7.0 do not include attestation.
 
 ---
 

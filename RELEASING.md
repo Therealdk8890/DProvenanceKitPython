@@ -31,8 +31,12 @@ project (owner/repo, workflow `publish-pypi.yml`, environment `pypi`). Then:
    `dprovenancekit/__init__.py` (installed copies read the version from package
    metadata; the fallback only applies when running from a source checkout, but
    it must not drift).
-2. Commit, tag (`git tag v0.1.0 && git push --tags`), and publish a GitHub Release.
-3. The workflow builds, `twine check`s, attests, and uploads.
+2. Run `python scripts/check_release_version.py vX.Y.Z` with the exact tag you intend
+   to publish. The release workflow repeats this check automatically before building.
+3. Commit, create a new tag (never reuse a published or failed release tag), push it,
+   and publish the matching GitHub Release.
+4. The workflow verifies the tag/version match, runs the release test gate, builds,
+   `twine check`s, attests, and uploads.
 
 ## Build provenance (attestations)
 

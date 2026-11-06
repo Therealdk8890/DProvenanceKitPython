@@ -113,6 +113,10 @@ Cross-language conformance covers fingerprints, query semantics, profile hash, a
 
 ---
 
+## Shared product versioning
+
+Swift and Python use the same DProvenanceKit product release version. Matching versions mean the SDKs belong to the same coordinated product release; they do **not** mean feature parity, identical APIs, or interchangeable packages. The capability matrix above remains authoritative. See the [cross-language release policy](https://github.com/Therealdk8890/DProvenanceKit/blob/main/docs/RELEASE_POLICY.md).
+
 ## Works with your observability stack
 
 DProvenanceKit aims to be the local-first layer for **AI decision-path observability** — record, diff, and CI-gate the instrumented path (attest on Swift). It is built to sit **beside** OpenTelemetry, LangSmith, Langfuse, and Arize, not to replace them.

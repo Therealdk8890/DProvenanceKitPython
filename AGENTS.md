@@ -6,7 +6,7 @@ that fidelity is the point. Preserve the invariants and the parity with upstream
 
 ## Stack
 - setuptools, **flat layout** — the package lives at `dprovenancekit/` in the repo root (no `src/`). **Python 3.9+.**
-- Version **0.7.1** — `pyproject.toml` is the source of truth. `__version__` derives from installed
+- Version **0.9.2** — `pyproject.toml` is the source of truth. `__version__` derives from installed
   package metadata (`importlib.metadata`), with a hardcoded fallback literal in
   `dprovenancekit/__init__.py` for source checkouts; the release checklist in `RELEASING.md` bumps both.
 - **Zero third-party runtime dependencies in the core** — standard library only (`sqlite3`, `contextvars`, `threading`, `json`, `hashlib`, `uuid`, `urllib`). **Do not add any core runtime dependency.** Framework adapters (LangChain, OpenAI Agents, LlamaIndex, CrewAI, Google GenAI, FastAPI, Jupyter, MCP) and the `crypto` extra (`cryptography` for DPK-BINARY-V1 attestation) live behind optional extras; `pytest` and friends are dev-only extras (dev also pulls `cryptography` so attestation tests run in CI).

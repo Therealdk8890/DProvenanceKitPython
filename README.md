@@ -338,7 +338,7 @@ Every release: baseline vs. candidate. A clear record of whether the instrumente
 
 ## Status
 
-**Latest published release: [0.7.1](https://github.com/Therealdk8890/DProvenanceKitPython/releases/tag/v0.7.1) on PyPI (`dprovenancekit`).** The repository source is being prepared for the corrective `0.9.2` package release; it is not published until the GitHub Release workflow completes successfully. Version 0.7.0 introduced MVP `DPK-BINARY-V1` software attestation via `dprovenancekit[crypto]`; 0.7.1 adds the `dpk init` starter-project workflow and gate-summary improvements. APIs may continue to evolve before 1.0. Wheels older than 0.7.0 do not include attestation.
+**Latest published Python release: [0.7.1](https://github.com/Therealdk8890/DProvenanceKitPython/releases/tag/v0.7.1) on PyPI (`dprovenancekit`).** The corrective Python 0.9.2 candidate is tracked in [PR #93](https://github.com/Therealdk8890/DProvenanceKitPython/pull/93); it is not published until its GitHub Release workflow completes successfully. The Swift SDK's latest published release is [0.9.0](https://github.com/Therealdk8890/DProvenanceKit/releases/tag/0.9.0); its coordinated 0.9.2 candidate is tracked in [Swift PR #142](https://github.com/Therealdk8890/DProvenanceKit/pull/142). The two 0.9.2 candidates are not releases yet. Matching versions identify a coordinated product release, not feature parity or interchangeable packages. Version 0.7.0 introduced MVP `DPK-BINARY-V1` software attestation via `dprovenancekit[crypto]`; 0.7.1 adds the `dpk init` starter-project workflow and gate-summary improvements. APIs may continue to evolve before 1.0. Wheels older than 0.7.0 do not include attestation.
 
 ---
 

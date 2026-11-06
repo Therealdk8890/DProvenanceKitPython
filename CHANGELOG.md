@@ -7,6 +7,12 @@ public API may still change between minor versions.
 
 ## [Unreleased]
 
+## [0.9.2] — 2026-11-06
+
+### Fixed
+- Correct package metadata and the source-checkout `__version__` fallback to `0.9.2`.
+- Add a release gate that rejects GitHub release tags that do not match both version declarations.
+
 ## [0.7.1] — 2026-09-18
 
 ### Added

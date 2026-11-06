@@ -231,7 +231,8 @@ Baseline for this changelog. See the Git history and
 [GitHub releases](https://github.com/Therealdk8890/DProvenanceKitPython/releases) for earlier
 changes.
 
-[Unreleased]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.9.1...v0.9.2
 [0.7.1]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.6.0...v0.6.1

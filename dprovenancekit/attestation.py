@@ -575,9 +575,11 @@ class TraceAttestationSigningKey(Protocol):
     @property
     def public_key_x963_representation(self) -> bytes:
         """Return the P-256 public key as an uncompressed X9.63 point."""
+        ...
 
     def signature_der(self, data: bytes) -> bytes:
         """Return an ECDSA-P256-SHA256 signature in ASN.1 DER form."""
+        ...
 
 
 class SoftwareTraceAttestationKey:

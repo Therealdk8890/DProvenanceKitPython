@@ -326,15 +326,35 @@ def create_handler(db_path: Optional[str] = None, allowed_hosts=None, sources=No
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
-def create_server(db_path: Optional[str] = None, port: int = 8080, host: str = "127.0.0.1", sources=None):
-    """Build a loopback-bound viewer unless the caller explicitly opts out."""
-    allowed_hosts = _LOOPBACK_HOSTS if host in _LOOPBACK_HOSTS else None
-    handler = create_handler(db_path, allowed_hosts, sources=sources)
+def create_server(
+    db_path: Optional[str] = None,
+    port: int = 8080,
+    host: str = "127.0.0.1",
+    sources=None,
+    allowed_hosts=None,
+):
+    """Build the viewer with loopback protections or an explicit Host allow-list.
+
+    A non-loopback bind remains an explicit exposure choice. Container deployments
+    can supply allowed_hosts to retain DNS-rebinding protection while binding inside
+    the container to 0.0.0.0; publish the container port only on host loopback.
+    """
+    if allowed_hosts is None:
+        effective_allowed_hosts = _LOOPBACK_HOSTS if host in _LOOPBACK_HOSTS else None
+    else:
+        effective_allowed_hosts = frozenset(allowed_hosts)
+    handler = create_handler(db_path, effective_allowed_hosts, sources=sources)
     return ThreadingHTTPServer((host, port), handler)
 
 
-def run_ui_server(db_path: Optional[str] = None, port: int = 8080, host: str = "127.0.0.1", sources=None):
-    server = create_server(db_path, port, host, sources=sources)
+def run_ui_server(
+    db_path: Optional[str] = None,
+    port: int = 8080,
+    host: str = "127.0.0.1",
+    sources=None,
+    allowed_hosts=None,
+):
+    server = create_server(db_path, port, host, sources=sources, allowed_hosts=allowed_hosts)
     display_host = "localhost" if host == "127.0.0.1" else host
     serving = f"{len(sources)} configured sources" if sources is not None else db_path
     print(f"Starting DProvenanceKit UI at http://{display_host}:{port} (serving {serving})")

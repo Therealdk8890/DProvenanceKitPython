@@ -657,7 +657,16 @@ def _run_ui(argv) -> int:
     ap = argparse.ArgumentParser(
         prog="dprovenancekit ui", description="Start local trace visualization UI."
     )
-    ap.add_argument("--db", required=True, help="path to the SQLite trace database")
+    ap.add_argument("--db", help="path to one SQLite trace database (single-source mode)")
+    ap.add_argument(
+        "--source",
+        action="append",
+        metavar="ID=LABEL=PATH",
+        help=(
+            "add a local trace database source; repeat for multiple sources, e.g. "
+            "--source prod=Production=/data/prod.sqlite"
+        ),
+    )
     ap.add_argument(
         "--port", type=int, default=8080, help="port to listen on (default: 8080)"
     )
@@ -670,7 +679,21 @@ def _run_ui(argv) -> int:
     )
     args = ap.parse_args(argv)
 
-    run_ui_server(args.db, args.port, host=args.host)
+    if args.db and args.source:
+        ap.error("--db and --source cannot be combined")
+    if not args.db and not args.source:
+        ap.error("provide --db or at least one --source")
+    if args.source:
+        sources = []
+        for item in args.source:
+            parts = item.split("=", 2)
+            if len(parts) != 3:
+                ap.error(f"invalid --source {item!r}; expected ID=LABEL=PATH")
+            source_id, label, path = parts
+            sources.append({"source_id": source_id, "label": label, "db_path": path})
+        run_ui_server(None, args.port, host=args.host, sources=sources)
+    else:
+        run_ui_server(args.db, args.port, host=args.host)
     return 0
 
 

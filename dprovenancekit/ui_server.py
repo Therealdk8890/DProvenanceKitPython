@@ -175,7 +175,7 @@ def create_handler(db_path: Optional[str] = None, allowed_hosts=None, sources=No
                         "label": source.label,
                         "multi_source": multi_source,
                         "status": "error",
-                        "error": str(exc),
+                        "error": "Source unavailable or schema incompatible",
                     })
             self._send_json(200, results)
 

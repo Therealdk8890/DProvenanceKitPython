@@ -69,7 +69,7 @@ A duplicate run UUID across two configured databases must remain unambiguous bec
 - Do not create, migrate, checkpoint, or otherwise mutate source files as part of viewer reads.
 - Do not use `SQLiteTraceStore(..., start_writer=False)` as the read path: its constructor still runs `_create_schema()` (including DDL, index creation, schema-version updates, and write-behind reconciliation), and `close()` calls writer shutdown/flush.
 - Implement a dedicated read-only reader using SQLite URI `mode=ro` (with URI-safe path construction), and query the existing schema without invoking store initialization or writer lifecycle methods. Validate schema compatibility with read-only metadata queries before serving a source.
-- Preserve the loopback default and Host-header allow-list. A Docker deployment must document that non-loopback exposure requires an explicit security boundary.
+- Preserve the loopback default and Host-header allow-list. Non-loopback binds require an explicit allow-list when used behind the loopback-only Docker port mapping.
 
 ### 4. UI behavior
 
@@ -81,13 +81,22 @@ A duplicate run UUID across two configured databases must remain unambiguous bec
 
 ### 5. Docker packaging
 
-After the multi-source API and UI are tested:
+The repository includes a minimal Python 3.12 / Debian Bookworm image and a Compose deployment:
 
-- Add a minimal Docker image and Compose example.
-- Mount the trace directory explicitly as read-only.
-- Bind the service to loopback by default on the host.
-- Document that the viewer exposes sensitive prompts, tool inputs, and outputs; users must not publish it directly to the internet.
-- Keep the container dependency footprint minimal and pin the base image/runtime deliberately.
+```bash
+mkdir -p traces
+# Place an existing trace database at ./traces/traces.sqlite
+docker compose up --build
+```
+
+Open `http://localhost:8080`. The Compose configuration:
+
+- publishes the port only on host loopback (`127.0.0.1:8080`);
+- mounts `./traces` at `/traces` as read-only;
+- runs with a read-only container filesystem, a temporary `/tmp`, no Linux capabilities, and `no-new-privileges`;
+- binds inside the container to `0.0.0.0` but retains an explicit Host allow-list for `localhost`, `127.0.0.1`, and `::1` to block DNS-rebinding Host headers.
+
+The viewer exposes sensitive prompts, tool inputs, and outputs. Do not publish the port on a public interface or attach the container to an untrusted shared Docker network. The host-loopback port binding does not make an untrusted peer on the same Docker network trustworthy. The base image is pinned to the Python 3.12 slim Bookworm line; update it deliberately and re-run the Python/Docker validation matrix.
 
 ## Security and verification invariants
 
@@ -106,7 +115,7 @@ After the multi-source API and UI are tested:
 4. Update the HTML viewer with source labels, cross-source comparison, and source-health status.
 5. Add security and read-only behavior tests.
 6. Add Dockerfile, Compose example, and local-only documentation.
-7. Run the complete Python test/lint/type-check matrix and review all CI results before merging.
+7. Run the complete Python test/lint/type-check matrix, validate the Docker build/Compose config, and review all CI results before merging.
 
 ## Acceptance criteria
 

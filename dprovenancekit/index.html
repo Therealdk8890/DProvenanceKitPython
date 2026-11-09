@@ -89,7 +89,7 @@
                 ]);
                 const runs = await response.json();
                 const sources = await sourceResponse.json();
-                multiSourceMode = runs.some(run => Boolean(run.source_id));
+                multiSourceMode = sources.some(source => Boolean(source.multi_source));
                 allRuns = runs;
                 const sourceStatus = document.getElementById('source-status');
                 if (multiSourceMode) {

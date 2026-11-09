@@ -72,6 +72,9 @@ def test_read_only_reader_does_not_change_database_bytes(temp_db_path, serve):
 
     status, runs = _get(base_url, "/api/runs")
     assert status == 200
+    with urllib.request.urlopen(base_url + "/api/runs") as response:
+        assert response.headers["Cache-Control"] == "no-store"
+        assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert len(runs) == 1
 
     status, run = _get(base_url, f"/api/runs/{runs[0]['run_id']}")

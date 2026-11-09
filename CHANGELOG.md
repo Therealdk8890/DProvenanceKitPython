@@ -7,6 +7,13 @@ public API may still change between minor versions.
 
 ## [Unreleased]
 
+## [0.9.3] — 2026-11-09
+
+### Added
+- Self-hosted multi-database trace workbench with source-aware run browsing and cross-database diffs.
+- Read-only SQLite source access, per-source health reporting, and isolated source failures.
+- Hardened local Docker Compose deployment and installed-wheel validation for the workbench.
+
 ## [0.9.2] — 2026-11-06
 
 ### Fixed

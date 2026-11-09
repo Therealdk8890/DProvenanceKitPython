@@ -120,6 +120,34 @@ def test_non_loopback_bind_does_not_enforce_host_allowlist():
     handler = create_handler("unused.sqlite", allowed_hosts=None)
     assert handler is not None  # constructs without a Host allow-list
 
+def test_localhost_bind_keeps_dns_rebinding_protection():
+    import http.client
+    import threading
+
+    server = create_server(db_path="unused.sqlite", port=0, host="localhost")
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host, port = server.server_address[:2]
+
+        def get_status(host_header):
+            conn = http.client.HTTPConnection(host, port, timeout=5)
+            try:
+                conn.putrequest("GET", "/", skip_host=True, skip_accept_encoding=True)
+                conn.putheader("Host", host_header)
+                conn.endheaders()
+                return conn.getresponse().status
+            finally:
+                conn.close()
+
+        assert get_status("evil.example.com") == 403
+        assert get_status(f"LOCALHOST:{port}") == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_explicit_host_allowlist_protects_non_loopback_container_bind():
     """A container can bind on all interfaces while still rejecting attacker Host headers."""
     import http.client

@@ -7,6 +7,7 @@ viewer connection must not migrate, reconcile, checkpoint, or write trace data.
 import json
 import os
 import re
+import sqlite3
 import uuid
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -231,6 +232,11 @@ def create_handler(db_path: str = None, allowed_hosts=None, sources=None):
                     run_data["source_id"] = source.source_id
                     run_data["source_label"] = source.label
                 self._send_json(200, run_data)
+            except sqlite3.OperationalError as exc:
+                if "unable to open database file" in str(exc).lower():
+                    self._send_json(404, {"error": "Run not found"})
+                else:
+                    self._server_error()
             except Exception:
                 self._server_error()
 
@@ -298,6 +304,11 @@ def create_handler(db_path: str = None, allowed_hosts=None, sources=None):
                     response["golden_source"] = golden_source.source_id
                     response["candidate_source"] = candidate_source.source_id
                 self._send_json(200, response)
+            except sqlite3.OperationalError as exc:
+                if "unable to open database file" in str(exc).lower():
+                    self._send_json(404, {"error": "Run not found"})
+                else:
+                    self._server_error()
             except Exception:
                 self._server_error()
 

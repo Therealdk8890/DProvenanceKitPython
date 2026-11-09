@@ -60,6 +60,14 @@ def test_viewer_normalizes_sqlite_and_event_timestamp_units():
     assert "esc(formatTimestamp(event.timestamp))" in html
 
 
+def test_dynamic_trace_ids_are_not_interpolated_into_inline_javascript():
+    html = INDEX_HTML.read_text()
+    assert 'onchange="loadDiff(' not in html
+    assert "compareSelect.addEventListener('change'" in html
+    assert "fetch('/api/diff?' + params.toString())" in html
+    assert "fetch(`/api/runs/${encodeURIComponent(runId)}${sourceQuery}`)" in html
+
+
 def test_run_picker_uses_keyboard_accessible_buttons():
     html = INDEX_HTML.read_text()
     assert "document.createElement('button')" in html

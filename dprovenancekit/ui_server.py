@@ -4,6 +4,7 @@ Viewer reads use ReadOnlySQLiteTraceReader, never SQLiteTraceStore: opening a
 viewer connection must not migrate, reconcile, checkpoint, or write trace data.
 """
 
+import ipaddress
 import json
 import os
 import re
@@ -74,8 +75,10 @@ def _host_only(host_header: str) -> str:
     """The hostname from a Host header, without the optional :port (IPv6-aware)."""
     host_header = host_header.strip()
     if host_header.startswith("["):
-        return host_header[1 : host_header.find("]")] if "]" in host_header else host_header
-    return host_header.rsplit(":", 1)[0] if ":" in host_header else host_header
+        host = host_header[1 : host_header.find("]")] if "]" in host_header else host_header
+    else:
+        host = host_header.rsplit(":", 1)[0] if ":" in host_header else host_header
+    return host.lower().rstrip(".")
 
 
 def create_handler(db_path: Optional[str] = None, allowed_hosts=None, sources=None):
@@ -340,9 +343,13 @@ def create_server(
     the container to 0.0.0.0; publish the container port only on host loopback.
     """
     if allowed_hosts is None:
-        effective_allowed_hosts = _LOOPBACK_HOSTS if host in _LOOPBACK_HOSTS else None
+        try:
+            is_loopback = host.lower() == "localhost" or ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            is_loopback = host.lower() == "localhost"
+        effective_allowed_hosts = _LOOPBACK_HOSTS if is_loopback else None
     else:
-        effective_allowed_hosts = frozenset(allowed_hosts)
+        effective_allowed_hosts = frozenset(str(value).lower().rstrip(".") for value in allowed_hosts)
     handler = create_handler(db_path, effective_allowed_hosts, sources=sources)
     return ThreadingHTTPServer((host, port), handler)
 

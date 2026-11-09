@@ -38,6 +38,7 @@
     <div class="container">
         <div class="sidebar">
             <h2>Recorded Runs</h2>
+            <div id="source-status" class="run-meta"></div>
             <div id="runs-loading" class="loading">Loading runs...</div>
             <ul id="run-list" class="run-list"></ul>
         </div>
@@ -50,6 +51,7 @@
 
     <script>
         let allRuns = [];
+        let multiSourceMode = false;
 
         // Trace payloads carry LLM/tool inputs and outputs — attacker-influenced
         // text. Every dynamic value interpolated into innerHTML must pass through
@@ -81,9 +83,23 @@
 
         async function fetchRuns() {
             try {
-                const response = await fetch('/api/runs');
+                const [response, sourceResponse] = await Promise.all([
+                    fetch('/api/runs'),
+                    fetch('/api/sources')
+                ]);
                 const runs = await response.json();
+                const sources = await sourceResponse.json();
+                multiSourceMode = runs.some(run => Boolean(run.source_id));
                 allRuns = runs;
+                const sourceStatus = document.getElementById('source-status');
+                if (multiSourceMode) {
+                    sourceStatus.innerHTML = sources.map(source =>
+                        `<div>${esc(source.label)}: <strong>${esc(source.status)}</strong>${
+                            source.status === 'error' ? ` — ${esc(source.error || 'Unavailable')}` :
+                            ` — ${esc(source.run_count)} runs`
+                        }</div>`
+                    ).join('');
+                }
                 
                 const listEl = document.getElementById('run-list');
                 document.getElementById('runs-loading').style.display = 'none';
@@ -99,12 +115,14 @@
                     button.type = 'button';
                     button.className = 'run-item';
                     button.dataset.runId = run.run_id;
+                    button.dataset.sourceId = run.source_id || '';
                     button.setAttribute('aria-pressed', 'false');
-                    button.addEventListener('click', () => loadRun(run.run_id, button));
+                    button.addEventListener('click', () => loadRun(run.run_id, button, run.source_id));
 
                     button.innerHTML = `
                         <div class="run-title">${esc(run.context_id || 'Unknown Context')}</div>
                         <div class="run-meta">
+                            ${multiSourceMode ? `${esc(run.source_label)} · ` : ''}
                             ${esc(formatTimestamp(run.start_time))}<br>
                             Events: ${esc(run.event_count)}
                         </div>
@@ -118,10 +136,10 @@
             }
         }
 
-        async function loadRun(runId, listItem) {
+        async function loadRun(runId, listItem, sourceId) {
             // Update active state
             const selectedItem = listItem || Array.from(document.querySelectorAll('.run-item'))
-                .find(el => el.dataset.runId === runId);
+                .find(el => el.dataset.runId === runId && el.dataset.sourceId === (sourceId || ''));
             document.querySelectorAll('.run-item').forEach(el => {
                 el.classList.remove('active');
                 el.setAttribute('aria-pressed', 'false');
@@ -135,7 +153,8 @@
             viewEl.innerHTML = '<div class="loading">Loading trace details...</div>';
             
             try {
-                const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`);
+                const sourceQuery = sourceId ? `?source=${encodeURIComponent(sourceId)}` : '';
+                const response = await fetch(`/api/runs/${encodeURIComponent(runId)}${sourceQuery}`);
                 const run = await response.json();
                 
                 if (run.error) {
@@ -145,8 +164,9 @@
 
                 let compareOptions = `<option value="">None (Single Trace View)</option>`;
                 allRuns.forEach(r => {
-                    if (r.run_id !== run.run_id) {
-                        compareOptions += `<option value="${esc(r.run_id)}">${esc(r.context_id || r.run_id)} (${esc(formatTimestamp(r.start_time))})</option>`;
+                    if (r.run_id !== run.run_id || (r.source_id || '') !== (run.source_id || '')) {
+                        const value = `${r.source_id || ''}|${r.run_id}`;
+                        compareOptions += `<option value="${esc(value)}">${esc(r.context_id || r.run_id)} ${r.source_label ? `[${esc(r.source_label)}]` : ''} (${esc(formatTimestamp(r.start_time))})</option>`;
                     }
                 });
 
@@ -155,12 +175,13 @@
                         <h2>Trace: ${esc(run.context_id || 'Unknown')}</h2>
                         <div>
                             <label for="compare-select" style="font-size: 14px; font-weight: 500; margin-right: 8px;">Compare against baseline:</label>
-                            <select id="compare-select" style="padding: 6px; border-radius: 4px; border: 1px solid #d1d5db;" onchange="loadDiff('${esc(run.run_id)}', this.value)">
+                            <select id="compare-select" style="padding: 6px; border-radius: 4px; border: 1px solid #d1d5db;" onchange="loadDiff('${esc(run.run_id)}', '${esc(run.source_id || '')}', this.value)">
                                 ${compareOptions}
                             </select>
                         </div>
                     </div>
                     <p class="run-meta" style="margin-bottom: 20px;">
+                        ${run.source_label ? `Source: ${esc(run.source_label)}<br>` : ''}
                         Run ID: ${esc(run.run_id)}<br>
                         Fingerprint: ${esc(run.fingerprint)}
                     </p>
@@ -194,17 +215,26 @@
             }
         }
         
-        async function loadDiff(candidateId, goldenId) {
-            if (!goldenId) {
-                loadRun(candidateId);
+        async function loadDiff(candidateId, candidateSourceId, goldenValue) {
+            if (!goldenValue) {
+                loadRun(candidateId, null, candidateSourceId);
                 return;
             }
+            const separator = goldenValue.indexOf('|');
+            const goldenSourceId = separator >= 0 ? goldenValue.slice(0, separator) : '';
+            const goldenId = separator >= 0 ? goldenValue.slice(separator + 1) : goldenValue;
             
             const viewEl = document.getElementById('trace-view');
             viewEl.innerHTML = '<div class="loading">Computing structural diff...</div>';
             
             try {
-                const response = await fetch(`/api/diff?golden=${encodeURIComponent(goldenId)}&candidate=${encodeURIComponent(candidateId)}`);
+                const params = new URLSearchParams({
+                    golden: goldenId,
+                    candidate: candidateId
+                });
+                if (goldenSourceId) params.set('golden_source', goldenSourceId);
+                if (candidateSourceId) params.set('candidate_source', candidateSourceId);
+                const response = await fetch(`/api/diff?${params.toString()}`);
                 const result = await response.json();
                 
                 if (result.error) {
@@ -212,14 +242,15 @@
                     return;
                 }
 
-                let goldenRun = allRuns.find(r => r.run_id === goldenId) || {context_id: goldenId};
-                let candidateRun = allRuns.find(r => r.run_id === candidateId) || {context_id: candidateId};
+                let goldenRun = allRuns.find(r => r.run_id === goldenId && (r.source_id || '') === goldenSourceId) || {context_id: goldenId};
+                let candidateRun = allRuns.find(r => r.run_id === candidateId && (r.source_id || '') === (candidateSourceId || '')) || {context_id: candidateId};
 
                 let compareOptions = `<option value="">None (Single Trace View)</option>`;
                 allRuns.forEach(r => {
-                    if (r.run_id !== candidateId) {
-                        let selected = r.run_id === goldenId ? 'selected' : '';
-                        compareOptions += `<option value="${esc(r.run_id)}" ${selected}>${esc(r.context_id || r.run_id)} (${esc(formatTimestamp(r.start_time))})</option>`;
+                    if (r.run_id !== candidateId || (r.source_id || '') !== (candidateSourceId || '')) {
+                        const value = `${r.source_id || ''}|${r.run_id}`;
+                        let selected = r.run_id === goldenId && (r.source_id || '') === goldenSourceId ? 'selected' : '';
+                        compareOptions += `<option value="${esc(value)}" ${selected}>${esc(r.context_id || r.run_id)} ${r.source_label ? `[${esc(r.source_label)}]` : ''} (${esc(formatTimestamp(r.start_time))})</option>`;
                     }
                 });
 
@@ -228,14 +259,14 @@
                         <h2>Unified Diff View</h2>
                         <div>
                             <label for="compare-select" style="font-size: 14px; font-weight: 500; margin-right: 8px;">Baseline (Golden):</label>
-                            <select id="compare-select" style="padding: 6px; border-radius: 4px; border: 1px solid #d1d5db;" onchange="loadDiff('${esc(candidateId)}', this.value)">
+                            <select id="compare-select" style="padding: 6px; border-radius: 4px; border: 1px solid #d1d5db;" onchange="loadDiff('${esc(candidateId)}', '${esc(candidateSourceId || '')}', this.value)">
                                 ${compareOptions}
                             </select>
                         </div>
                     </div>
                     <p class="run-meta" style="margin-bottom: 20px;">
-                        <strong>Candidate:</strong> ${esc(candidateRun.context_id)}<br>
-                        <strong>Golden:</strong> ${esc(goldenRun.context_id)}
+                        <strong>Candidate:</strong> ${esc(candidateRun.context_id)} ${candidateRun.source_label ? `[${esc(candidateRun.source_label)}]` : ''}<br>
+                        <strong>Golden:</strong> ${esc(goldenRun.context_id)} ${goldenRun.source_label ? `[${esc(goldenRun.source_label)}]` : ''}
                     </p>
                     <div class="event-list">
                 `;

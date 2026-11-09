@@ -12,7 +12,7 @@ import uuid
 from pathlib import Path
 from typing import List, Optional, Type
 
-from .event import AnyTraceableEvent, TraceEvent, TraceableEvent
+from .event import TraceEvent, TraceableEvent
 from .query import TraceRun
 
 
@@ -100,7 +100,7 @@ class ReadOnlySQLiteTraceReader:
             try:
                 payload = self._event_type.decode(bytes(payload_data))
                 parsed_event_id = uuid.UUID(event_id)
-            except (Exception,):
+            except Exception:
                 # A malformed event should not prevent inspection of other events.
                 continue
             events.append(

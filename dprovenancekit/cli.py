@@ -671,6 +671,15 @@ def _run_ui(argv) -> int:
         "--port", type=int, default=8080, help="port to listen on (default: 8080)"
     )
     ap.add_argument(
+        "--allow-host",
+        action="append",
+        dest="allowed_hosts",
+        help=(
+            "explicitly allow a Host hostname (repeatable); useful with a container "
+            "binding to 0.0.0.0 while the host port is published only on loopback"
+        ),
+    )
+    ap.add_argument(
         "--host",
         default="127.0.0.1",
         help="interface to bind (default: 127.0.0.1; use 0.0.0.0 to expose on the "
@@ -691,9 +700,9 @@ def _run_ui(argv) -> int:
                 ap.error(f"invalid --source {item!r}; expected ID=LABEL=PATH")
             source_id, label, path = parts
             sources.append({"source_id": source_id, "label": label, "db_path": path})
-        run_ui_server(None, args.port, host=args.host, sources=sources)
+        run_ui_server(None, args.port, host=args.host, sources=sources, allowed_hosts=args.allowed_hosts)
     else:
-        run_ui_server(args.db, args.port, host=args.host)
+        run_ui_server(args.db, args.port, host=args.host, allowed_hosts=args.allowed_hosts)
     return 0
 
 

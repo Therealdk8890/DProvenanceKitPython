@@ -153,6 +153,8 @@ def test_unhealthy_source_is_reported_without_hiding_healthy_sources(tmp_path, s
     assert status == 200
     assert sources[0]["status"] == "healthy"
     assert sources[1]["status"] == "error"
+    assert str(broken) not in json.dumps(sources[1])
+    assert sources[1]["error"] == "Source unavailable or schema incompatible"
 
     status, runs = _get(base_url, "/api/runs")
     assert status == 200

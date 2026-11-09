@@ -159,7 +159,8 @@
             
             try {
                 const sourceQuery = sourceId ? `?source=${encodeURIComponent(sourceId)}` : '';
-                const response = await fetch(`/api/runs/${encodeURIComponent(runId)}${sourceQuery}`);
+                const runUrl = '/api/runs/' + encodeURIComponent(runId) + sourceQuery;
+                const response = await fetch(runUrl);
                 const run = await response.json();
                 
                 if (run.error) {

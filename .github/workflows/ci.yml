@@ -120,3 +120,16 @@ jobs:
         pip install -e ".[dev,${{ matrix.extra }}]"
     - name: Run ${{ matrix.adapter }} integration tests
       run: python -m pytest -q ${{ matrix.tests }}
+
+  # Keep the self-hosted viewer image and Compose deployment buildable on every PR.
+  container:
+    name: Docker image + Compose validation
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      with:
+        persist-credentials: false
+    - name: Validate Compose configuration
+      run: docker compose config --quiet
+    - name: Build viewer image
+      run: docker build --pull --tag dprovenancekit-viewer:test .

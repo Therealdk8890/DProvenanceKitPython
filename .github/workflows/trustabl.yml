@@ -37,6 +37,6 @@ jobs:
         uses: trustabl/trustabl-action@973f666d20b5fbb2e6a4511bd3846e965a08c28b # v0.4.1
         with:
           version: v0.1.6
-          upload-sarif: true
+          upload-sarif: false
           comment-on-pr: false
           upload-artifact: false

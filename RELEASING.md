@@ -3,6 +3,20 @@
 The library is the free, Apache 2.0-licensed client SDK. The hosted backend lives in a separate
 private repo and is **not** packaged here — only the `dprovenancekit/` package is published.
 
+## Coordinated DProvenanceKit product versions
+
+Python and Swift share one product release version, while retaining independent packages,
+APIs, capabilities, and release gates. Matching numbers do not imply feature parity.
+
+For a coordinated release, prepare both SDKs at the same version, require each repository's
+full CI and release-specific checks to pass, then publish through each repository's own
+process. Python uses its `vX.Y.Z` tag and PyPI Trusted Publishing workflow; Swift uses its
+Swift package release tag and GitHub Release. Announce the product release as complete only
+after both publication paths are confirmed. If either path fails, report each SDK's status
+separately. Never reuse or rewrite a published or failed tag.
+
+The current 0.9.2 release candidates are being prepared in [Python PR #93](https://github.com/Therealdk8890/DProvenanceKitPython/pull/93) and [Swift PR #142](https://github.com/Therealdk8890/DProvenanceKit/pull/142). Neither is published by those PRs.
+
 ## One command (manual)
 
 ```bash
@@ -31,8 +45,12 @@ project (owner/repo, workflow `publish-pypi.yml`, environment `pypi`). Then:
    `dprovenancekit/__init__.py` (installed copies read the version from package
    metadata; the fallback only applies when running from a source checkout, but
    it must not drift).
-2. Commit, tag (`git tag v0.1.0 && git push --tags`), and publish a GitHub Release.
-3. The workflow builds, `twine check`s, attests, and uploads.
+2. Run `python scripts/check_release_version.py vX.Y.Z` with the exact tag you intend
+   to publish. The release workflow repeats this check automatically before building.
+3. Commit, create a new tag (never reuse a published or failed release tag), push it,
+   and publish the matching GitHub Release.
+4. The workflow verifies the tag/version match, runs the release test gate, builds,
+   `twine check`s, attests, and uploads.
 
 ## Build provenance (attestations)
 

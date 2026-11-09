@@ -238,7 +238,7 @@ try:
     __version__ = _distribution_version("dprovenancekit")
 except _PackageNotFoundError:
     # Source checkout without installed metadata; keep in sync with pyproject.toml.
-    __version__ = "0.9.2"
+    __version__ = "0.9.3"
 
 
 

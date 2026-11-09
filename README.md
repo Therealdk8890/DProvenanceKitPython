@@ -36,9 +36,9 @@ Want to see the gate run on a pull request? Try the [dpk-gate-demo](https://gith
 
 ## Self-hosted trace workbench
 
-The Python SDK includes a local web viewer. The published `0.9.2` package supports the existing single-database viewer; the multi-database workbench described here was added after that release and will be included in a subsequent package release. To use multi-database mode before that release, install the current repository checkout as shown below. The viewer runs on your machine; there is no hosted control plane, account, upload, or telemetry requirement.
+The Python SDK includes a local web viewer. The published `0.9.2` package supports the original single-database viewer. The multi-database workbench described here is included in the `0.9.3` release candidate in this branch; it will become available from PyPI only after the release is published. Until then, install the current repository checkout as shown below. The viewer runs on your machine; there is no hosted control plane, account, upload, or telemetry requirement.
 
-With the published `0.9.2` package, open one database:
+With the currently published `0.9.2` package, open one database:
 
 ```bash
 python -m pip install "dprovenancekit==0.9.2"
@@ -47,7 +47,7 @@ dpk ui --db .dprovenance/traces.sqlite
 
 Then open [http://localhost:8080](http://localhost:8080). The server binds to loopback by default.
 
-To use the newer multi-database mode before its next PyPI release, install the current repository checkout:
+To use multi-database mode while `0.9.3` is pending publication, install the current repository checkout:
 
 ```bash
 git clone https://github.com/Therealdk8890/DProvenanceKitPython.git
@@ -67,7 +67,7 @@ The viewer shows source health, aggregates runs, and supports strict-audit compa
 
 **Security:** traces can contain prompts, tool inputs, outputs, and other sensitive data. Keep the default loopback bind. The viewer does not provide user authentication; do not expose it on a public or untrusted network. For a hardened local container deployment, see [the workbench deployment guide](docs/SELF_HOSTED_WORKBENCH.md).
 
-CI builds a wheel from the current repository revision, installs it into a clean virtual environment, and verifies the `dpk ui` entry point and packaged HTML. This protects the next package release; it does not retroactively add multi-database support to the already-published `0.9.2` artifact.
+CI builds a wheel from the current repository revision, installs it into a clean virtual environment, and verifies the `dpk ui` entry point and packaged HTML. This validates the `0.9.3` release candidate; it does not retroactively add multi-database support to the already-published `0.9.2` artifact.
 
 ---
 

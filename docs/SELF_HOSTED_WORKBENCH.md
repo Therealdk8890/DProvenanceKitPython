@@ -1,34 +1,29 @@
-# Self-hosted multi-database workbench
+# Self-hosted trace workbench
 
-## Objective
+The Python SDK has a local web viewer for existing DProvenanceKit SQLite trace databases. The published `0.9.2` package contains the original single-database viewer. The multi-database workbench described below was added to the repository after that release and will ship in a subsequent package release.
 
-Extend the existing local Python trace viewer from one SQLite database to an explicitly configured set of local trace databases. Keep the viewer useful without a hosted service, commercial account, or network upload.
+## Install
 
-## Repository facts
-
-The current `dprovenancekit.ui_server` already provides:
-
-- a local HTTP server with loopback binding by default;
-- a Host-header allow-list to mitigate DNS rebinding;
-- run listing and run-detail endpoints;
-- strict-audit diffing between runs in the configured database;
-- an HTML viewer that selects runs and compares traces.
-
-The current server factory accepts one `db_path`. The existing viewer therefore does not yet provide a unified index across independent database files.
-
-The Python SDK already has framework adapters for LangChain, LlamaIndex, OpenAI Agents, CrewAI, and other integrations. This work should not duplicate those adapters.
-
-## Proposed architecture
-
-### CLI usage
-
-Single-database mode remains unchanged:
+For the published single-database viewer:
 
 ```bash
+python -m pip install "dprovenancekit==0.9.2"
 dpk ui --db .dprovenance/traces.sqlite
 ```
 
-Multi-database mode is explicit; repeat `--source ID=LABEL=PATH` for each local database:
+To use the new multi-database mode before its next PyPI release, install the current repository checkout:
+
+```bash
+git clone https://github.com/Therealdk8890/DProvenanceKitPython.git
+cd DProvenanceKitPython
+python -m pip install .
+```
+
+The viewer binds to `127.0.0.1` by default. Open [http://localhost:8080](http://localhost:8080).
+
+## Multiple databases
+
+Configure each source explicitly. Repeat `--source ID=LABEL=PATH`:
 
 ```bash
 dpk ui \
@@ -36,93 +31,55 @@ dpk ui \
   --source staging=Staging=/data/staging.sqlite
 ```
 
-Source IDs must be unique and use letters, digits, dots, underscores, or hyphens. Labels are display-only. The viewer opens each path read-only and does not copy or upload trace contents.
+- IDs must be unique and contain only letters, digits, dots, underscores, or hyphens.
+- Labels are display names; paths point to existing SQLite trace databases.
+- The viewer does not scan directories, create databases, or upload data.
+- A source that is missing, unreadable, or schema-incompatible is reported as unhealthy without taking healthy sources offline.
+- Run details and comparisons are source-aware, including when two databases contain the same run UUID.
+- Existing single-database `--db` usage remains supported.
 
-### 1. Explicit source registry
+## Docker Compose deployment
 
-Add a small immutable source configuration model:
-
-- `source_id`: stable caller-supplied identifier, unique within the server;
-- `label`: human-readable label shown in the UI;
-- `db_path`: local filesystem path to a SQLite database.
-
-The existing `create_server(db_path=...)` and `run_ui_server(db_path=...)` calls must remain valid and behave exactly as the single-source mode does today. Multi-source mode should be opt-in through an explicit list of source configurations. Do not scan arbitrary directories or discover databases implicitly.
-
-### 2. Source-aware API
-
-In multi-source mode:
-
-- `GET /api/sources` reports each configured source and its health without exposing absolute filesystem paths.
-- `GET /api/runs` aggregates run metadata and adds `source_id` and `source_label` to each row.
-- `GET /api/runs/{run_id}?source={source_id}` reads a run from the named source.
-- `GET /api/diff?golden={id}&golden_source={source}&candidate={id}&candidate_source={source}` compares runs from either the same or different databases.
-
-Single-source callers that omit source parameters retain the current behavior.
-
-A duplicate run UUID across two configured databases must remain unambiguous because every multi-source detail/diff request identifies its source. Never silently choose the first matching database.
-
-### 3. Failure isolation and read-only behavior
-
-- Treat every configured database as read-only input.
-- A missing, unreadable, malformed, or schema-incompatible database must produce a visible source-health error while healthy sources remain available.
-- Do not silently omit a source from the source list or run index.
-- Do not create, migrate, checkpoint, or otherwise mutate source files as part of viewer reads.
-- Do not use `SQLiteTraceStore(..., start_writer=False)` as the read path: its constructor still runs `_create_schema()` (including DDL, index creation, schema-version updates, and write-behind reconciliation), and `close()` calls writer shutdown/flush.
-- Implement a dedicated read-only reader using SQLite URI `mode=ro` (with URI-safe path construction), and query the existing schema without invoking store initialization or writer lifecycle methods. Validate schema compatibility with read-only metadata queries before serving a source.
-- Preserve the loopback default and Host-header allow-list. Non-loopback binds require an explicit allow-list when used behind the loopback-only Docker port mapping.
-
-### 4. UI behavior
-
-- Display source labels beside runs.
-- Preserve run selection and side-by-side comparison.
-- Allow comparisons across sources.
-- Show source errors and empty sources separately; do not conflate an unreadable database with a database containing zero runs.
-- Escape all trace-derived and source-derived strings before rendering HTML.
-
-### 5. Docker packaging
-
-The repository includes a minimal Python 3.12 / Debian Bookworm image and a Compose deployment:
+The repository includes a hardened local container configuration. From a checkout:
 
 ```bash
 mkdir -p traces
-# Place an existing trace database at ./traces/traces.sqlite
+# Copy an existing DProvenanceKit SQLite database to ./traces/traces.sqlite
 docker compose up --build
 ```
 
-Open `http://localhost:8080`. The Compose configuration:
+Open [http://localhost:8080](http://localhost:8080). The Compose configuration:
 
 - publishes the port only on host loopback (`127.0.0.1:8080`);
-- mounts `./traces` at `/traces` as read-only;
-- runs with a read-only container filesystem, a temporary `/tmp`, no Linux capabilities, and `no-new-privileges`;
-- binds inside the container to `0.0.0.0` but retains an explicit Host allow-list for `localhost`, `127.0.0.1`, and `::1` to block DNS-rebinding Host headers.
+- mounts `./traces` read-only at `/traces`;
+- runs as a non-root numeric user with a read-only container filesystem;
+- drops Linux capabilities and enables `no-new-privileges`;
+- retains an explicit Host allow-list to mitigate DNS rebinding.
 
-The viewer exposes sensitive prompts, tool inputs, and outputs. Do not publish the port on a public interface or attach the container to an untrusted shared Docker network. The host-loopback port binding does not make an untrusted peer on the same Docker network trustworthy. The base image is pinned to the Python 3.12 slim Bookworm line; update it deliberately and re-run the Python/Docker validation matrix.
+The image is built from the repository checkout; Docker is not required for the pip-installed single-database viewer.
 
-## Security and verification invariants
+## Security model and limitations
 
-1. Strict-audit alignment remains the default for comparisons.
-2. Semantic alignment may assist investigation, but must never authorize a match or downgrade a strict-audit finding.
-3. Source identity is part of the comparison context and is included in exported/report metadata.
-4. The viewer performs no uploads, telemetry, or automatic network calls.
-5. Existing single-database endpoint behavior remains backward compatible.
-6. Source database bytes and metadata are not modified by viewer reads.
+The viewer exposes trace contents, which may include prompts, tool inputs, outputs, and sensitive business or personal data.
 
-## Delivery sequence
+- Keep the default loopback bind unless you have deliberately designed and secured a network deployment.
+- The viewer does **not** provide user authentication or authorization. A Host allow-list is a DNS-rebinding defense, not authentication.
+- Do not publish the port on a public interface or attach the container to an untrusted shared Docker network.
+- Source databases are opened with SQLite URI `mode=ro`; viewer reads do not invoke the store's schema initialization or writer lifecycle.
+- API responses disable caching and MIME sniffing. Trace- and source-derived strings are escaped before HTML rendering.
+- The viewer performs no telemetry, upload, or automatic network calls.
 
-1. Add source registry and source-health model with unit tests.
-2. Add source-aware run listing and run-detail routing.
-3. Add cross-source strict-audit diffing and duplicate-ID tests.
-4. Update the HTML viewer with source labels, cross-source comparison, and source-health status.
-5. Add security and read-only behavior tests.
-6. Add Dockerfile, Compose example, and local-only documentation.
-7. Run the complete Python test/lint/type-check matrix, validate the Docker build/Compose config, and review all CI results before merging.
+## API overview
 
-## Acceptance criteria
+In multi-source mode:
 
-- Existing single-database tests pass unchanged.
-- Multiple configured databases appear in one viewer with stable source labels.
-- Runs can be inspected and compared across different databases.
-- Duplicate UUIDs are handled deterministically through explicit source identity.
-- An unhealthy database does not take down healthy sources.
-- Read-only behavior and loopback/Host protections have automated regression tests.
-- Docker/Compose works with explicitly mounted local databases and does not require a hosted control plane.
+- `GET /api/sources` reports configured source health without returning filesystem paths.
+- `GET /api/runs` aggregates run metadata and attaches source IDs and labels.
+- `GET /api/runs/{run_id}?source={source_id}` loads a run from a named source.
+- `GET /api/diff?golden={id}&golden_source={source}&candidate={id}&candidate_source={source}` compares runs from either the same or different databases.
+
+Strict-audit alignment remains authoritative. The viewer does not turn semantic suggestions into verification or claim that recorded content is true.
+
+## Package validation
+
+The CI workflow builds a wheel from the current repository revision, installs it in a fresh virtual environment, imports the viewer module, verifies that the packaged `index.html` resource exists, and invokes `dpk ui --help`. This verifies packaging of the current source revision for a future release; it does not claim that the already-published `0.9.2` wheel contains the newer multi-database implementation.

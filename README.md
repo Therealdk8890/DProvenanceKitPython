@@ -34,6 +34,43 @@ Want to see the gate run on a pull request? Try the [dpk-gate-demo](https://gith
 
 > Working in Swift / on-device Apple AI? **[DProvenanceKit](https://github.com/Therealdk8890/DProvenanceKit)** — same recording / diff / gate model, plus CryptoKit attestation (`DPK-BINARY-V1` + ECDSA P-256 DER), proof packs, and a Foundation Models adapter. **Python can sign/verify the same `DPK-BINARY-V1` format** via `pip install dprovenancekit[crypto]` (software P-256; no Secure Enclave / proof packs).
 
+## Self-hosted trace workbench
+
+The Python SDK includes a local web viewer. The published `0.9.2` package supports the existing single-database viewer; the multi-database workbench described here was added after that release and will be included in a subsequent package release. To use multi-database mode before that release, install the current repository checkout as shown below. The viewer runs on your machine; there is no hosted control plane, account, upload, or telemetry requirement.
+
+With the published `0.9.2` package, open one database:
+
+```bash
+python -m pip install "dprovenancekit==0.9.2"
+dpk ui --db .dprovenance/traces.sqlite
+```
+
+Then open [http://localhost:8080](http://localhost:8080). The server binds to loopback by default.
+
+To use the newer multi-database mode before its next PyPI release, install the current repository checkout:
+
+```bash
+git clone https://github.com/Therealdk8890/DProvenanceKitPython.git
+cd DProvenanceKitPython
+python -m pip install .
+```
+
+Then repeat `--source ID=LABEL=PATH` for each database:
+
+```bash
+dpk ui \
+  --source prod=Production=/data/production.sqlite \
+  --source staging=Staging=/data/staging.sqlite
+```
+
+The viewer shows source health, aggregates runs, and supports strict-audit comparisons across sources. Each source is explicitly configured; the viewer does not scan directories. Database reads use SQLite read-only mode. Existing single-database `--db` usage remains supported.
+
+**Security:** traces can contain prompts, tool inputs, outputs, and other sensitive data. Keep the default loopback bind. The viewer does not provide user authentication; do not expose it on a public or untrusted network. For a hardened local container deployment, see [the workbench deployment guide](docs/SELF_HOSTED_WORKBENCH.md).
+
+CI builds a wheel from the current repository revision, installs it into a clean virtual environment, and verifies the `dpk ui` entry point and packaged HTML. This protects the next package release; it does not retroactively add multi-database support to the already-published `0.9.2` artifact.
+
+---
+
 ---
 
 ## The gap request-level observability leaves open

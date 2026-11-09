@@ -176,7 +176,7 @@ def create_handler(db_path: Optional[str] = None, allowed_hosts=None, sources=No
                         "status": "healthy",
                         "run_count": count,
                     })
-                except Exception as exc:
+                except Exception:
                     results.append({
                         "source_id": source.source_id,
                         "label": source.label,

@@ -164,6 +164,7 @@ def create_handler(db_path: str = None, allowed_hosts=None, sources=None):
                     results.append({
                         "source_id": source.source_id,
                         "label": source.label,
+                        "multi_source": multi_source,
                         "status": "healthy",
                         "run_count": count,
                     })
@@ -171,6 +172,7 @@ def create_handler(db_path: str = None, allowed_hosts=None, sources=None):
                     results.append({
                         "source_id": source.source_id,
                         "label": source.label,
+                        "multi_source": multi_source,
                         "status": "error",
                         "error": str(exc),
                     })

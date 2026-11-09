@@ -20,6 +20,24 @@ The Python SDK already has framework adapters for LangChain, LlamaIndex, OpenAI 
 
 ## Proposed architecture
 
+### CLI usage
+
+Single-database mode remains unchanged:
+
+```bash
+dpk ui --db .dprovenance/traces.sqlite
+```
+
+Multi-database mode is explicit; repeat `--source ID=LABEL=PATH` for each local database:
+
+```bash
+dpk ui \
+  --source prod=Production=/data/production.sqlite \
+  --source staging=Staging=/data/staging.sqlite
+```
+
+Source IDs must be unique and use letters, digits, dots, underscores, or hyphens. Labels are display-only. The viewer opens each path read-only and does not copy or upload trace contents.
+
 ### 1. Explicit source registry
 
 Add a small immutable source configuration model:

@@ -18,12 +18,4 @@ USER 10001:10001
 EXPOSE 8080
 
 ENTRYPOINT ["dpk"]
-CMD [
-  "ui",
-  "--source", "primary=Traces=/traces/traces.sqlite",
-  "--host", "0.0.0.0",
-  "--port", "8080",
-  "--allow-host", "localhost",
-  "--allow-host", "127.0.0.1",
-  "--allow-host", "::1"
-]
+CMD ["ui", "--source", "primary=Traces=/traces/traces.sqlite", "--host", "0.0.0.0", "--port", "8080", "--allow-host", "localhost", "--allow-host", "127.0.0.1", "--allow-host", "::1"]

@@ -15,7 +15,7 @@ Swift package release tag and GitHub Release. Announce the product release as co
 after both publication paths are confirmed. If either path fails, report each SDK's status
 separately. Never reuse or rewrite a published or failed tag.
 
-The current 0.9.2 release candidates are being prepared in [Python PR #93](https://github.com/Therealdk8890/DProvenanceKitPython/pull/93) and [Swift PR #142](https://github.com/Therealdk8890/DProvenanceKit/pull/142). Neither is published by those PRs.
+The coordinated 0.9.2 Python and Swift releases have been published. The next coordinated product release is 0.9.3; Python release preparation includes the multi-database workbench, while Swift must independently complete its own release checks and publish the matching 0.9.3 tag. Do not describe the product release as coordinated until both publication paths are confirmed.
 
 ## One command (manual)
 

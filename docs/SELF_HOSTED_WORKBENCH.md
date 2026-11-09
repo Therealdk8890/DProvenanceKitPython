@@ -1,17 +1,17 @@
 # Self-hosted trace workbench
 
-The Python SDK has a local web viewer for existing DProvenanceKit SQLite trace databases. The published `0.9.2` package contains the original single-database viewer. The multi-database workbench described below was added to the repository after that release and will ship in a subsequent package release.
+The Python SDK has a local web viewer for existing DProvenanceKit SQLite trace databases. The published `0.9.2` package contains the original single-database viewer. The multi-database workbench described below is included in the `0.9.3` release candidate and will be available from PyPI after that release is published.
 
 ## Install
 
-For the published single-database viewer:
+For the currently published single-database viewer:
 
 ```bash
 python -m pip install "dprovenancekit==0.9.2"
 dpk ui --db .dprovenance/traces.sqlite
 ```
 
-To use the new multi-database mode before its next PyPI release, install the current repository checkout:
+To use the `0.9.3` candidate's multi-database mode before PyPI publication, install the current repository checkout:
 
 ```bash
 git clone https://github.com/Therealdk8890/DProvenanceKitPython.git
@@ -82,4 +82,4 @@ Strict-audit alignment remains authoritative. The viewer does not turn semantic 
 
 ## Package validation
 
-The CI workflow builds a wheel from the current repository revision, installs it in a fresh virtual environment, imports the viewer module, verifies that the packaged `index.html` resource exists, and invokes `dpk ui --help`. This verifies packaging of the current source revision for a future release; it does not claim that the already-published `0.9.2` wheel contains the newer multi-database implementation.
+The CI workflow builds a wheel from the current repository revision, installs it in a fresh virtual environment, imports the viewer module, verifies that the packaged `index.html` resource exists, and invokes `dpk ui --help`. This verifies packaging of the `0.9.3` release candidate; it does not claim that the already-published `0.9.2` wheel contains the newer multi-database implementation.

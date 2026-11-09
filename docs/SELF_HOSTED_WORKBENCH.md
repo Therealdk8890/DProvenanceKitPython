@@ -48,7 +48,9 @@ A duplicate run UUID across two configured databases must remain unambiguous bec
 - Treat every configured database as read-only input.
 - A missing, unreadable, malformed, or schema-incompatible database must produce a visible source-health error while healthy sources remain available.
 - Do not silently omit a source from the source list or run index.
-- Do not create, migrate, checkpoint, or otherwise mutate source files as part of viewer reads. Verify the existing SQLite store open behavior before selecting the read-only connection strategy.
+- Do not create, migrate, checkpoint, or otherwise mutate source files as part of viewer reads.
+- Do not use `SQLiteTraceStore(..., start_writer=False)` as the read path: its constructor still runs `_create_schema()` (including DDL, index creation, schema-version updates, and write-behind reconciliation), and `close()` calls writer shutdown/flush.
+- Implement a dedicated read-only reader using SQLite URI `mode=ro` (with URI-safe path construction), and query the existing schema without invoking store initialization or writer lifecycle methods. Validate schema compatibility with read-only metadata queries before serving a source.
 - Preserve the loopback default and Host-header allow-list. A Docker deployment must document that non-loopback exposure requires an explicit security boundary.
 
 ### 4. UI behavior

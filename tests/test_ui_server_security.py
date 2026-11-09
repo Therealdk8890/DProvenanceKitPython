@@ -65,7 +65,7 @@ def test_dynamic_trace_ids_are_not_interpolated_into_inline_javascript():
     assert 'onchange="loadDiff(' not in html
     assert "compareSelect.addEventListener('change'" in html
     assert "fetch('/api/diff?' + params.toString())" in html
-    assert "fetch(`/api/runs/${encodeURIComponent(runId)}${sourceQuery}`)" in html
+    assert "const runUrl = '/api/runs/' + encodeURIComponent(runId) + sourceQuery" in html
 
 
 def test_run_picker_uses_keyboard_accessible_buttons():

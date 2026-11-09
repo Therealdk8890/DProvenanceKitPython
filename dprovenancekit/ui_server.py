@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 from urllib.parse import parse_qs, urlparse
+from typing import Optional
 
 from .event import AnyTraceableEvent
 from .ui_reader import ReadOnlySQLiteTraceReader
@@ -77,7 +78,7 @@ def _host_only(host_header: str) -> str:
     return host_header.rsplit(":", 1)[0] if ":" in host_header else host_header
 
 
-def create_handler(db_path: str = None, allowed_hosts=None, sources=None):
+def create_handler(db_path: Optional[str] = None, allowed_hosts=None, sources=None):
     """Create a handler for legacy single-db mode or explicit multi-source mode.
 
     Existing positional/keyword db_path calls remain supported. In multi-source
@@ -325,14 +326,14 @@ def create_handler(db_path: str = None, allowed_hosts=None, sources=None):
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
-def create_server(db_path: str = None, port: int = 8080, host: str = "127.0.0.1", sources=None):
+def create_server(db_path: Optional[str] = None, port: int = 8080, host: str = "127.0.0.1", sources=None):
     """Build a loopback-bound viewer unless the caller explicitly opts out."""
     allowed_hosts = _LOOPBACK_HOSTS if host in _LOOPBACK_HOSTS else None
     handler = create_handler(db_path, allowed_hosts, sources=sources)
     return ThreadingHTTPServer((host, port), handler)
 
 
-def run_ui_server(db_path: str = None, port: int = 8080, host: str = "127.0.0.1", sources=None):
+def run_ui_server(db_path: Optional[str] = None, port: int = 8080, host: str = "127.0.0.1", sources=None):
     server = create_server(db_path, port, host, sources=sources)
     display_host = "localhost" if host == "127.0.0.1" else host
     serving = f"{len(sources)} configured sources" if sources is not None else db_path

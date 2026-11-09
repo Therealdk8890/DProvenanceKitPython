@@ -159,7 +159,7 @@
             
             try {
                 const sourceQuery = sourceId ? `?source=${encodeURIComponent(sourceId)}` : '';
-                const response = await fetch(`/api/runs/${encodeURIComponent(runId)}${esc(sourceQuery)}`);
+                const response = await fetch(`/api/runs/${encodeURIComponent(runId)}${sourceQuery}`);
                 const run = await response.json();
                 
                 if (run.error) {
@@ -180,7 +180,7 @@
                         <h2>Trace: ${esc(run.context_id || 'Unknown')}</h2>
                         <div>
                             <label for="compare-select" style="font-size: 14px; font-weight: 500; margin-right: 8px;">Compare against baseline:</label>
-                            <select id="compare-select" style="padding: 6px; border-radius: 4px; border: 1px solid #d1d5db;" onchange="loadDiff('${esc(run.run_id)}', '${esc(run.source_id || '')}', this.value)">
+                            <select id="compare-select" style="padding: 6px; border-radius: 4px; border: 1px solid #d1d5db;">
                                 ${compareOptions}
                             </select>
                         </div>
@@ -213,6 +213,10 @@
                 
                 html += `</div>`;
                 viewEl.innerHTML = html;
+                const compareSelect = viewEl.querySelector('#compare-select');
+                compareSelect.addEventListener('change', () =>
+                    loadDiff(run.run_id, run.source_id || '', compareSelect.value)
+                );
                 
             } catch (error) {
                 console.error("Error fetching run details:", error);
@@ -239,7 +243,7 @@
                 });
                 if (goldenSourceId) params.set('golden_source', goldenSourceId);
                 if (candidateSourceId) params.set('candidate_source', candidateSourceId);
-                const response = await fetch(`/api/diff?${esc(params.toString())}`);
+                const response = await fetch('/api/diff?' + params.toString());
                 const result = await response.json();
                 
                 if (result.error) {
@@ -264,7 +268,7 @@
                         <h2>Unified Diff View</h2>
                         <div>
                             <label for="compare-select" style="font-size: 14px; font-weight: 500; margin-right: 8px;">Baseline (Golden):</label>
-                            <select id="compare-select" style="padding: 6px; border-radius: 4px; border: 1px solid #d1d5db;" onchange="loadDiff('${esc(candidateId)}', '${esc(candidateSourceId || '')}', this.value)">
+                            <select id="compare-select" style="padding: 6px; border-radius: 4px; border: 1px solid #d1d5db;">
                                 ${compareOptions}
                             </select>
                         </div>
@@ -306,6 +310,10 @@
                 
                 html += `</div>`;
                 viewEl.innerHTML = html;
+                const compareSelect = viewEl.querySelector('#compare-select');
+                compareSelect.addEventListener('change', () =>
+                    loadDiff(candidateId, candidateSourceId || '', compareSelect.value)
+                );
                 
             } catch (error) {
                 console.error("Error fetching diff:", error);

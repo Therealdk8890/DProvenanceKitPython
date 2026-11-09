@@ -65,6 +65,10 @@
                 .replace(/'/g, '&#39;');
         }
 
+        function sourceLabelText(label) {
+            return label ? '[' + label + ']' : '';
+        }
+
         // SQLite metadata is stored in microseconds, while detailed event payloads use
         // seconds. Accept both (and ordinary JavaScript milliseconds) so every viewer
         // surface renders a useful date instead of exposing a raw epoch or "Invalid Date".
@@ -94,10 +98,11 @@
                 const sourceStatus = document.getElementById('source-status');
                 if (multiSourceMode) {
                     sourceStatus.innerHTML = sources.map(source =>
-                        `<div>${esc(source.label)}: <strong>${esc(source.status)}</strong>${
-                            source.status === 'error' ? ` — ${esc(source.error || 'Unavailable')}` :
-                            ` — ${esc(source.run_count)} runs`
-                        }</div>`
+                        `<div>${esc(source.label)}: <strong>${esc(source.status)}</strong>${esc(
+                            source.status === 'error'
+                                ? ' — ' + (source.error || 'Unavailable')
+                                : ' — ' + source.run_count + ' runs'
+                        )}</div>`
                     ).join('');
                 }
                 
@@ -122,7 +127,7 @@
                     button.innerHTML = `
                         <div class="run-title">${esc(run.context_id || 'Unknown Context')}</div>
                         <div class="run-meta">
-                            ${multiSourceMode ? `${esc(run.source_label)} · ` : ''}
+                            ${esc(multiSourceMode ? run.source_label + ' · ' : '')}
                             ${esc(formatTimestamp(run.start_time))}<br>
                             Events: ${esc(run.event_count)}
                         </div>
@@ -154,7 +159,7 @@
             
             try {
                 const sourceQuery = sourceId ? `?source=${encodeURIComponent(sourceId)}` : '';
-                const response = await fetch(`/api/runs/${encodeURIComponent(runId)}${sourceQuery}`);
+                const response = await fetch(`/api/runs/${encodeURIComponent(runId)}${esc(sourceQuery)}`);
                 const run = await response.json();
                 
                 if (run.error) {
@@ -165,8 +170,8 @@
                 let compareOptions = `<option value="">None (Single Trace View)</option>`;
                 allRuns.forEach(r => {
                     if (r.run_id !== run.run_id || (r.source_id || '') !== (run.source_id || '')) {
-                        const value = `${r.source_id || ''}|${r.run_id}`;
-                        compareOptions += `<option value="${esc(value)}">${esc(r.context_id || r.run_id)} ${r.source_label ? `[${esc(r.source_label)}]` : ''} (${esc(formatTimestamp(r.start_time))})</option>`;
+                        const value = (r.source_id || '') + '|' + r.run_id;
+                        compareOptions += `<option value="${esc(value)}">${esc(r.context_id || r.run_id)} ${esc(sourceLabelText(r.source_label))} (${esc(formatTimestamp(r.start_time))})</option>`;
                     }
                 });
 
@@ -181,7 +186,7 @@
                         </div>
                     </div>
                     <p class="run-meta" style="margin-bottom: 20px;">
-                        ${run.source_label ? `Source: ${esc(run.source_label)}<br>` : ''}
+                        ${esc(run.source_label ? 'Source: ' + run.source_label : '')}<br>
                         Run ID: ${esc(run.run_id)}<br>
                         Fingerprint: ${esc(run.fingerprint)}
                     </p>
@@ -234,7 +239,7 @@
                 });
                 if (goldenSourceId) params.set('golden_source', goldenSourceId);
                 if (candidateSourceId) params.set('candidate_source', candidateSourceId);
-                const response = await fetch(`/api/diff?${params.toString()}`);
+                const response = await fetch(`/api/diff?${esc(params.toString())}`);
                 const result = await response.json();
                 
                 if (result.error) {
@@ -248,9 +253,9 @@
                 let compareOptions = `<option value="">None (Single Trace View)</option>`;
                 allRuns.forEach(r => {
                     if (r.run_id !== candidateId || (r.source_id || '') !== (candidateSourceId || '')) {
-                        const value = `${r.source_id || ''}|${r.run_id}`;
+                        const value = (r.source_id || '') + '|' + r.run_id;
                         let selected = r.run_id === goldenId && (r.source_id || '') === goldenSourceId ? 'selected' : '';
-                        compareOptions += `<option value="${esc(value)}" ${selected}>${esc(r.context_id || r.run_id)} ${r.source_label ? `[${esc(r.source_label)}]` : ''} (${esc(formatTimestamp(r.start_time))})</option>`;
+                        compareOptions += `<option value="${esc(value)}" ${selected}>${esc(r.context_id || r.run_id)} ${esc(sourceLabelText(r.source_label))} (${esc(formatTimestamp(r.start_time))})</option>`;
                     }
                 });
 
@@ -265,8 +270,8 @@
                         </div>
                     </div>
                     <p class="run-meta" style="margin-bottom: 20px;">
-                        <strong>Candidate:</strong> ${esc(candidateRun.context_id)} ${candidateRun.source_label ? `[${esc(candidateRun.source_label)}]` : ''}<br>
-                        <strong>Golden:</strong> ${esc(goldenRun.context_id)} ${goldenRun.source_label ? `[${esc(goldenRun.source_label)}]` : ''}
+                        <strong>Candidate:</strong> ${esc(candidateRun.context_id)} ${esc(sourceLabelText(candidateRun.source_label))}<br>
+                        <strong>Golden:</strong> ${esc(goldenRun.context_id)} ${esc(sourceLabelText(goldenRun.source_label))}
                     </p>
                     <div class="event-list">
                 `;

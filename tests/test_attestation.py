@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 import base64
 import copy
 from pathlib import Path
@@ -142,7 +144,7 @@ def test_round_trip_sign_verify():
     )
     doc = signed_document(trace, key, issued_at_unix_microseconds=1_700_000_000_123_456)
     assert doc.attestation.trace_digest == trace_digest_hex(trace)
-    assert doc.attestation.key_id == __import__("hashlib").sha256(
+    assert doc.attestation.key_id == hashlib.sha256(
         key.public_key_x963_representation
     ).hexdigest()
 

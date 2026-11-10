@@ -205,7 +205,7 @@ class StructuralAlignmentEngineV1:
     def align(
         self,
         target_events: Iterable[Union[StructuralAlignmentNode, Mapping[str, Any]]],
-        candidate_events: Iterable[StructuralAlignmentNode | Mapping[str, Any]],
+        candidate_events: Iterable[Union[StructuralAlignmentNode, Mapping[str, Any]]],
     ) -> StructuralAlignmentResult:
         targets = self._coerce_nodes(target_events, "target")
         candidates = self._coerce_nodes(candidate_events, "candidate")

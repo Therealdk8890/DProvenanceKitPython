@@ -309,7 +309,7 @@ class StructuralAlignmentEngineV1:
             suggestion = suggestions.get(ti)
             if mapped_pair is not None:
                 candidate_id: Optional[str] = candidates[mapped_pair.candidate_index].id
-                suggested_id = None
+                suggested_id: Optional[str] = None
                 type_score = mapped_pair.type_score
                 hierarchy_score = mapped_pair.hierarchy_score
                 payload_score = mapped_pair.payload_score

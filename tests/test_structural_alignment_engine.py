@@ -136,3 +136,33 @@ def test_engine_is_separate_from_legacy_alignment_engine() -> None:
     from dprovenancekit.alignment_engine import TraceAlignmentEngine
 
     assert StructuralAlignmentEngineV1 is not TraceAlignmentEngine
+
+
+def test_parent_matching_is_topological_even_when_parent_follows_child_in_input() -> None:
+    target = [
+        {"id": "child", "parent_id": "root", "type": "CHILD", "payload_signature": "c"},
+        {"id": "root", "parent_id": None, "type": "ROOT", "payload_signature": "r"},
+    ]
+    candidate = [
+        {"id": "child-c", "parent_id": "root-c", "type": "CHILD", "payload_signature": "c"},
+        {"id": "root-c", "parent_id": None, "type": "ROOT", "payload_signature": "r"},
+    ]
+    result = StructuralAlignmentEngineV1().align(target, candidate)
+    actual = {v.target_id: v for v in result.verdicts}
+    assert actual["root"].candidate_id == "root-c"
+    assert actual["child"].candidate_id == "child-c"
+    assert actual["child"].hierarchy_score == 1.0
+
+
+def test_equal_score_assignment_uses_candidate_sequence_then_target_sequence() -> None:
+    target = [
+        {"id": "target-1", "parent_id": None, "type": "STEP", "payload_signature": "same"},
+        {"id": "target-2", "parent_id": None, "type": "STEP", "payload_signature": "same"},
+    ]
+    candidate = [
+        {"id": "candidate-1", "parent_id": None, "type": "STEP", "payload_signature": "same"},
+        {"id": "candidate-2", "parent_id": None, "type": "STEP", "payload_signature": "same"},
+    ]
+    result = StructuralAlignmentEngineV1().align(target, candidate)
+    actual = {v.target_id: v.candidate_id for v in result.verdicts}
+    assert actual == {"target-1": "candidate-1", "target-2": "candidate-2"}

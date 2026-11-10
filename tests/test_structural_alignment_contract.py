@@ -26,7 +26,7 @@ def test_structural_alignment_expected_metrics_are_internally_consistent() -> No
         expected = case["expected"]
         tp, fp, fn = expected["tp"], expected["fp"], expected["fn"]
         denominator = 2 * tp + fp + fn
-        computed_f1 = (2 * tp / denominator) if denominator else 0.0
+        computed_f1 = (2 * tp / denominator) if denominator else 1.0
         assert computed_f1 == expected["global_f1"], case["id"]
 
 
@@ -41,7 +41,7 @@ def test_inclusive_threshold_mapping_does_not_override_hierarchy_gate() -> None:
         if verdict["target_id"] == "child"
     )
 
-    assert case["configuration"]["min_node_conformance"] == 0.7
+    assert case["configuration"]["min_node_conformance"] == 7000
     assert child["node_score"] == 0.7
     assert child["matched"] is True
     assert child["candidate_id"] == "child_c"
@@ -77,6 +77,15 @@ def test_below_threshold_hierarchy_candidate_is_diagnostic_not_a_match() -> None
     assert combined["suggested_candidate_id"] == "cb"
     assert combined["matched"] is False
     assert combined["reason"] == "PARENT_HIERARCHY_MISMATCH"
+
+
+def test_empty_trace_metric_policy_is_explicit() -> None:
+    doc = json.loads(VECTORS.read_text(encoding="utf-8"))
+    assert doc["metric"]["zero_denominator"] == 1
+    empty = next(case for case in doc["cases"] if case["id"] == "empty_both_traces")
+    assert empty["expected"]["global_f1"] == 1.0
+    assert empty["expected"]["empty_input"] is True
+    assert empty["expected"]["conforming"] is False
 
 
 def test_assignment_and_suggestion_policy_is_explicit() -> None:

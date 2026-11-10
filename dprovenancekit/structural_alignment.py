@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
 
 class StructuralAlignmentInputError(ValueError):
@@ -99,7 +99,7 @@ class StructuralAlignmentEngineV1:
 
     @staticmethod
     def _coerce_nodes(
-        events: Iterable[StructuralAlignmentNode | Mapping[str, Any]],
+        events: Iterable[Union[StructuralAlignmentNode, Mapping[str, Any]]],
         side: str,
     ) -> List[StructuralAlignmentNode]:
         nodes: List[StructuralAlignmentNode] = []
@@ -371,7 +371,7 @@ class StructuralAlignmentEngineV1:
         global_f1 = (2 * tp / denominator) if denominator else 0.0
         hierarchy_gate_passed = all(
             pair.hierarchy_score == 1 for pair in mapped_pairs.values()
-        ) and len(mapped_pairs) == len(targets)
+        )
         order_gate_passed = not reordered
         all_required_nodes_meet_score_threshold = len(mapped_pairs) == len(targets)
         conforming = (

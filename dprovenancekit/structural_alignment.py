@@ -25,19 +25,25 @@ class StructuralAlignmentConfig:
     min_global_f1_floor: float = 0.95
 
     def __post_init__(self) -> None:
-        weights = (
-            self.type_weight,
-            self.hierarchy_weight,
-            self.payload_weight,
+        values = (
+            ("type_weight", self.type_weight),
+            ("hierarchy_weight", self.hierarchy_weight),
+            ("payload_weight", self.payload_weight),
+            ("min_node_conformance", self.min_node_conformance),
+            ("min_global_f1_floor", self.min_global_f1_floor),
         )
-        if any(not 0.0 <= weight <= 1.0 for weight in weights):
-            raise StructuralAlignmentInputError("component weights must be in [0, 1]")
-        if sum(Decimal(str(weight)) for weight in weights) != Decimal("1"):
-            raise StructuralAlignmentInputError("component weights must sum to 1")
-        if not 0.0 <= self.min_node_conformance <= 1.0:
-            raise StructuralAlignmentInputError("min_node_conformance must be in [0, 1]")
-        if not 0.0 <= self.min_global_f1_floor <= 1.0:
-            raise StructuralAlignmentInputError("min_global_f1_floor must be in [0, 1]")
+        for name, value in values:
+            try:
+                scaled = Decimal(str(value)) * Decimal(10000)
+            except Exception as exc:
+                raise StructuralAlignmentInputError(f"{name} must be an exact basis-point value") from exc
+            if not scaled.is_finite() or scaled != scaled.to_integral_value():
+                raise StructuralAlignmentInputError(f"{name} must be exactly representable in basis points")
+            if not 0 <= int(scaled) <= 10000:
+                raise StructuralAlignmentInputError(f"{name} must be in [0, 1]")
+        weight_bps = [int(Decimal(str(value)) * Decimal(10000)) for _, value in values[:3]]
+        if sum(weight_bps) != 10000:
+            raise StructuralAlignmentInputError("component weights must sum to 10000 basis points")
 
 
 @dataclass(frozen=True)
@@ -71,6 +77,8 @@ class StructuralAlignmentResult:
     hierarchy_gate_passed: bool
     order_gate_passed: bool
     all_required_nodes_meet_score_threshold: bool
+    f1_gate_passed: bool
+    empty_input: bool
     conforming: bool
     verdicts: Tuple[StructuralNodeVerdict, ...]
 
@@ -82,7 +90,7 @@ class _ScoredPair:
     type_score: int
     hierarchy_score: int
     payload_score: int
-    score: Decimal
+    score: int
 
 
 class StructuralAlignmentEngineV1:
@@ -92,10 +100,11 @@ class StructuralAlignmentEngineV1:
 
     def __init__(self, config: Optional[StructuralAlignmentConfig] = None) -> None:
         self.config = config or StructuralAlignmentConfig()
-        self._type_weight = Decimal(str(self.config.type_weight))
-        self._hierarchy_weight = Decimal(str(self.config.hierarchy_weight))
-        self._payload_weight = Decimal(str(self.config.payload_weight))
-        self._threshold = Decimal(str(self.config.min_node_conformance))
+        self._type_weight_bps = int(Decimal(str(self.config.type_weight)) * 10000)
+        self._hierarchy_weight_bps = int(Decimal(str(self.config.hierarchy_weight)) * 10000)
+        self._payload_weight_bps = int(Decimal(str(self.config.payload_weight)) * 10000)
+        self._threshold_bps = int(Decimal(str(self.config.min_node_conformance)) * 10000)
+        self._global_f1_floor_bps = int(Decimal(str(self.config.min_global_f1_floor)) * 10000)
 
     @staticmethod
     def _coerce_nodes(
@@ -189,9 +198,9 @@ class StructuralAlignmentEngineV1:
                 mapped_parent is not None and candidate.parent_id == mapped_parent
             )
         score = (
-            self._type_weight * type_score
-            + self._hierarchy_weight * hierarchy_score
-            + self._payload_weight * payload_score
+            self._type_weight_bps * type_score
+            + self._hierarchy_weight_bps * hierarchy_score
+            + self._payload_weight_bps * payload_score
         )
         return _ScoredPair(
             target_index=-1,
@@ -226,7 +235,7 @@ class StructuralAlignmentEngineV1:
             available_candidates = [
                 i for i in range(len(candidates)) if i not in assigned_candidates
             ]
-            eligible: List[Tuple[Decimal, int, str, int, str, _ScoredPair]] = []
+            eligible: List[Tuple[int, int, str, int, str, _ScoredPair]] = []
             for ti in depth_targets:
                 for ci in available_candidates:
                     base = self._score_pair(
@@ -240,7 +249,7 @@ class StructuralAlignmentEngineV1:
                         payload_score=base.payload_score,
                         score=base.score,
                     )
-                    if pair.score >= self._threshold:
+                    if pair.score >= self._threshold_bps:
                         eligible.append(
                             (
                                 -pair.score,
@@ -270,7 +279,7 @@ class StructuralAlignmentEngineV1:
             remaining = [
                 ci for ci in range(len(candidates)) if ci not in assigned_candidates
             ]
-            ranked: List[Tuple[Decimal, int, str, _ScoredPair]] = []
+            ranked: List[Tuple[int, int, str, _ScoredPair]] = []
             for ci in remaining:
                 scored = self._score_pair(
                     target, candidates[ci], mapped_target_to_candidate
@@ -313,7 +322,7 @@ class StructuralAlignmentEngineV1:
                 type_score = mapped_pair.type_score
                 hierarchy_score = mapped_pair.hierarchy_score
                 payload_score = mapped_pair.payload_score
-                node_score = float(mapped_pair.score)
+                node_score = mapped_pair.score / 10000
                 matched = True
                 if hierarchy_score == 0:
                     gate_passed = False
@@ -331,7 +340,7 @@ class StructuralAlignmentEngineV1:
                 type_score = suggested_pair.type_score
                 hierarchy_score = suggested_pair.hierarchy_score
                 payload_score = suggested_pair.payload_score
-                node_score = float(suggested_pair.score)
+                node_score = suggested_pair.score / 10000
                 matched = False
                 gate_passed = False
                 if hierarchy_score == 0:
@@ -366,7 +375,12 @@ class StructuralAlignmentEngineV1:
         fn = len(targets) - tp
         fp = len(candidates) - len(assigned_candidates)
         denominator = 2 * tp + fp + fn
-        global_f1 = (2 * tp / denominator) if denominator else 0.0
+        empty_input = not targets and not candidates
+        global_f1 = (2 * tp / denominator) if denominator else 1.0
+        f1_gate_passed = (
+            True if denominator == 0
+            else 2 * tp * 10000 >= self._global_f1_floor_bps * denominator
+        )
         hierarchy_gate_passed = all(
             pair.hierarchy_score == 1 for pair in mapped_pairs.values()
         )
@@ -374,7 +388,8 @@ class StructuralAlignmentEngineV1:
         all_required_nodes_meet_score_threshold = len(mapped_pairs) == len(targets)
         conforming = (
             all_required_nodes_meet_score_threshold
-            and global_f1 >= self.config.min_global_f1_floor
+            and not empty_input
+            and f1_gate_passed
             and hierarchy_gate_passed
             and order_gate_passed
         )
@@ -388,6 +403,8 @@ class StructuralAlignmentEngineV1:
             all_required_nodes_meet_score_threshold=(
                 all_required_nodes_meet_score_threshold
             ),
+            f1_gate_passed=f1_gate_passed,
+            empty_input=empty_input,
             conforming=conforming,
             verdicts=tuple(verdicts),
         )

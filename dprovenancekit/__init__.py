@@ -127,6 +127,19 @@ from .alignment_models import (
 )
 from .alignment_meta import AlignmentMetaEvent, MetaEventKind
 from .alignment_contract import AlignmentExecutionContract
+
+# Deterministic configuration authorization (experimental v1)
+from .config_authorization import (
+    ConfigurationAuthorizationError,
+    canonical_configuration_bytes,
+    configuration_fingerprint,
+    parse_configuration_json,
+    verify_pinned_configuration,
+)
+from .signed_config_manifest import (
+    TrustedConfigurationKey,
+    verify_signed_configuration,
+)
 from .alignment_evidence import (
     AlignmentBinding,
     BindingDecision,

@@ -54,22 +54,28 @@ def test_engine_reproduces_every_contract_fixture(case: dict) -> None:
     )
     assert result.global_f1 == pytest.approx(expected["global_f1"])
     assert result.conforming is expected["conforming"]
-    if "f1_gate_passed" in expected:
-        assert result.f1_gate_passed is expected["f1_gate_passed"]
-    if "empty_input" in expected:
-        assert result.empty_input is expected["empty_input"]
-    if "hierarchy_gate_passed" in expected:
-        assert result.hierarchy_gate_passed is expected["hierarchy_gate_passed"]
-    if "order_gate_passed" in expected:
-        assert result.order_gate_passed is expected["order_gate_passed"]
-    if "all_required_nodes_meet_score_threshold" in expected:
-        assert (
-            result.all_required_nodes_meet_score_threshold
-            is expected["all_required_nodes_meet_score_threshold"]
-        )
+    assert result.f1_gate_passed is expected["f1_gate_passed"]
+    assert result.empty_input is expected["empty_input"]
+    assert result.hierarchy_gate_passed is expected["hierarchy_gate_passed"]
+    assert result.order_gate_passed is expected["order_gate_passed"]
+    assert (
+        result.all_required_nodes_meet_score_threshold
+        is expected["all_required_nodes_meet_score_threshold"]
+    )
 
     actual = {verdict.target_id: verdict for verdict in result.verdicts}
-    for expected_verdict in expected["verdicts"]:
+    expected_verdicts = expected["verdicts"]
+    assert len(actual) == len(expected_verdicts), case["id"]
+    assert set(actual) == {item["target_id"] for item in expected_verdicts}, case["id"]
+    for expected_verdict in expected_verdicts:
+        assert all(
+            field in expected_verdict
+            for field in (
+                "candidate_id", "suggested_candidate_id", "type_score",
+                "hierarchy_score", "payload_score", "node_score",
+                "matched", "gate_passed", "reason",
+            )
+        ), case["id"]
         verdict = actual[expected_verdict["target_id"]]
         for field in (
             "candidate_id",
@@ -80,16 +86,8 @@ def test_engine_reproduces_every_contract_fixture(case: dict) -> None:
         ):
             if field in expected_verdict:
                 assert getattr(verdict, field) == expected_verdict[field]
-        for field in (
-            "type_score",
-            "hierarchy_score",
-            "payload_score",
-            "node_score",
-        ):
-            if field in expected_verdict:
-                assert getattr(verdict, field) == pytest.approx(
-                    expected_verdict[field]
-                )
+        for field in ("type_score", "hierarchy_score", "payload_score", "node_score"):
+            assert getattr(verdict, field) == pytest.approx(expected_verdict[field])
 
 
 def test_zero_score_candidate_is_not_emitted_as_diagnostic_suggestion() -> None:

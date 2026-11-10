@@ -305,15 +305,15 @@ class StructuralAlignmentEngineV1:
 
         verdicts: List[StructuralNodeVerdict] = []
         for ti, target in enumerate(targets):
-            pair = mapped_pairs.get(ti)
+            mapped_pair = mapped_pairs.get(ti)
             suggestion = suggestions.get(ti)
-            if pair is not None:
-                candidate_id: Optional[str] = candidates[pair.candidate_index].id
+            if mapped_pair is not None:
+                candidate_id: Optional[str] = candidates[mapped_pair.candidate_index].id
                 suggested_id = None
-                type_score = pair.type_score
-                hierarchy_score = pair.hierarchy_score
-                payload_score = pair.payload_score
-                node_score = float(pair.score)
+                type_score = mapped_pair.type_score
+                hierarchy_score = mapped_pair.hierarchy_score
+                payload_score = mapped_pair.payload_score
+                node_score = float(mapped_pair.score)
                 matched = True
                 if hierarchy_score == 0:
                     gate_passed = False

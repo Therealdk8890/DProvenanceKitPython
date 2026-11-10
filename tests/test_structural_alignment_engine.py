@@ -170,3 +170,8 @@ def test_equal_score_assignment_uses_candidate_sequence_then_target_sequence() -
     result = StructuralAlignmentEngineV1().align(target, candidate)
     actual = {v.target_id: v.candidate_id for v in result.verdicts}
     assert actual == {"target-1": "candidate-1", "target-2": "candidate-2"}
+
+
+def test_configuration_rejects_sub_basis_point_precision() -> None:
+    with pytest.raises(StructuralAlignmentInputError):
+        StructuralAlignmentConfig(min_node_conformance=0.80001)

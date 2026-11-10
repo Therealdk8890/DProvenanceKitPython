@@ -225,3 +225,67 @@ def test_diff_compares_payload_value_not_encoded_hash():
 
     assert diff.summary.modified_events == 1
     assert diff.summary.divergence_points == 1
+
+
+# Alignment snapshot metadata must be validated independently of rendered output.
+def test_alignment_snapshot_rejects_profile_hash_mismatch(monkeypatch):
+    from types import SimpleNamespace
+
+    import pytest
+
+    from dprovenancekit import AlignmentSnapshotValidator, SnapshotValidationError
+    from dprovenancekit.alignment_snapshot import AlignmentSnapshot
+    import dprovenancekit.alignment_snapshot as snapshot_module
+
+    monkeypatch.setattr(snapshot_module, "render_models", lambda _result: [])
+    result = SimpleNamespace(profile_hash="profile-new", engine_version="engine-v1")
+    snapshot = AlignmentSnapshot(
+        profile_hash="profile-old",
+        engine_version="engine-v1",
+        output_alignments_hash=AlignmentSnapshotValidator.compute_alignments_hash([]),
+    )
+
+    with pytest.raises(SnapshotValidationError) as exc:
+        AlignmentSnapshotValidator().validate(result, snapshot)
+    assert exc.value.field == "profile_hash"
+
+
+def test_alignment_snapshot_rejects_engine_version_mismatch(monkeypatch):
+    from types import SimpleNamespace
+
+    import pytest
+
+    from dprovenancekit import AlignmentSnapshotValidator, SnapshotValidationError
+    from dprovenancekit.alignment_snapshot import AlignmentSnapshot
+    import dprovenancekit.alignment_snapshot as snapshot_module
+
+    monkeypatch.setattr(snapshot_module, "render_models", lambda _result: [])
+    result = SimpleNamespace(profile_hash="profile-v1", engine_version="engine-v2")
+    snapshot = AlignmentSnapshot(
+        profile_hash="profile-v1",
+        engine_version="engine-v1",
+        output_alignments_hash=AlignmentSnapshotValidator.compute_alignments_hash([]),
+    )
+
+    with pytest.raises(SnapshotValidationError) as exc:
+        AlignmentSnapshotValidator().validate(result, snapshot)
+    assert exc.value.field == "engine_version"
+
+
+def test_alignment_snapshot_report_only_rejects_metadata_drift(monkeypatch):
+    from types import SimpleNamespace
+
+    from dprovenancekit import AlignmentSnapshotValidator, DriftToleranceMode
+    from dprovenancekit.alignment_snapshot import AlignmentSnapshot
+    import dprovenancekit.alignment_snapshot as snapshot_module
+
+    monkeypatch.setattr(snapshot_module, "render_models", lambda _result: [])
+    result = SimpleNamespace(profile_hash="profile-new", engine_version="engine-v1")
+    snapshot = AlignmentSnapshot(
+        profile_hash="profile-old",
+        engine_version="engine-v1",
+        output_alignments_hash=AlignmentSnapshotValidator.compute_alignments_hash([]),
+    )
+
+    validator = AlignmentSnapshotValidator(DriftToleranceMode.REPORT_ONLY)
+    assert validator.validate(result, snapshot) is False

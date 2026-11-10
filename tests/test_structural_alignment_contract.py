@@ -77,3 +77,20 @@ def test_below_threshold_hierarchy_candidate_is_diagnostic_not_a_match() -> None
     assert combined["suggested_candidate_id"] == "cb"
     assert combined["matched"] is False
     assert combined["reason"] == "PARENT_HIERARCHY_MISMATCH"
+
+
+def test_assignment_and_suggestion_policy_is_explicit() -> None:
+    doc = json.loads(VECTORS.read_text(encoding="utf-8"))
+    assignment = doc["default_configuration"]["assignment"]
+    assert assignment["strategy"] == "parent_first_greedy"
+    assert assignment["candidate_pool"] == "all_unassigned_candidates"
+    assert assignment["candidate_pair_priority"] == [
+        "node_score_desc",
+        "candidate_sequence_asc",
+        "candidate_id_lexical",
+        "target_sequence_asc",
+        "target_id_lexical",
+    ]
+    suggestions = doc["default_configuration"]["diagnostic_suggestions"]
+    assert suggestions["selected_after_eligible_assignment"] is True
+    assert suggestions["suggestions_count_as_mappings"] is False

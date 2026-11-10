@@ -44,13 +44,36 @@ def test_inclusive_threshold_mapping_does_not_override_hierarchy_gate() -> None:
     assert case["configuration"]["min_node_conformance"] == 0.7
     assert child["node_score"] == 0.7
     assert child["matched"] is True
+    assert child["candidate_id"] == "child_c"
+    assert child["suggested_candidate_id"] is None
     assert child["gate_passed"] is False
     assert child["reason"] == "PARENT_HIERARCHY_MISMATCH"
 
-    # The eligible pair contributes to F1, but the independent hierarchy gate fails.
     assert (expected["tp"], expected["fp"], expected["fn"]) == (2, 0, 0)
     assert expected["global_f1"] == 1.0
     assert expected["all_required_nodes_meet_score_threshold"] is True
     assert expected["order_gate_passed"] is True
     assert expected["hierarchy_gate_passed"] is False
     assert expected["conforming"] is False
+
+
+def test_below_threshold_hierarchy_candidate_is_diagnostic_not_a_match() -> None:
+    cases = {case["id"]: case for case in _load_cases()}
+    child = next(
+        verdict for verdict in cases["parent_hierarchy_shift"]["expected"]["verdicts"]
+        if verdict["target_id"] == "child"
+    )
+    assert child["candidate_id"] is None
+    assert child["suggested_candidate_id"] == "child_c"
+    assert child["matched"] is False
+    assert child["node_score"] == 0.7
+    assert child["reason"] == "PARENT_HIERARCHY_MISMATCH"
+
+    combined = next(
+        verdict for verdict in cases["missing_and_hierarchy_drift"]["expected"]["verdicts"]
+        if verdict["target_id"] == "b"
+    )
+    assert combined["candidate_id"] is None
+    assert combined["suggested_candidate_id"] == "cb"
+    assert combined["matched"] is False
+    assert combined["reason"] == "PARENT_HIERARCHY_MISMATCH"

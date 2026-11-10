@@ -42,7 +42,7 @@ EXPECTED_PUBLIC = {
     "trace",
     # Attestation (DPK-BINARY-V1 MVP)
     "AttestableTrace", "AttestableTraceEvent", "SoftwareTraceAttestationKey",
-    "TraceAttestation", "TraceAttestationDocument", "TraceAttestationError",
+    "TraceAttestationSigningKey", "TraceAttestation", "TraceAttestationDocument", "TraceAttestationError",
     "TraceAttestationTrust", "TraceAttestationVerification",
     "TraceAttestationVerificationFailure", "TraceAttestationVerifier",
     "attest", "signed_document", "trace_digest_hex",

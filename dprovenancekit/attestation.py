@@ -54,7 +54,7 @@ import struct
 import uuid
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Protocol, Sequence, Set, Tuple, Union
 
 from .edge import TraceEdge, TraceEdgeType
 
@@ -562,6 +562,26 @@ def _verification_failure_for_trace(
 # ---------------------------------------------------------------------------
 
 
+class TraceAttestationSigningKey(Protocol):
+    """Provider-neutral P-256 signing interface for DPK-BINARY-V1.
+
+    Implementations expose the uncompressed X9.63 public key and return an ASN.1
+    DER-encoded ECDSA signature over the supplied bytes using SHA-256. A provider
+    may keep its private key in software, a TPM, an HSM, or another protected key
+    store. This protocol describes interoperability only; it does not attest
+    where a private key is stored or establish device or provider identity.
+    """
+
+    @property
+    def public_key_x963_representation(self) -> bytes:
+        """Return the P-256 public key as an uncompressed X9.63 point."""
+        ...
+
+    def signature_der(self, data: bytes) -> bytes:
+        """Return an ECDSA-P256-SHA256 signature in ASN.1 DER form."""
+        ...
+
+
 class SoftwareTraceAttestationKey:
     """Software P-256 signing key (X9.63 public key; raw 32-byte private scalar)."""
 
@@ -609,7 +629,7 @@ class SoftwareTraceAttestationKey:
 
 def attest(
     trace: AttestableTrace,
-    key: SoftwareTraceAttestationKey,
+    key: TraceAttestationSigningKey,
     issued_at_unix_microseconds: Optional[int] = None,
 ) -> TraceAttestation:
     """Sign ``trace`` and return a ``TraceAttestation`` envelope."""
@@ -655,7 +675,7 @@ def attest(
 
 def signed_document(
     trace: AttestableTrace,
-    key: SoftwareTraceAttestationKey,
+    key: TraceAttestationSigningKey,
     issued_at_unix_microseconds: Optional[int] = None,
 ) -> TraceAttestationDocument:
     return TraceAttestationDocument(

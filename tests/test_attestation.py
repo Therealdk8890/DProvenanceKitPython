@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 import base64
 import copy
 from pathlib import Path
@@ -14,6 +16,7 @@ from dprovenancekit.attestation import (  # noqa: E402
     AttestableTrace,
     AttestableTraceEvent,
     SoftwareTraceAttestationKey,
+    TraceAttestationSigningKey,
     TraceAttestationDocument,
     TraceAttestationTrust,
     TraceAttestationVerificationFailure,
@@ -141,7 +144,7 @@ def test_round_trip_sign_verify():
     )
     doc = signed_document(trace, key, issued_at_unix_microseconds=1_700_000_000_123_456)
     assert doc.attestation.trace_digest == trace_digest_hex(trace)
-    assert doc.attestation.key_id == __import__("hashlib").sha256(
+    assert doc.attestation.key_id == hashlib.sha256(
         key.public_key_x963_representation
     ).hexdigest()
 
@@ -160,6 +163,42 @@ def test_round_trip_sign_verify():
     assert doc2.verify().is_valid
     assert doc2.attestation.key_id == doc.attestation.key_id
 
+
+
+class _DelegatingExternalSigner:
+    """Test adapter with the same contract an external key provider implements."""
+
+    def __init__(self, key: SoftwareTraceAttestationKey) -> None:
+        self._key = key
+
+    @property
+    def public_key_x963_representation(self) -> bytes:
+        return self._key.public_key_x963_representation
+
+    def signature_der(self, data: bytes) -> bytes:
+        return self._key.signature_der(data)
+
+
+def test_external_signing_provider_protocol(golden_doc: TraceAttestationDocument):
+    software_key = SoftwareTraceAttestationKey()
+    provider: TraceAttestationSigningKey = _DelegatingExternalSigner(software_key)
+
+    doc = signed_document(
+        golden_doc.trace,
+        provider,
+        issued_at_unix_microseconds=1_700_000_000_123_456,
+    )
+
+    embedded = doc.verify()
+    assert embedded.is_valid
+    assert embedded.trust == TraceAttestationTrust.EMBEDDED_KEY_ONLY
+    assert doc.attestation.key_id == __import__("hashlib").sha256(
+        software_key.public_key_x963_representation
+    ).hexdigest()
+
+    trusted = doc.verify(trusted_key_ids={doc.attestation.key_id})
+    assert trusted.is_valid
+    assert trusted.trust == TraceAttestationTrust.TRUSTED_KEY
 
 def test_fail_closed_self_loop():
     key = SoftwareTraceAttestationKey()

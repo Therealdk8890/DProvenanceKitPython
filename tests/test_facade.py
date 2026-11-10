@@ -128,6 +128,14 @@ def test_facade_jsonl_golden_with_multiple_runs_uses_newest(tmp_path, capsys):
     second = tmp_path / "second.jsonl"
     trace.save(second)
 
+    # Timestamps are display metadata and can tie across fast consecutive runs.
+    # Make that case deterministic so the loader must use JSONL append order.
+    for path in (first, second):
+        rows = [json.loads(line) for line in path.read_text().splitlines() if line]
+        for row in rows:
+            row["timestamp"] = 1.0
+        path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+
     combined = tmp_path / "golden.jsonl"
     combined.write_text(first.read_text() + second.read_text())
 

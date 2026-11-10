@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def pyproject_version() -> str:
-    text = (ROOT / "pyproject.toml").read_text()
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
     if not m:
         raise SystemExit("error: version not found in pyproject.toml")
@@ -18,7 +18,7 @@ def pyproject_version() -> str:
 
 
 def init_fallback_version() -> str:
-    text = (ROOT / "dprovenancekit" / "__init__.py").read_text()
+    text = (ROOT / "dprovenancekit" / "__init__.py").read_text(encoding="utf-8")
     m = re.search(r'^    __version__\s*=\s*"([^"]+)"', text, re.M)
     if not m:
         # alternate indentation
@@ -35,8 +35,8 @@ def main() -> int:
     if ver != init_ver:
         errors.append(f"pyproject ({ver}) != __init__ fallback ({init_ver})")
 
-    readme = (ROOT / "README.md").read_text()
-    surface = (ROOT / "docs" / "VERSION_SURFACE.md").read_text()
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    surface = (ROOT / "docs" / "VERSION_SURFACE.md").read_text(encoding="utf-8")
 
     if ver not in surface:
         errors.append(f"docs/VERSION_SURFACE.md does not mention {ver}")

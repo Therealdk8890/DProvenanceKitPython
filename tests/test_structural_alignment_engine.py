@@ -31,15 +31,15 @@ def _engine_for(case: dict) -> StructuralAlignmentEngineV1:
     defaults = _document()["default_configuration"]
     return StructuralAlignmentEngineV1(
         StructuralAlignmentConfig(
-            type_weight=weights["type"],
-            hierarchy_weight=weights["hierarchy"],
-            payload_weight=weights["payload"],
+            type_weight=weights["type"] / 10000,
+            hierarchy_weight=weights["hierarchy"] / 10000,
+            payload_weight=weights["payload"] / 10000,
             min_node_conformance=config.get(
                 "min_node_conformance", defaults["min_node_conformance"]
-            ),
+            ) / 10000,
             min_global_f1_floor=config.get(
                 "min_global_f1_floor", defaults["min_global_f1_floor"]
-            ),
+            ) / 10000,
         )
     )
 
@@ -54,6 +54,10 @@ def test_engine_reproduces_every_contract_fixture(case: dict) -> None:
     )
     assert result.global_f1 == pytest.approx(expected["global_f1"])
     assert result.conforming is expected["conforming"]
+    if "f1_gate_passed" in expected:
+        assert result.f1_gate_passed is expected["f1_gate_passed"]
+    if "empty_input" in expected:
+        assert result.empty_input is expected["empty_input"]
     if "hierarchy_gate_passed" in expected:
         assert result.hierarchy_gate_passed is expected["hierarchy_gate_passed"]
     if "order_gate_passed" in expected:

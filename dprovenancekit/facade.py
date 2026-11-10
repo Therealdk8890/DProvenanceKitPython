@@ -303,9 +303,15 @@ class _TraceFacade:
             by_run: Dict[uuid.UUID, List[TraceEvent]] = {}
             for event in events:
                 by_run.setdefault(event.run_id, []).append(event)
+            # Wall-clock timestamps can tie across runs. Preserve JSONL append order
+            # as the deterministic tie-breaker so the last concatenated run wins.
             newest_events = max(
-                by_run.values(), key=lambda evs: max(e.timestamp for e in evs)
-            )
+                enumerate(by_run.values()),
+                key=lambda item: (
+                    max(event.timestamp for event in item[1]),
+                    item[0],
+                ),
+            )[1]
             newest_events.sort(key=lambda e: e.sequence)
             return TraceRun(
                 run_id=newest_events[0].run_id,

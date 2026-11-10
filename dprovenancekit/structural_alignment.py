@@ -204,7 +204,7 @@ class StructuralAlignmentEngineV1:
 
     def align(
         self,
-        target_events: Iterable[StructuralAlignmentNode | Mapping[str, Any]],
+        target_events: Iterable[Union[StructuralAlignmentNode, Mapping[str, Any]]],
         candidate_events: Iterable[StructuralAlignmentNode | Mapping[str, Any]],
     ) -> StructuralAlignmentResult:
         targets = self._coerce_nodes(target_events, "target")
@@ -212,8 +212,6 @@ class StructuralAlignmentEngineV1:
         target_depths = self._depths(targets, "target")
         self._depths(candidates, "candidate")
 
-        target_index = {node.id: i for i, node in enumerate(targets)}
-        candidate_index = {node.id: i for i, node in enumerate(candidates)}
         mapped_target_to_candidate: Dict[str, str] = {}
         mapped_pairs: Dict[int, _ScoredPair] = {}
         assigned_candidates: set[int] = set()

@@ -38,6 +38,10 @@ jobs:
       run: ruff check dprovenancekit/
     - name: Mypy (type-check)
       run: mypy dprovenancekit/
+    # Exercise the published regression-gate API against independent synthetic labels.
+    # Numbers are illustrative policy sensitivity, never a field accuracy claim.
+    - name: Synthetic gate policy sensitivity (JSON report)
+      run: python examples/reliability_gate_benchmark.py --fail-on-missed-regression
 
   test:
     name: pytest (Python ${{ matrix.python-version }} on ${{ matrix.os }})

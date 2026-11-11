@@ -9,12 +9,12 @@ generalization, model reliability, or superiority to other observability tools.
 
 From a Python SDK checkout with the package installed:
 
-\`\`\`bash
+```bash
 python examples/reliability_gate_benchmark.py
 python examples/reliability_gate_benchmark.py --output reports/gate-policy-v1.json
 python examples/reliability_gate_benchmark.py --fail-on-missed-regression
 python -m pytest tests/test_reliability_gate_benchmark.py
-\`\`\`
+```
 
 The script uses only the Python SDK and standard library. It runs the **production
 RegressionGate**, not a second test-only implementation. Results are deterministic
@@ -25,8 +25,8 @@ false-positive rates, false-negative rates, and case IDs behind disagreements.
 
 | Policy | Configuration | Trade-off |
 | --- | --- | --- |
-| Default strict | \`RegressionGate()\` | Blocks any instrumented structural divergence, including benign additions |
-| Severity only | \`RegressionGate(allow_divergent_steps=True)\` | Allows noncritical divergence but still blocks HIGH-severity critical-path regressions |
+| Default strict | `RegressionGate()` | Blocks any instrumented structural divergence, including benign additions |
+| Severity only | `RegressionGate(allow_divergent_steps=True)` | Allows noncritical divergence but still blocks HIGH-severity critical-path regressions |
 
 Both policies use the default strict-audit profile, exact payload comparison,
 minimum priority STRUCTURAL, and maximum accepted severity NONE. **Neither
@@ -52,7 +52,7 @@ Confusion-matrix definitions, with **positive = a labeled regression**:
 - TP: regression blocked; FN: regression allowed
 - FP: benign change blocked; TN: benign change allowed
 - FPR = FP / (FP + TN); FNR = FN / (FN + TP)
-- When a denominator is zero, its rate is \`null\` rather than a fabricated zero.
+- When a denominator is zero, its rate is `null` rather than a fabricated zero.
 
 The test enforces zero **synthetic** missed regressions for these scenarios, not
 an unconditional guarantee about arbitrary real runs.
@@ -76,5 +76,5 @@ an unconditional guarantee about arbitrary real runs.
   establish hidden model reasoning, factual correctness, or actions omitted
   from the trace.
 
-See \`tests/test_regression_gate.py\` for unit-level behavior and
-\`docs/adversarial_alignment.md\` for greedy-vs-optimal matching stress tests.
+See `tests/test_regression_gate.py` for unit-level behavior and
+`docs/adversarial_alignment.md` for greedy-vs-optimal matching stress tests.

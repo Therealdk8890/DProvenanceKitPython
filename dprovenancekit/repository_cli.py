@@ -39,6 +39,14 @@ def _mapping_file(path: Optional[str]) -> Dict[str, Any]:
     return value
 
 
+def _explicit_success(result: Any, *keys: str) -> bool:
+    """Never turn a truthy string, integer, or conflicting status into success."""
+    if not isinstance(result, dict):
+        return False
+    flags = [result[key] for key in keys if key in result]
+    return bool(flags) and all(flag is True for flag in flags)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="dpk repo", description="Local, immutable reasoning history (opt-in format v1)."
@@ -152,25 +160,24 @@ def main(argv: Optional[List[str]] = None) -> int:
                     capture_policy=_mapping_file(args.capture_policy),
                 ))
             elif command == "commit":
+                target = args.branch or repo.status()["head"]
+                target = target if target.startswith("refs/") else "refs/heads/" + target
+                previous = repo.refs().get(target)
+                if previous is not None and args.expected_parent is None:
+                    raise ValueError("--expected-parent required to advance an existing branch")
+                if args.expected_parent is not None and args.expected_parent != previous:
+                    raise ValueError("--expected-parent does not match the branch tip")
                 evidence = args.evidence
                 if args.run:
                     evidence = repo.lookup_run(args.run)
                     if evidence is None:
-                        from .event import AnyTraceableEvent
-                        from .sqlite_store import SQLiteTraceStore
-
-                        if not Path(args.db).is_file():
-                            raise ValueError("capture database does not exist")
-                        store = SQLiteTraceStore(AnyTraceableEvent, args.db, start_writer=False)
-                        try:
-                            evidence = repo.seal_run(store, args.run)
-                        finally:
-                            store.close()
-                kwargs = {"branch": args.branch, "author": args.author}
-                if args.expected_parent is not None:
-                    kwargs["expected_parent"] = args.expected_parent
-                print(repo.commit(evidence, args.message, **kwargs))
+                        evidence = repo.seal_run_from_readonly_database(args.db, args.run)
+                # Also check the initial empty ref atomically; never rely on preflight.
+                print(repo.commit(evidence, args.message, branch=args.branch,
+                                  expected_parent=previous, author=args.author))
             elif command == "log":
+                if args.limit < 1 or args.offset < 0:
+                    raise ValueError("--limit must be positive and --offset non-negative")
                 _emit(repo.log(args.ref, limit=args.limit, offset=args.offset))
             elif command == "show":
                 _emit(repo.get_object(repo.resolve(args.ref)))
@@ -211,7 +218,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             elif command == "fsck":
                 result = repo.fsck()
                 _emit(result)
-                return 0 if result.get("valid", result.get("ok", False)) else 2
+                return 0 if _explicit_success(result, "valid", "ok") else 2
             elif command == "sign":
                 from .attestation import SoftwareTraceAttestationKey
                 from cryptography.hazmat.primitives.serialization import load_pem_private_key
@@ -224,9 +231,11 @@ def main(argv: Optional[List[str]] = None) -> int:
             elif command == "verify":
                 result = repo.verify_signatures(repo.resolve(args.subject), args.trusted_key_ids)
                 _emit(result)
-                if isinstance(result, dict):
-                    valid = result.get("trusted_signer") if args.trusted_key_ids else result.get("integrity_valid")
-                    return 0 if valid else 2
+                # Integrity-only evidence is informative; trust requires a separately
+                # provisioned key ID before verify can return success.
+                if args.trusted_key_ids:
+                    return 0 if _explicit_success(result, "integrity_valid", "trusted_signer") else 2
+                return 2
         return 0
     except (ValueError, OSError, KeyError, TypeError, RuntimeError, ImportError, sqlite3.Error) as exc:
         print("dpk repo: " + str(exc), file=sys.stderr)

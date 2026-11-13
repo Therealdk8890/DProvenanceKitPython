@@ -28,7 +28,10 @@ def test_cli_commits_can_advance_existing_branch_and_gate(tmp_path, capsys):
         first = _capture(repo, store, workflow)
         second = _capture(repo, store, workflow, verify=False)
     for active in (first, second):
-        assert main(["repo", "--repo", str(path), "commit", "--run", str(active.run_id), "-m", "recorded"]) == 0
+        args = ["repo", "--repo", str(path), "commit", "--run", str(active.run_id), "-m", "recorded"]
+        if active is second:
+            args += ["--expected-parent", baseline]
+        assert main(args) == 0
         output = capsys.readouterr().out.strip()
         assert len(output) == 64
         if active is first:
@@ -99,7 +102,7 @@ def test_cli_signing_distinguishes_signature_integrity_from_pinned_trust(tmp_pat
     assert main(["repo", "--repo", str(path), "sign", commit, "--key", str(private)]) == 0
     assert "PRIVATE KEY" not in capsys.readouterr().out
     args = ["repo", "--repo", str(path), "verify", commit]
-    assert main(args) == 0
+    assert main(args) == 2
     report = json.loads(capsys.readouterr().out)
     assert report["integrity_valid"] and not report["trusted_signer"]
     assert main(args + ["--trusted-key", "f" * 64]) == 2

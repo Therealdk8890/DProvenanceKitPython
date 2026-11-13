@@ -66,7 +66,7 @@ works on strict JSON values without rewriting archival bytes.
 ```console
 dpk repo init
 dpk repo snapshot --asset prompt=prompt.txt
-dpk repo commit --run RUN_UUID -m "Preserve the recorded execution"
+dpk repo commit --run RUN_UUID -m "Preserve the first recorded execution"
 dpk repo branch experiment --from main
 dpk repo switch experiment
 dpk repo log --limit 20
@@ -75,6 +75,14 @@ dpk repo diff --baseline main --candidate experiment --json
 dpk repo gate --baseline refs/baselines/default --candidate experiment --json
 dpk repo fsck
 ```
+
+The first commit on an empty branch needs no parent. **Every subsequent branch
+commit must supply `--expected-parent COMMIT_ID`** using the branch tip it
+actually reviewed. The repository rechecks the expected parent atomically; a
+missing or stale parent exits nonzero rather than silently advancing a changed
+branch. For example: `dpk repo commit --run RUN_UUID --expected-parent COMMIT_ID
+-m "Verified follow-up"`. Never obtain the expected parent from untrusted
+candidate evidence.
 
 The default repository is `.dprovenance/repository.sqlite`, separate from
 `.dprovenance/traces.sqlite`. Select another with `--repo PATH` before or after
@@ -129,7 +137,11 @@ dpk repo verify COMMIT_ID --trusted-key EXPECTED_KEY_ID
 
 Private keys are never placed in repository objects or bundles. An embedded key
 can establish signature integrity; signer trust requires an independently
-provisioned key ID. Unsigned objects can still have verified byte integrity.
+provisioned key ID. **`dpk repo verify` returns a successful exit code only
+when an explicit trusted key ID matches a valid signature.** An invocation
+without `--trusted-key` can print integrity-only information but exits 2 to
+avoid being mistaken for an authenticated signer. Unsigned objects can still
+have verified byte integrity.
 
 ## Boundaries and compatibility
 

@@ -8,12 +8,14 @@ URI mode=ro and issues SELECT-only queries.
 from __future__ import annotations
 
 import sqlite3
+import json
 import uuid
+from dataclasses import replace
 from pathlib import Path
 from typing import List, Optional, Type
 
-from .event import TraceEvent, TraceableEvent
-from .query import TraceRun
+from .event import AnyTraceableEvent, TraceEvent, TraceableEvent
+from .query import CaptureQuality, TraceRun
 
 
 class ReadOnlySQLiteTraceReader:
@@ -23,7 +25,7 @@ class ReadOnlySQLiteTraceReader:
         "runs": {"run_id", "context_id", "start_time", "end_time", "event_count", "fingerprint"},
         "trace_events": {
             "id", "run_id", "engine", "span_id", "parent_span_id",
-            "type", "payload", "timestamp", "sequence",
+            "type", "priority", "payload", "timestamp", "sequence",
         },
     }
 
@@ -43,6 +45,10 @@ class ReadOnlySQLiteTraceReader:
             raise
 
         self._event_type = event_type
+        self._event_columns = {row[1] for row in self._db.execute("PRAGMA table_info(trace_events)")}
+        self._has_capture = bool(self._db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='run_capture'"
+        ).fetchone())
 
     def _validate_schema(self) -> None:
         tables = {
@@ -89,19 +95,33 @@ class ReadOnlySQLiteTraceReader:
         if not rows or rows[0][0] is None:
             return None
         context_id = rows[0][0]
+        sql = (
+            "SELECT id, engine, span_id, parent_span_id, payload, timestamp, sequence, type, priority, "
+            "schema_version, schema_provenance FROM trace_events WHERE run_id=? ORDER BY sequence"
+            if {"schema_version", "schema_provenance"} <= self._event_columns else
+            "SELECT id, engine, span_id, parent_span_id, payload, timestamp, sequence, type, priority, "
+            "1, 'legacy_assumed_v1' FROM trace_events WHERE run_id=? ORDER BY sequence"
+        )
         event_rows = self._db.execute(
-            "SELECT id, engine, span_id, parent_span_id, payload, timestamp, sequence "
-            "FROM trace_events WHERE run_id = ? ORDER BY sequence ASC",
+            sql,
             (str(run_id),),
         ).fetchall()
 
         events = []
-        for event_id, engine, span_id, parent_span_id, payload_data, timestamp_us, sequence in event_rows:
+        undecoded = 0
+        assumed_schema = False
+        for (event_id, engine, span_id, parent_span_id, payload_data, timestamp_us,
+             sequence, event_type, priority, schema_version, provenance) in event_rows:
+            assumed_schema = assumed_schema or provenance != "recorded"
             try:
-                payload = self._event_type.decode(bytes(payload_data))
+                payload = (
+                    AnyTraceableEvent.from_storage(bytes(payload_data), event_type, priority)
+                    if self._event_type is AnyTraceableEvent
+                    else self._event_type.decode(bytes(payload_data))
+                )
                 parsed_event_id = uuid.UUID(event_id)
             except Exception:
-                # A malformed event should not prevent inspection of other events.
+                undecoded += 1
                 continue
             events.append(
                 TraceEvent(
@@ -109,7 +129,7 @@ class ReadOnlySQLiteTraceReader:
                     run_id=run_id,
                     context_id=context_id,
                     engine_name=engine if engine is not None else "Unknown",
-                    schema_version=1,
+                    schema_version=int(schema_version),
                     sequence=int(sequence),
                     span_id=span_id,
                     parent_span_id=parent_span_id,
@@ -117,9 +137,16 @@ class ReadOnlySQLiteTraceReader:
                     timestamp=float(timestamp_us) / 1_000_000.0,
                 )
             )
-        if not events:
-            return None
-        return TraceRun(run_id=run_id, context_id=context_id, events=events)
+        quality = CaptureQuality()
+        if self._has_capture:
+            row = self._db.execute("SELECT quality_json FROM run_capture WHERE run_id=?", (str(run_id),)).fetchone()
+            if row:
+                quality = CaptureQuality(**json.loads(row[0]))
+        quality = replace(
+            quality, undecoded_events=quality.undecoded_events + undecoded,
+            schema_provenance="legacy_assumed_v1" if assumed_schema else quality.schema_provenance,
+        )
+        return TraceRun(run_id=run_id, context_id=context_id, events=events, capture_quality=quality)
 
     def close(self) -> None:
         self._db.close()

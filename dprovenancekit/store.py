@@ -6,6 +6,7 @@ import logging
 import queue
 import threading
 import uuid
+from dataclasses import asdict, replace
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Set
 
@@ -13,7 +14,7 @@ from .drop_stats import TraceDropStats
 from .edge import TraceEdge, TraceEdgeType
 from .event import TraceEvent
 from .graph import TraceExplanation, TraceGraph
-from .query import TraceQueryDSL, TraceQueryPlanner, TraceRun
+from .query import CaptureQuality, TraceQueryDSL, TraceQueryPlanner, TraceRun
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +155,10 @@ class InMemoryTraceStore(TraceStore):
         self._run_by_context: Dict[str, Set[uuid.UUID]] = {}
         self._run_by_engine: Dict[str, Set[uuid.UUID]] = {}
         self._decision_type_events: Dict[str, Dict[uuid.UUID, List[float]]] = {}
+        self._capture_quality: Dict[uuid.UUID, CaptureQuality] = {}
+        self._capture_contexts: Dict[uuid.UUID, str] = {}
+        self._event_runs: Dict[uuid.UUID, uuid.UUID] = {}
+        self._closed = False
 
         self._live_engine = live_engine
         self._live_queue: Optional[queue.Queue] = None
@@ -184,6 +189,11 @@ class InMemoryTraceStore(TraceStore):
                 )
 
     def close(self) -> None:
+        with self._lock:
+            self._closed = True
+            for key, quality in self._capture_quality.items():
+                if not quality.sealed:
+                    self._capture_quality[key] = replace(quality, lifecycle="interrupted", sealed=True)
         if self._live_queue is not None and self._live_thread is not None:
             self._live_queue.put(None)
             self._live_thread.join()
@@ -197,6 +207,13 @@ class InMemoryTraceStore(TraceStore):
 
     def record(self, event: TraceEvent) -> None:
         with self._lock:
+            self._check_write_locked(event.run_id)
+            quality = self._capture_quality.get(event.run_id)
+            if quality is not None and quality.attempted_events is not None:
+                self._capture_quality[event.run_id] = replace(
+                    quality, attempted_events=quality.attempted_events + 1
+                )
+            self._event_runs[event.id] = event.run_id
             self._events_by_run.setdefault(event.run_id, []).append(event)
             self._run_by_context.setdefault(event.context_id, set()).add(event.run_id)
             self._run_by_engine.setdefault(event.engine_name, set()).add(event.run_id)
@@ -214,7 +231,97 @@ class InMemoryTraceStore(TraceStore):
 
     def link(self, source: uuid.UUID, target: uuid.UUID, type: TraceEdgeType) -> None:
         with self._lock:
-            self._edges.append(TraceEdge(source_id=source, target_id=target, type=type))
+            run_id = self._event_runs.get(source) or self._event_runs.get(target)
+            self._link_locked(run_id, source, target, type)
+
+    def link_for_run(self, run_id, source, target, type) -> None:
+        with self._lock:
+            self._link_locked(run_id, source, target, type)
+
+    def _link_locked(self, run_id, source, target, type) -> None:
+        self._check_write_locked(run_id)
+        quality = self._capture_quality.get(run_id)
+        if quality is not None and quality.attempted_edges is not None:
+            self._capture_quality[run_id] = replace(quality, attempted_edges=quality.attempted_edges + 1)
+        self._edges.append(TraceEdge(source_id=source, target_id=target, type=type))
+
+    def _check_write_locked(self, run_id) -> None:
+        if self._closed:
+            raise RuntimeError("trace store is closed")
+        quality = self._capture_quality.get(run_id)
+        if quality is not None and quality.sealed:
+            raise RuntimeError("trace run is sealed; late writes are rejected")
+
+    def begin_run(self, run_id, context_id, schema_version=1) -> None:
+        with self._lock:
+            self._check_write_locked(run_id)
+            if run_id in self._capture_quality:
+                raise ValueError("run already exists")
+            self._capture_contexts[run_id] = context_id
+            self._capture_quality[run_id] = CaptureQuality(
+                lifecycle="recording", attempted_events=0, attempted_edges=0,
+                schema_provenance="recorded",
+            )
+
+    def finish_run(self, run_id, status="completed") -> None:
+        if status not in ("completed", "failed", "interrupted"):
+            raise ValueError("invalid run completion status")
+        with self._lock:
+            self._check_write_locked(run_id)
+            quality = self._capture_quality.get(run_id)
+            if quality is None:
+                raise ValueError("begin_run is required before finish_run")
+            self._capture_quality[run_id] = replace(quality, lifecycle=status, sealed=True)
+
+    def bind_workflow(self, run_id, workflow_id) -> None:
+        with self._lock:
+            self._check_write_locked(run_id)
+            quality = self._capture_quality.get(run_id)
+            if (quality is None or quality.lifecycle != "recording"
+                    or quality.attempted_events != 0 or quality.attempted_edges != 0):
+                raise ValueError("workflow must be bound before recording begins")
+            if quality.workflow_id is not None and quality.workflow_id != workflow_id:
+                raise ValueError("run already bound to another workflow")
+            self._capture_quality[run_id] = replace(quality, workflow_id=workflow_id)
+
+    def prepare_evidence(self, run_id) -> TraceRun:
+        run_id = uuid.UUID(str(run_id))
+        with self._lock:
+            quality = self._capture_quality.get(run_id, CaptureQuality())
+            if quality.lifecycle == "recording":
+                raise ValueError("finish the run before preparing evidence")
+            run = self._make_run_locked(run_id)
+            if run is None:
+                raise ValueError("run not found")
+            return run
+
+    def repository_run_snapshot(self, run_id) -> dict:
+        run_id = uuid.UUID(str(run_id))
+        with self._lock:
+            run = self._make_run_locked(run_id)
+            if run is None or run.capture_quality.lifecycle == "recording":
+                raise ValueError("finish the run before preparing evidence")
+            events = []
+            for event in run.events:
+                raw = event.payload.encode()
+                events.append({
+                    "id": str(event.id), "run_id": str(event.run_id),
+                    "context_id": event.context_id, "engine_name": event.engine_name,
+                    "schema_version": event.schema_version, "sequence": event.sequence,
+                    "span_id": event.span_id, "parent_span_id": event.parent_span_id,
+                    "type_identifier": event.payload.type_identifier,
+                    "priority": int(event.payload.priority), "payload_bytes": raw,
+                    "payload_json": raw.decode("utf-8"),
+                    "timestamp_us": int(event.timestamp * 1_000_000),
+                    "schema_provenance": "recorded",
+                })
+            ids = {event.id for event in run.events}
+            edges = [{"source_id": str(edge.source_id), "target_id": str(edge.target_id),
+                      "type": edge.type.value} for edge in self._edges
+                     if edge.source_id in ids or edge.target_id in ids]
+            return {"run": run, "events": events, "edges": edges,
+                    "capture_quality": asdict(run.capture_quality),
+                    "lifecycle": run.capture_quality.lifecycle}
 
     def flush(self) -> None:
         # No-op: `record` commits synchronously, so nothing is pending to drain.
@@ -277,16 +384,15 @@ class InMemoryTraceStore(TraceStore):
 
     def _make_run_locked(self, id: uuid.UUID) -> Optional[TraceRun]:
         """Build a run snapshot ordered by the authoritative causal clock (sequence)."""
-        events = self._events_by_run.get(id)
-        if events is None:
+        events = self._events_by_run.get(id, [])
+        if not events and id not in self._capture_contexts:
             return None
         sorted_events = sorted(events, key=lambda e: e.sequence)
-        if not sorted_events:
-            return None
         return TraceRun(
             run_id=id,
-            context_id=sorted_events[0].context_id,
+            context_id=sorted_events[0].context_id if sorted_events else self._capture_contexts[id],
             events=sorted_events,
+            capture_quality=self._capture_quality.get(id, CaptureQuality()),
         )
 
     def query_runs(self, dsl: TraceQueryDSL) -> List[TraceRun]:

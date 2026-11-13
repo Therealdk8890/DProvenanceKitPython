@@ -107,6 +107,8 @@ class TraceEventRow:
     type: str
     payload: bytes
     timestamp: int
+    schema_version: int = 1
+    schema_provenance: str = "recorded"
 
 
 @dataclass
@@ -146,6 +148,25 @@ class AnyTraceableEvent(TraceableEvent):
             "priority_value": self.priority_value,
             "raw_json": self.raw_json,
         }
+
+    @classmethod
+    def from_storage(cls, data: bytes, type_identifier: str, priority: int) -> "AnyTraceableEvent":
+        """Decode payload bytes using the authoritative storage envelope.
+
+        Preserve an existing type-erased envelope's inner JSON, while refusing
+        to let payload fields override the persisted type or priority.
+        """
+        raw_json = data.decode("utf-8")
+        parsed = json.loads(raw_json)
+        if isinstance(parsed, dict) and set(parsed) == {
+            "type_identifier_value", "priority_value", "raw_json"
+        } and isinstance(parsed["raw_json"], str) and (
+            parsed["type_identifier_value"] == type_identifier
+            and type(parsed["priority_value"]) is int and parsed["priority_value"] == priority
+        ):
+            raw_json = parsed["raw_json"]
+            json.loads(raw_json)
+        return cls(type_identifier, int(priority), raw_json)
 
     @classmethod
     def decode(cls, data: bytes) -> "TraceableEvent":

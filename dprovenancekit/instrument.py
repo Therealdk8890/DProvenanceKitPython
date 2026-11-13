@@ -178,6 +178,8 @@ def traced_run(
     *,
     schema_version: int = 1,
     db_path: Optional[Union[str, Path]] = None,
+    repository: Optional[Any] = None,
+    workflow_snapshot: Optional[str] = None,
 ) -> Iterator[ActiveTraceRun]:
     """Open a recording run for instrumented code.
 
@@ -188,6 +190,12 @@ def traced_run(
     """
     if store is not None and db_path is not None:
         raise ValueError("db_path cannot be used when an explicit store is supplied")
+    if (repository is None) != (workflow_snapshot is None):
+        raise ValueError("repository and workflow_snapshot must be supplied together")
+    if repository is not None:
+        workflow = repository.get_object(workflow_snapshot)
+        if workflow["type"] != "workflow":
+            raise ValueError("workflow_snapshot must identify a workflow object")
 
     owned_store = None
     if store is None:
@@ -202,10 +210,18 @@ def traced_run(
         with _KIT.run(
             context_id=context_id, store=store, schema_version=schema_version
         ) as run:
+            if repository is not None:
+                assert workflow_snapshot is not None
+                repository.bind_run(run.run_id, workflow_snapshot)
+                if not hasattr(store, "bind_workflow"):
+                    raise ValueError("repository capture requires a store supporting workflow binding")
+                store.bind_workflow(run.run_id, workflow_snapshot)
             try:
                 yield run
             finally:
                 run.flush()
+        if repository is not None:
+            run.repository_evidence_id = repository.seal_run(store, run.run_id)
     finally:
         if owned_store is not None:
             owned_store.close()
@@ -216,13 +232,21 @@ def record_event(
     attributes: Optional[Mapping[str, Any]] = None,
     *,
     priority: TracePriority = TracePriority.STRUCTURAL,
+    logical_step_id: Optional[str] = None,
 ) -> Optional[uuid.UUID]:
     """Record an ad-hoc event in the current run (a decision, a chosen branch, …).
 
     A soft no-op (returns ``None``) outside a :func:`traced_run`. Records under the current
     span/engine, so a call inside a decorated step attributes to that step.
     """
-    return _KIT.record(TracedEvent.make(type_identifier, priority, attributes))
+    values = dict(attributes or {})
+    if logical_step_id is not None:
+        if not isinstance(logical_step_id, str) or not logical_step_id.strip():
+            raise ValueError("logical_step_id must be a nonempty string")
+        if "dpk.logical_step_id" in values:
+            raise ValueError("logical step annotation must use logical_step_id")
+        values["dpk.logical_step_id"] = logical_step_id
+    return _KIT.record(TracedEvent.make(type_identifier, priority, values))
 
 
 def _record(

@@ -39,6 +39,7 @@ from .kit import DProvenanceKit, ActiveTraceRun
 
 # Query
 from .query import (
+    CaptureQuality,
     TraceRun,
     TraceQueryDSL,
     TraceQueryNode,
@@ -58,6 +59,7 @@ from .store import (
     NotImplementedTraceError,
 )
 from .sqlite_store import SQLiteTraceStore, SQLiteConnection, SQLiteWriter
+from .repository import ReasoningRepository, RepositoryError, RefConflictError
 from .raw_store import RawTraceStore, RawTraceRun, RawTraceEvent
 
 # OpenTelemetry ingestion
@@ -286,6 +288,10 @@ __all__ = [
     "ActiveTraceRun",
     # Query
     "TraceRun",
+    "CaptureQuality",
+    "ReasoningRepository",
+    "RepositoryError",
+    "RefConflictError",
     "TraceQueryDSL",
     # Stores
     "TraceStore",

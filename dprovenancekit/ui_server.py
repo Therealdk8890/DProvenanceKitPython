@@ -81,12 +81,18 @@ def _host_only(host_header: str) -> str:
     return host.lower().rstrip(".")
 
 
-def create_handler(db_path: Optional[str] = None, allowed_hosts=None, sources=None):
+def create_handler(db_path: Optional[str] = None, allowed_hosts=None, sources=None, repository_path=None):
     """Create a handler for legacy single-db mode or explicit multi-source mode.
 
     Existing positional/keyword db_path calls remain supported. In multi-source
     mode, every detail and diff request must identify its source explicitly.
     """
+    if repository_path is not None:
+        if db_path is not None or sources is not None:
+            raise ValueError("repository mode cannot be combined with trace databases")
+        from .repository_ui import create_repository_handler
+
+        return create_repository_handler(repository_path, allowed_hosts)
     if sources is not None:
         source_configs = _normalize_sources(sources)
         multi_source = True
@@ -339,6 +345,7 @@ def create_server(
     host: str = "127.0.0.1",
     sources=None,
     allowed_hosts=None,
+    repository_path=None,
 ):
     """Build the viewer with loopback protections or an explicit Host allow-list.
 
@@ -354,7 +361,7 @@ def create_server(
         effective_allowed_hosts = _LOOPBACK_HOSTS if is_loopback else None
     else:
         effective_allowed_hosts = frozenset(str(value).lower().rstrip(".") for value in allowed_hosts)
-    handler = create_handler(db_path, effective_allowed_hosts, sources=sources)
+    handler = create_handler(db_path, effective_allowed_hosts, sources=sources, repository_path=repository_path)
     return ThreadingHTTPServer((host, port), handler)
 
 
@@ -364,10 +371,11 @@ def run_ui_server(
     host: str = "127.0.0.1",
     sources=None,
     allowed_hosts=None,
+    repository_path=None,
 ):
-    server = create_server(db_path, port, host, sources=sources, allowed_hosts=allowed_hosts)
+    server = create_server(db_path, port, host, sources=sources, allowed_hosts=allowed_hosts, repository_path=repository_path)
     display_host = "localhost" if host == "127.0.0.1" else host
-    serving = f"{len(sources)} configured sources" if sources is not None else db_path
+    serving = repository_path or (f"{len(sources)} configured sources" if sources is not None else db_path)
     print(f"Starting DProvenanceKit UI at http://{display_host}:{port} (serving {serving})")
     try:
         server.serve_forever()

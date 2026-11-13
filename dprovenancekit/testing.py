@@ -235,6 +235,12 @@ class RegressionGate:
         has_divergent = any(kind.value in steps_by_change for kind in _DIVERGENT_KINDS)
         steps_ok = self._allow_divergent_steps or not has_divergent
         passed = level_ok and steps_ok
+        damaged = any(
+            run.capture_quality.undecoded_events or run.capture_quality.dropped_events
+            or run.capture_quality.dropped_edges for run in (golden, candidate)
+        )
+        if damaged:
+            passed = False
 
         golden_fp = run_fingerprint(golden)
         candidate_fp = run_fingerprint(candidate)
@@ -242,7 +248,8 @@ class RegressionGate:
             passed=passed,
             regression_level=risk.level,
             strength=risk.strength,
-            reasoning=risk.reasoning,
+            reasoning=("Incomplete capture: lost or undecodable evidence; verdict is indeterminate. "
+                       + risk.reasoning) if damaged else risk.reasoning,
             fingerprint_match=golden_fp == candidate_fp,
             golden_fingerprint=golden_fp,
             candidate_fingerprint=candidate_fp,

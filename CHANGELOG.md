@@ -7,6 +7,20 @@ public API may still change between minor versions.
 
 ## [Unreleased]
 
+### Added
+- Opt-in local reasoning repository v1: canonical SHA-256 objects, workflow/run commits,
+  branch/tag/baseline refs with transactional conditional updates and reflog.
+- Integrity-aware strict comparisons, workflow change reports, full-closure portable
+  bundles, detached P-256 signatures, and shared Python/Swift conformance fixtures.
+- `dpk repo` CLI, offline history demo, and read-only paged `dpk ui --repo` workbench.
+- Required Windows, macOS and Linux repository/capture validation jobs.
+
+### Fixed
+- Generic SQLite/UI decoding retains stored critical identity, priority and schema
+  rather than inferring them from payload keys or silently hiding decode failures.
+- Per-run capture lifecycle/loss accounting, bounded edge buffering, workflow
+  prebinding and rejection of writes after finalization.
+
 ## [0.9.3] — 2026-11-09
 
 ### Added

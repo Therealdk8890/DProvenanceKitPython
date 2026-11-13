@@ -10,20 +10,21 @@ so neither thins a run silently.
 from __future__ import annotations
 
 import hashlib
+import json
 import random
 import sqlite3
 import threading
 import time
 import uuid
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Dict, List, Optional, Set, Type
 from contextlib import contextmanager
 
 from .drop_stats import TraceDropStats, TraceDropTally
 from .edge import TraceEdge, TraceEdgeType
-from .event import RunRow, TraceableEvent, TraceEvent, TraceEventRow
-from .query import TraceQueryCompiler, TraceQueryDSL, TraceRun
+from .event import AnyTraceableEvent, RunRow, TraceableEvent, TraceEvent, TraceEventRow
+from .query import CaptureQuality, TraceQueryCompiler, TraceQueryDSL, TraceRun
 from .store import TraceStore, validate_max_depth
 from .write_buffer import TraceWriteBuffer
 
@@ -233,6 +234,7 @@ class SQLiteWriter:
             # Durably committed: now safe to fold into in-memory run metadata.
             for event in batch:
                 self._update_run_state(event)
+            self._buffer.acknowledge_edges(edges_batch)
         except sqlite3.OperationalError as err:
             err_msg = str(err).lower()
             if "locked" in err_msg or "busy" in err_msg:
@@ -240,13 +242,15 @@ class SQLiteWriter:
                 self._buffer.requeue(batch, edges_batch)
             else:
                 for event in batch:
-                    self._drop_tally.record(priority=event.priority)
+                    self._drop_tally.record(priority=event.priority, run_id=event.run_id)
+                self._buffer.record_edge_loss(edges_batch)
                 logger.error(f"[DProvenanceKit] SQLiteWriter fatal insert error, dropping batch: {err}")
         except Exception as err:
             # The transaction rolled back: these rows were already drained and are gone.
             # Count the loss per tier so it surfaces in dropStats / preserved_integrity.
             for event in batch:
-                self._drop_tally.record(priority=event.priority)
+                self._drop_tally.record(priority=event.priority, run_id=event.run_id)
+            self._buffer.record_edge_loss(edges_batch)
             logger.error(f"[DProvenanceKit] SQLiteWriter fatal insert error, dropping batch: {err}")
 
     def _insert_edges(self, edges: List[TraceEdge]) -> None:
@@ -257,10 +261,14 @@ class SQLiteWriter:
         )
 
     def _insert(self, events: List[TraceEventRow]) -> None:
+        columns = {r[1] for r in self._db.query("PRAGMA table_info(trace_events)")}
+        has_schema = "schema_version" in columns
         sql = (
             "INSERT INTO trace_events "
-            "(id, run_id, context_id, priority, sequence, engine, span_id, parent_span_id, type, payload, timestamp) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
+            "(id, run_id, context_id, priority, sequence, engine, span_id, parent_span_id, type, payload, timestamp"
+            + (", schema_version, schema_provenance" if has_schema else "")
+            + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?"
+            + (", ?, ?" if has_schema else "") + ");"
         )
         rows = [
             (
@@ -275,7 +283,7 @@ class SQLiteWriter:
                 e.type,
                 e.payload,
                 int(e.timestamp),
-            )
+            ) + ((e.schema_version, e.schema_provenance) if has_schema else ())
             for e in events
         ]
         self._db.executemany(sql, rows)
@@ -345,6 +353,13 @@ class SQLiteTraceStore(TraceStore):
         start_writer: bool = True,
     ):
         self._event_type = event_type
+        self._capture_lock = threading.RLock()
+        self._capture_persist_lock = threading.Lock()
+        self._capture_quality: Dict[str, CaptureQuality] = {}
+        self._capture_contexts: Dict[str, str] = {}
+        self._owned_capture_runs: Set[str] = set()
+        self._event_runs: Dict[uuid.UUID, str] = {}
+        self._closed = False
         self._db = SQLiteConnection(path)
         try:
             self._buffer = TraceWriteBuffer(
@@ -354,6 +369,15 @@ class SQLiteTraceStore(TraceStore):
             self._writer = SQLiteWriter(self._db, self._buffer, self._drop_tally)
 
             self._create_schema()
+            for run_id, context_id, quality_json in self._db.query(
+                "SELECT run_id, context_id, quality_json FROM run_capture"
+            ):
+                quality = CaptureQuality(**json.loads(quality_json))
+                if quality.lifecycle == "recording":
+                    quality = replace(quality, lifecycle="interrupted", sealed=True,
+                                      attempted_events=None, attempted_edges=None)
+                self._capture_quality[run_id] = quality
+                self._capture_contexts[run_id] = context_id
 
             if start_writer:
                 self._writer.start()
@@ -395,11 +419,20 @@ class SQLiteTraceStore(TraceStore):
             for alter in (
                 "ALTER TABLE trace_events ADD COLUMN span_id TEXT;",
                 "ALTER TABLE trace_events ADD COLUMN parent_span_id TEXT;",
+                "ALTER TABLE trace_events ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1;",
+                "ALTER TABLE trace_events ADD COLUMN schema_provenance TEXT NOT NULL DEFAULT 'legacy_assumed_v1';",
             ):
                 try:
                     db.execute(alter)
                 except sqlite3.OperationalError:
                     pass
+
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS run_capture (
+                    run_id TEXT PRIMARY KEY, context_id TEXT NOT NULL,
+                    quality_json TEXT NOT NULL
+                );
+            """)
 
             db.execute("CREATE INDEX IF NOT EXISTS idx_run_id ON trace_events(run_id);")
             db.execute("CREATE INDEX IF NOT EXISTS idx_type ON trace_events(type);")
@@ -448,12 +481,25 @@ class SQLiteTraceStore(TraceStore):
                 """)
 
     def record(self, event: TraceEvent) -> None:
+        with self._capture_lock:
+            self._check_write_locked(str(event.run_id))
+            self._capture_contexts.setdefault(str(event.run_id), event.context_id)
+            self._owned_capture_runs.add(str(event.run_id))
+            quality = self._capture_quality.setdefault(str(event.run_id), CaptureQuality())
+            if quality.attempted_events is not None:
+                self._capture_quality[str(event.run_id)] = replace(
+                    quality, attempted_events=quality.attempted_events + 1
+                )
+            self._event_runs[event.id] = str(event.run_id)
+            self._record_locked(event)
+
+    def _record_locked(self, event: TraceEvent) -> None:
         try:
             payload_data = event.payload.encode()
         except Exception:
             # An unencodable payload can't be persisted — count it in its own tier so the
             # loss shows up in dropStats rather than vanishing silently.
-            self._drop_tally.record(priority=int(event.payload.priority))
+            self._drop_tally.record(priority=int(event.payload.priority), run_id=str(event.run_id))
             return
 
         row = TraceEventRow(
@@ -468,20 +514,172 @@ class SQLiteTraceStore(TraceStore):
             type=event.payload.type_identifier,
             payload=payload_data,
             timestamp=int(event.timestamp * 1_000_000),
+            schema_version=event.schema_version,
         )
         self._buffer.enqueue(row)
 
     def link(self, source: uuid.UUID, target: uuid.UUID, type: TraceEdgeType) -> None:
-        self._buffer.enqueue_edge(
-            TraceEdge(source_id=source, target_id=target, type=type)
+        with self._capture_lock:
+            run_id = self._event_runs.get(source) or self._event_runs.get(target)
+            self._link_locked(run_id, source, target, type)
+
+    def link_for_run(self, run_id: uuid.UUID, source: uuid.UUID, target: uuid.UUID,
+                     type: TraceEdgeType) -> None:
+        with self._capture_lock:
+            self._link_locked(str(run_id), source, target, type)
+
+    def _link_locked(self, run_id, source, target, type) -> None:
+        self._check_write_locked(run_id)
+        if run_id is not None:
+            quality = self._capture_quality.setdefault(run_id, CaptureQuality())
+            if quality.attempted_edges is not None:
+                self._capture_quality[run_id] = replace(
+                    quality, attempted_edges=quality.attempted_edges + 1
+                )
+        self._buffer.enqueue_edge(TraceEdge(source, target, type), run_id=run_id)
+
+    def _check_write_locked(self, run_id) -> None:
+        if self._closed:
+            raise RuntimeError("trace store is closed")
+        quality = self._capture_quality.get(run_id)
+        if quality is not None and quality.sealed:
+            raise RuntimeError("trace run is sealed; late writes are rejected")
+
+    def begin_run(self, run_id: uuid.UUID, context_id: str, schema_version: int = 1) -> None:
+        with self._capture_lock:
+            key = str(run_id)
+            self._check_write_locked(key)
+            if key in self._capture_quality:
+                raise ValueError("run already exists")
+            self._capture_contexts[key] = context_id
+            self._owned_capture_runs.add(key)
+            self._capture_quality[key] = CaptureQuality(
+                lifecycle="recording", attempted_events=0, attempted_edges=0,
+                schema_provenance="recorded"
+            )
+        self._persist_capture_locked()
+
+    def bind_workflow(self, run_id: uuid.UUID, workflow_id: str) -> None:
+        """Bind the declared workflow before the first event or edge attempt."""
+        key = str(run_id)
+        with self._capture_lock:
+            self._check_write_locked(key)
+            quality = self._capture_quality.get(key)
+            if (quality is None or quality.lifecycle != "recording"
+                    or quality.attempted_events != 0 or quality.attempted_edges != 0):
+                raise ValueError("workflow must be bound before recording begins")
+            if quality.workflow_id is not None and quality.workflow_id != workflow_id:
+                raise ValueError("run already bound to another workflow")
+            self._capture_quality[key] = replace(quality, workflow_id=workflow_id)
+        self._persist_capture_locked()
+
+    def _quality_locked(self, run_id: str, undecoded: int = 0) -> CaptureQuality:
+        quality = self._capture_quality.get(run_id, CaptureQuality())
+        return replace(
+            quality,
+            dropped_events=quality.dropped_events + self._buffer.drops_for_run(run_id)
+            + self._drop_tally.for_run(run_id),
+            dropped_edges=quality.dropped_edges + self._buffer.edge_drops_for_run(run_id),
+            undecoded_events=quality.undecoded_events + undecoded,
         )
+
+    def _persist_capture_locked(self) -> None:
+        with self._capture_persist_lock:
+            self._persist_capture_now()
+
+    def _persist_capture_now(self) -> None:
+        # Snapshot counters briefly; disk I/O must never hold the admission lock
+        # and make an unrelated run's record() wait on SQLite.
+        with self._capture_lock:
+            states = [
+                (run_id, self._capture_contexts.get(run_id, ""),
+                 json.dumps(asdict(self._quality_locked(run_id)), sort_keys=True))
+                for run_id in self._owned_capture_runs
+            ]
+        for run_id, context_id, quality_json in states:
+            self._db.execute(
+                "INSERT INTO run_capture(run_id, context_id, quality_json) VALUES (?, ?, ?) "
+                "ON CONFLICT(run_id) DO UPDATE SET quality_json=excluded.quality_json",
+                (run_id, context_id, quality_json),
+            )
+
+    def finish_run(self, run_id: uuid.UUID, status: str = "completed") -> None:
+        if status not in ("completed", "failed", "interrupted"):
+            raise ValueError("invalid run completion status")
+        with self._capture_lock:
+            key = str(run_id)
+            self._check_write_locked(key)
+            quality = self._capture_quality.get(key)
+            if quality is None or quality.lifecycle != "recording":
+                raise ValueError("begin_run is required before finish_run")
+            # Close admission before the persistence barrier, while holding the lock.
+            self._capture_quality[key] = replace(quality, lifecycle=status, sealed=True)
+        self._writer.flush()
+        self._persist_capture_locked()
+
+    def prepare_evidence(self, run_id: uuid.UUID) -> TraceRun:
+        run_id = uuid.UUID(str(run_id))
+        with self._capture_lock:
+            quality = self._capture_quality.get(str(run_id), CaptureQuality())
+            if quality.lifecycle == "recording":
+                raise ValueError("finish the run before preparing evidence")
+        self.flush()
+        run = self._fetch_run(run_id)
+        if run is None:
+            raise ValueError("run not found")
+        return run
+
+    def repository_run_snapshot(self, run_id: uuid.UUID) -> dict:
+        run_id = uuid.UUID(str(run_id))
+        self.prepare_evidence(run_id)
+        with self._db.transaction():
+            run = self._fetch_run(run_id)
+            if run is None:
+                raise ValueError("run not found")
+            rows = self._db.query(
+                "SELECT id, context_id, engine, schema_version, sequence, span_id, "
+                "parent_span_id, type, priority, payload, timestamp, schema_provenance "
+                "FROM trace_events WHERE run_id=? ORDER BY sequence, id", (str(run_id),)
+            )
+            events = []
+            for row in rows:
+                payload_bytes = bytes(row[9])
+                try:
+                    payload_json = payload_bytes.decode("utf-8")
+                except UnicodeError:
+                    payload_json = None
+                item = dict(zip(
+                    ("id", "context_id", "engine_name", "schema_version", "sequence", "span_id",
+                     "parent_span_id", "type_identifier", "priority", "payload_json", "timestamp_us",
+                     "schema_provenance"), tuple(row[:9]) + (payload_json,) + tuple(row[10:])
+                ), run_id=str(run_id), payload_bytes=payload_bytes)
+                events.append(item)
+            edge_rows = self._db.query(
+                "SELECT source_id, target_id, edge_type FROM trace_edges WHERE "
+                "source_id IN (SELECT id FROM trace_events WHERE run_id=?) OR "
+                "target_id IN (SELECT id FROM trace_events WHERE run_id=?) "
+                "ORDER BY source_id, target_id, edge_type", (str(run_id), str(run_id))
+            )
+            return {"run": run, "events": events,
+                    "edges": [dict(zip(("source_id", "target_id", "type"), r)) for r in edge_rows],
+                    "capture_quality": asdict(run.capture_quality),
+                    "lifecycle": run.capture_quality.lifecycle}
 
     def flush(self) -> None:
         self._writer.flush()
+        self._persist_capture_locked()
 
     def close(self) -> None:
         """Shut down the writer thread and close the database. Required for final durability."""
+        with self._capture_lock:
+            if self._closed:
+                return
+            self._closed = True
+            for key, quality in self._capture_quality.items():
+                if quality.lifecycle == "recording":
+                    self._capture_quality[key] = replace(quality, lifecycle="interrupted", sealed=True)
         self._writer.shutdown()
+        self._persist_capture_locked()
         self._db.close()
 
     def __enter__(self) -> "SQLiteTraceStore":
@@ -493,6 +691,10 @@ class SQLiteTraceStore(TraceStore):
     @property
     def drop_stats(self) -> TraceDropStats:
         return self._buffer.drop_stats + self._drop_tally.snapshot
+
+    @property
+    def edge_drop_count(self) -> int:
+        return self._buffer.edge_drop_count
 
     def query_runs(self, dsl: TraceQueryDSL) -> List[TraceRun]:
         """Run a query against the database. Flushes pending writes first so events
@@ -546,41 +748,58 @@ class SQLiteTraceStore(TraceStore):
         return self._fetch_run(id)
 
     def _fetch_run(self, id: uuid.UUID) -> Optional[TraceRun]:
+        id = uuid.UUID(str(id))
         ctx_rows = self._db.query(
             "SELECT context_id FROM runs WHERE run_id = ?", (str(id),)
         )
         if not ctx_rows or ctx_rows[0][0] is None:
-            return None
-        context_id = ctx_rows[0][0]
+            context_id = self._capture_contexts.get(str(id))
+            if context_id is None:
+                return None
+        else:
+            context_id = ctx_rows[0][0]
 
         rows = self._db.query(
-            "SELECT id, engine, span_id, parent_span_id, type, payload, timestamp, sequence "
+            "SELECT id, engine, span_id, parent_span_id, type, payload, timestamp, sequence, "
+            "priority, schema_version, schema_provenance "
             "FROM trace_events WHERE run_id = ? ORDER BY sequence ASC",
             (str(id),),
         )
 
         events: List[TraceEvent] = []
+        undecoded = 0
+        assumed_schema = False
         for (
             event_id,
             engine,
             span_id,
             parent_span_id,
-            _type,
+            event_type,
             payload_data,
             timestamp_us,
             sequence,
+            priority,
+            schema_version,
+            schema_provenance,
         ) in rows:
+            assumed_schema = assumed_schema or schema_provenance != "recorded"
             try:
-                payload = self._event_type.decode(bytes(payload_data))
+                payload: TraceableEvent
+                if self._event_type is AnyTraceableEvent:
+                    payload = AnyTraceableEvent.from_storage(bytes(payload_data), event_type, priority)
+                else:
+                    payload = self._event_type.decode(bytes(payload_data))
+                event_uuid = uuid.UUID(event_id)
             except Exception:
+                undecoded += 1
                 continue
             events.append(
                 TraceEvent(
-                    id=uuid.UUID(event_id),
+                    id=event_uuid,
                     run_id=id,
                     context_id=context_id,
                     engine_name=engine if engine is not None else "Unknown",
-                    schema_version=1,
+                    schema_version=int(schema_version),
                     sequence=int(sequence),
                     span_id=span_id,
                     parent_span_id=parent_span_id,
@@ -589,9 +808,11 @@ class SQLiteTraceStore(TraceStore):
                 )
             )
 
-        if not events:
-            return None
-        return TraceRun(run_id=id, context_id=context_id, events=events)
+        with self._capture_lock:
+            quality = self._quality_locked(str(id), undecoded)
+        if assumed_schema:
+            quality = replace(quality, schema_provenance="legacy_assumed_v1")
+        return TraceRun(run_id=id, context_id=context_id, events=events, capture_quality=quality)
 
     def lineage_edges(
         self, id: uuid.UUID, max_depth: Optional[int] = None
@@ -686,7 +907,7 @@ class SQLiteTraceStore(TraceStore):
             placeholders = ", ".join("?" for _ in chunk)
             sql = (
                 "SELECT e.id, e.run_id, r.context_id, e.engine, e.span_id, e.parent_span_id, "
-                "e.payload, e.timestamp, e.sequence "
+                "e.payload, e.timestamp, e.sequence, e.type, e.priority, e.schema_version "
                 "FROM trace_events e JOIN runs r ON e.run_id = r.run_id "
                 f"WHERE e.id IN ({placeholders})"
             )
@@ -701,6 +922,9 @@ class SQLiteTraceStore(TraceStore):
                     payload_data,
                     timestamp_us,
                     sequence,
+                    event_type,
+                    priority,
+                    schema_version,
                 ) = row
                 try:
                     event_id = uuid.UUID(id_str)
@@ -710,7 +934,11 @@ class SQLiteTraceStore(TraceStore):
                 if engine is None:
                     continue
                 try:
-                    payload = self._event_type.decode(bytes(payload_data))
+                    payload = (
+                        AnyTraceableEvent.from_storage(bytes(payload_data), event_type, priority)
+                        if self._event_type is AnyTraceableEvent
+                        else self._event_type.decode(bytes(payload_data))
+                    )
                 except Exception:
                     continue
                 events[event_id] = TraceEvent(
@@ -718,7 +946,7 @@ class SQLiteTraceStore(TraceStore):
                     run_id=run_id,
                     context_id=context_id,
                     engine_name=engine,
-                    schema_version=1,
+                    schema_version=int(schema_version),
                     sequence=int(sequence),
                     span_id=span_id,
                     parent_span_id=parent_span_id,

@@ -98,6 +98,45 @@ class TraceWriteBuffer:
         self._queue_depth_by_run: Dict[str, int] = {}
         self._retry_queue: List[TraceEventRow] = []
         self._retry_edges: List[TraceEdge] = []
+        self._drops_by_run: Dict[str, int] = {}
+        self._edge_drops_by_run: Dict[str, int] = {}
+        self._edge_runs: Dict[tuple, str] = {}
+        self._dropped_edges = 0
+
+    @property
+    def edge_drop_count(self) -> int:
+        """All lost edges, including legacy calls without an attributable run."""
+        with self._lock:
+            return self._dropped_edges
+
+    def drops_for_run(self, run_id: str) -> int:
+        with self._lock:
+            return self._drops_by_run.get(run_id, 0)
+
+    def edge_drops_for_run(self, run_id: str) -> int:
+        with self._lock:
+            return self._edge_drops_by_run.get(run_id, 0)
+
+    def _drop_row_locked(self, row: TraceEventRow, priority: TracePriority) -> None:
+        self._dropped_by_tier[priority] += 1
+        self._drops_by_run[row.run_id] = self._drops_by_run.get(row.run_id, 0) + 1
+
+    def _drop_edge_locked(self, edge: TraceEdge, run_id: Optional[str] = None) -> None:
+        self._dropped_edges += 1
+        run_id = run_id or self._edge_runs.get((edge.source_id, edge.target_id, edge.type))
+        if run_id is not None:
+            self._edge_drops_by_run[run_id] = self._edge_drops_by_run.get(run_id, 0) + 1
+
+    def record_edge_loss(self, edges: List[TraceEdge]) -> None:
+        with self._lock:
+            for edge in edges:
+                self._drop_edge_locked(edge)
+                self._edge_runs.pop((edge.source_id, edge.target_id, edge.type), None)
+
+    def acknowledge_edges(self, edges: List[TraceEdge]) -> None:
+        with self._lock:
+            for edge in edges:
+                self._edge_runs.pop((edge.source_id, edge.target_id, edge.type), None)
 
     @property
     def current_depth(self) -> int:
@@ -128,7 +167,7 @@ class TraceWriteBuffer:
             cap = self._config.capacity
 
             if event_bytes > cap.max_event_size_bytes:
-                self._dropped_by_tier[priority] += 1
+                self._drop_row_locked(event, priority)
                 return
 
             run_depth = self._queue_depth_by_run.get(event.run_id, 0)
@@ -139,7 +178,7 @@ class TraceWriteBuffer:
                 run_depth >= self._max_per_run_buffer
                 and priority <= TracePriority.DIAGNOSTIC
             ):
-                self._dropped_by_tier[priority] += 1
+                self._drop_row_locked(event, priority)
                 return
 
             # 2. Global capacity: evict the lowest-priority, oldest victim to make room.
@@ -152,10 +191,10 @@ class TraceWriteBuffer:
             while over_capacity():
                 if self._config.eviction == EvictionPolicy.DROP_OLDEST:
                     if not self._evict_one_locked(priority):
-                        self._dropped_by_tier[priority] += 1
+                        self._drop_row_locked(event, priority)
                         return
                 else:  # REJECT_NEW
-                    self._dropped_by_tier[priority] += 1
+                    self._drop_row_locked(event, priority)
                     return
 
             stamp = self._enqueue_counter
@@ -174,8 +213,13 @@ class TraceWriteBuffer:
                 self._queue_depth_by_run.get(event.run_id, 0) + 1
             )
 
-    def enqueue_edge(self, edge: TraceEdge) -> None:
+    def enqueue_edge(self, edge: TraceEdge, run_id: Optional[str] = None) -> None:
         with self._lock:
+            if self._edge_queue.count + len(self._retry_edges) >= self._config.capacity.max_items:
+                self._drop_edge_locked(edge, run_id)
+                return
+            if run_id is not None:
+                self._edge_runs[(edge.source_id, edge.target_id, edge.type)] = run_id
             self._edge_queue.append(edge)
 
     def _evict_one_locked(self, incoming: TracePriority) -> bool:
@@ -201,7 +245,7 @@ class TraceWriteBuffer:
             return False
         self._total_count -= 1
         self._total_bytes -= victim.bytes
-        self._dropped_by_tier[tier] += 1
+        self._drop_row_locked(victim.row, tier)
         self._decrement_run_depth(victim.row.run_id)
         return True
 
@@ -286,8 +330,10 @@ class TraceWriteBuffer:
         while len(self._retry_queue) > cap:
             victim = self._retry_queue.pop()
             try:
-                self._dropped_by_tier[TracePriority(victim.priority)] += 1
+                self._drop_row_locked(victim, TracePriority(victim.priority))
             except ValueError:
-                self._dropped_by_tier[TracePriority.TELEMETRY] += 1
+                self._drop_row_locked(victim, TracePriority.TELEMETRY)
         while len(self._retry_edges) > cap:
-            self._retry_edges.pop()
+            edge = self._retry_edges.pop()
+            self._drop_edge_locked(edge)
+            self._edge_runs.pop((edge.source_id, edge.target_id, edge.type), None)

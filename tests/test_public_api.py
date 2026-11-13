@@ -20,6 +20,7 @@ EXPECTED_PUBLIC = {
     "BufferCapacity", "EvictionPolicy", "OfflineConfig",
     "TraceContext", "DProvenanceKit", "ActiveTraceRun",
     "TraceRun", "TraceQueryDSL",
+    "CaptureQuality", "ReasoningRepository", "RepositoryError", "RefConflictError",
     "TraceStore", "InMemoryTraceStore", "SQLiteTraceStore", "RawTraceStore",
     "RawTraceRun", "RawTraceEvent", "TraceError", "NodeNotFoundError",
     "IngestedRun", "OTelSpanEvent", "ingest_otlp", "run_id_for_trace",

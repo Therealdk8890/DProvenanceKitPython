@@ -11,6 +11,13 @@ DProvenanceKit records the execution steps your application instruments, compare
 
 ## Try it in 60 seconds
 
+The current source checkout also includes an **opt-in reasoning repository v1
+candidate**: immutable workflow/run commits, branches, baseline promotion,
+read-only history browsing, and verified offline bundles. Run
+`dpk repo demo --output-dir history-demo` after installing this checkout.
+See the [local reasoning history guide](docs/REASONING_REPOSITORY.md).
+This functionality is not implied to exist in the published 0.9.2 wheel.
+
 Install the published Python package and run the self-contained demo:
 
 ```bash

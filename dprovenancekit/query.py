@@ -21,6 +21,43 @@ from .event import TraceEvent
 
 
 @dataclass(frozen=True)
+class CaptureQuality:
+    """Capture provenance, kept separate from semantic equivalence.
+
+    Older databases and hand-built runs have unknown quality, never an inferred
+    successful capture. Counts describe attempts, including rejected writes.
+    """
+
+    lifecycle: str = "legacy_unknown"
+    attempted_events: Optional[int] = None
+    dropped_events: int = 0
+    attempted_edges: Optional[int] = None
+    dropped_edges: int = 0
+    undecoded_events: int = 0
+    schema_provenance: str = "legacy_assumed_v1"
+    sealed: bool = False
+    workflow_id: Optional[str] = None
+
+    @property
+    def complete(self) -> bool:
+        return (
+            self.lifecycle == "completed" and self.sealed
+            and self.attempted_events is not None
+            and self.attempted_edges is not None
+            and self.dropped_events == 0 and self.dropped_edges == 0
+            and self.undecoded_events == 0
+        )
+
+    @property
+    def incomplete(self) -> bool:
+        return (
+            self.lifecycle in ("recording", "failed", "interrupted")
+            or self.dropped_events > 0 or self.dropped_edges > 0
+            or self.undecoded_events > 0
+        )
+
+
+@dataclass(frozen=True)
 class TraceRun:
     """A finished run's events in ascending ``sequence`` order.
 
@@ -36,6 +73,7 @@ class TraceRun:
     run_id: uuid.UUID
     context_id: str
     events: List[TraceEvent]
+    capture_quality: CaptureQuality = field(default_factory=CaptureQuality)
 
     def __post_init__(self) -> None:
         events = list(self.events)
@@ -44,7 +82,8 @@ class TraceRun:
             for i in range(len(events) - 1)
         ):
             events.sort(key=lambda e: e.sequence)  # sorted() is stable in Python
-            object.__setattr__(self, "events", events)
+        # Always detach the caller's list, including already sorted inputs.
+        object.__setattr__(self, "events", events)
 
 
 # MARK: - AST nodes --------------------------------------------------------------

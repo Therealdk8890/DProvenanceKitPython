@@ -9,6 +9,7 @@ anything a structural diff depends on was lost.
 from __future__ import annotations
 
 import threading
+from typing import Dict, Optional
 from dataclasses import dataclass
 
 from .priority import TracePriority
@@ -71,8 +72,9 @@ class TraceDropTally:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._by_tier = [0, 0, 0, 0]
+        self._by_run: Dict[str, int] = {}
 
-    def record(self, priority: int, count: int = 1) -> None:
+    def record(self, priority: int, count: int = 1, run_id: Optional[str] = None) -> None:
         """Record ``count`` lost events in the given priority tier.
 
         Out-of-range tiers are ignored rather than raising — a tally must never be the
@@ -81,6 +83,12 @@ class TraceDropTally:
         with self._lock:
             if 0 <= priority < len(self._by_tier):
                 self._by_tier[priority] += count
+                if run_id is not None:
+                    self._by_run[run_id] = self._by_run.get(run_id, 0) + count
+
+    def for_run(self, run_id: str) -> int:
+        with self._lock:
+            return self._by_run.get(run_id, 0)
 
     @property
     def snapshot(self) -> TraceDropStats:

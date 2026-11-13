@@ -36,9 +36,13 @@ class ActiveTraceRun(AnyActiveTraceRun):
         self._schema_version = schema_version
         self._sequence_lock = threading.Lock()
         self._sequence_counter = 0
+        self._closed = False
+        self.repository_evidence_id: Optional[str] = None
 
     def record(self, payload: TraceableEvent, engine_name: Optional[str]) -> uuid.UUID:
         with self._sequence_lock:
+            if self._closed:
+                raise RuntimeError("trace run is closed; late writes are rejected")
             seq = self._sequence_counter
             self._sequence_counter += 1
 
@@ -64,7 +68,12 @@ class ActiveTraceRun(AnyActiveTraceRun):
         # Reject self-referential edges at the write boundary — never valid provenance.
         if source == target:
             return
-        self._store.link(source, target, type)
+        if self._closed:
+            raise RuntimeError("trace run is closed; late writes are rejected")
+        if hasattr(self._store, "link_for_run"):
+            self._store.link_for_run(self.run_id, source, target, type)
+        else:
+            self._store.link(source, target, type)
 
     def flush(self) -> None:
         self._store.flush()
@@ -81,11 +90,21 @@ class DProvenanceKit:
         self, context_id: str, store, schema_version: int = 1
     ) -> Iterator[ActiveTraceRun]:
         active = ActiveTraceRun(context_id, store, self.event_type, schema_version)
+        if hasattr(store, "begin_run"):
+            store.begin_run(active.run_id, context_id, schema_version)
         token = TraceContext.current_run.set(active)
+        status = "completed"
         try:
             yield active
+        except BaseException:
+            status = "failed"
+            raise
         finally:
             TraceContext.current_run.reset(token)
+            with active._sequence_lock:
+                active._closed = True
+            if hasattr(store, "finish_run"):
+                store.finish_run(active.run_id, status=status)
 
     @contextmanager
     def with_engine(self, name: str) -> Iterator[None]:

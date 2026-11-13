@@ -658,6 +658,7 @@ def _run_ui(argv) -> int:
         prog="dprovenancekit ui", description="Start local trace visualization UI."
     )
     ap.add_argument("--db", help="path to one SQLite trace database (single-source mode)")
+    ap.add_argument("--repo", help="path to an immutable reasoning repository (read-only history mode)")
     ap.add_argument(
         "--source",
         action="append",
@@ -688,11 +689,13 @@ def _run_ui(argv) -> int:
     )
     args = ap.parse_args(argv)
 
-    if args.db and args.source:
-        ap.error("--db and --source cannot be combined")
-    if not args.db and not args.source:
-        ap.error("provide --db or at least one --source")
-    if args.source:
+    if sum(bool(value) for value in (args.db, args.source, args.repo)) > 1:
+        ap.error("--db, --source, and --repo cannot be combined")
+    if not args.db and not args.source and not args.repo:
+        ap.error("provide --db, --repo, or at least one --source")
+    if args.repo:
+        run_ui_server(None, args.port, host=args.host, allowed_hosts=args.allowed_hosts, repository_path=args.repo)
+    elif args.source:
         sources = []
         for item in args.source:
             parts = item.split("=", 2)
@@ -1295,7 +1298,7 @@ For the API reference and advanced options, see the project README.
 
 
 _USAGE = (
-    "Usage: dprovenancekit <init|record|compare|gate|demo|anomalies|runs|ui|ingest|export|sync"
+    "Usage: dprovenancekit <repo|init|record|compare|gate|demo|anomalies|runs|ui|ingest|export|sync"
     "|attest|evaluate|diagnose|stability>"
 )
 
@@ -1304,6 +1307,7 @@ _HELP = """DProvenanceKit — record, diff, and gate AI agent runs.
 {usage}
 
 Commands:
+  repo       opt-in immutable reasoning history, branches, bundles, and verified gates
   init       scaffold a minimal local-first project (DX hook stub)
   record     pin the latest recorded run as the local golden baseline
   compare    inspect the latest run against the baseline; always exit 0 on a diff
@@ -1340,6 +1344,10 @@ def main(argv=None) -> int:
         print(__version__)
         return 0
 
+    if argv and argv[0] == "repo":
+        from .repository_cli import main as repository_main
+
+        return repository_main(argv[1:])
     if argv and argv[0] == "init":
         return _run_init(argv[1:])
     if argv and argv[0] == "demo":

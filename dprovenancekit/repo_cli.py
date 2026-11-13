@@ -184,6 +184,10 @@ def main(argv: Optional[List[str]] = None, *, repository_factory: Any = None) ->
                     existing = None
                 if existing is not None and args.expected_parent is None:
                     raise ValueError("--expected-parent is required for an existing branch")
+                if existing is not None and args.expected_parent != existing:
+                    raise ValueError("branch changed: --expected-parent does not match current tip")
+                if existing is None and args.expected_parent is not None:
+                    raise ValueError("cannot supply --expected-parent for an empty branch")
                 evidence = args.evidence
                 if args.run:
                     evidence = repo.lookup_run(args.run)

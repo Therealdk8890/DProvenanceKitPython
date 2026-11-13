@@ -570,6 +570,12 @@ class ReasoningRepository:
             row = self._db.execute("SELECT evidence FROM bindings WHERE run_id=?", (str(run_id),)).fetchone()
             return row[0] if row else None
 
+    def seal_run_from_readonly_database(self, db_path: str, run_id: Any) -> str:
+        """Seal one completed capture without opening a writable trace store."""
+        from .repository_readonly import seal_readonly_run
+
+        return seal_readonly_run(self, db_path, run_id)
+
     def seal_run(self, store: Any, run_id: Any, workflow_id: Optional[str] = None) -> str:
         key = str(run_id)
         with self._lock:

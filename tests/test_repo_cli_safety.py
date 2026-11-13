@@ -119,6 +119,20 @@ def test_existing_branch_requires_expected_parent_before_commit(tmp_path, capsys
     assert "--expected-parent" in capsys.readouterr().err
 
 
+def test_stale_parent_does_not_commit(tmp_path, capsys):
+    path = tmp_path / "repository.sqlite"
+    path.touch()
+    fake = FakeRepository(tip="changed", evidence="sealed-evidence")
+    result = repo_cli.main(
+        ["--repo", str(path), "commit", "--evidence", "sealed-evidence",
+         "-m", "test", "--expected-parent", "stale"],
+        repository_factory=lambda _: fake,
+    )
+    assert result == 2
+    assert not fake.commit_called
+    assert "branch changed" in capsys.readouterr().err
+
+
 def test_existing_branch_passes_compare_and_swap_precondition(tmp_path):
     path = tmp_path / "repository.sqlite"
     path.touch()

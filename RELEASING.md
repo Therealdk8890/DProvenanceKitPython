@@ -15,12 +15,13 @@ Swift package release tag and GitHub Release. Announce the product release as co
 after both publication paths are confirmed. If either path fails, report each SDK's status
 separately. Never reuse or rewrite a published or failed tag.
 
-The coordinated 0.9.2 Python and Swift releases have been published. The next coordinated
-product release is **0.10.0**, superseding the unpublished 0.9.3 preparation. Both SDKs
-must independently pass their release checks. Python will use `v0.10.0`; Swift will use
-`0.10.0`. Neither is published yet. See [the release checklist](docs/RELEASE_0.10.0.md)
-for scope, commands and publication verification. Do not describe the product release
-as complete until both publication paths are confirmed.
+The coordinated **0.10.0** release is published for Python (`v0.10.0`, including PyPI)
+and Swift (`0.10.0`), superseding the unpublished 0.9.3 preparation. The Python
+[Trusted Publishing run](https://github.com/Therealdk8890/DProvenanceKitPython/actions/runs/43797953686)
+succeeded, and a fresh installation from PyPI passed both offline demos. See
+[the publication record](docs/RELEASE_0.10.0.md) for immutable commits and validation.
+Future coordinated releases must independently pass both SDKs' release checks and
+verify both publication paths before announcement.
 
 ## One command (manual)
 

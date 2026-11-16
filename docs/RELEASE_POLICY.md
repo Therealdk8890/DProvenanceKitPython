@@ -25,9 +25,12 @@ and [Swift 0.9.2](https://github.com/Therealdk8890/DProvenanceKit/releases/tag/0
 The Python [publish workflow](https://github.com/Therealdk8890/DProvenanceKitPython/actions/runs/42661357851)
 completed successfully, including PyPI publication.
 
-## 0.10.0 preparation
+## 0.10.0 status
 
-The next coordinated target is **0.10.0**, superseding the unpublished Python 0.9.3
-preparation. Python uses tag `v0.10.0`; Swift uses `0.10.0`. Both remain unpublished
-candidates. See [the release checklist](RELEASE_0.10.0.md). Publishing either SDK alone
-does not complete the coordinated release.
+The coordinated **0.10.0** release is published for both SDKs:
+[Python v0.10.0](https://github.com/Therealdk8890/DProvenanceKitPython/releases/tag/v0.10.0),
+[PyPI](https://pypi.org/project/dprovenancekit/0.10.0/) and
+[Swift 0.10.0](https://github.com/Therealdk8890/DProvenanceKit/releases/tag/0.10.0).
+The [Python Trusted Publishing workflow](https://github.com/Therealdk8890/DProvenanceKitPython/actions/runs/43797953686)
+succeeded, a fresh PyPI install passed both offline demos, and both tags resolve to
+the validated merge commits. See [the publication record](RELEASE_0.10.0.md).

@@ -1,13 +1,13 @@
-# Local reasoning history (opt-in v1 candidate)
+# Local reasoning history (opt-in v1)
 
 DPK can preserve a workflow snapshot and its recorded execution as an immutable
 commit, branch experiments, compare decision paths, and export portable evidence.
-This is opt-in functionality in the 0.10.0 source candidate, not a claim about the
-published 0.9.2 wheel. Existing trace commands and formats remain available.
+This opt-in functionality ships in the published 0.10.0 package and is absent from
+the older 0.9.2 wheel. Existing trace commands and formats remain available.
 
 ## Run the complete offline example
 
-From this checkout, after `python -m pip install -e .`:
+After `python -m pip install "dprovenancekit==0.10.0"`:
 
 ```console
 dpk repo demo --output-dir history-demo

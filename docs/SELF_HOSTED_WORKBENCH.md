@@ -1,20 +1,20 @@
 # Self-hosted trace workbench
 
-The Python SDK has a local web viewer for existing DProvenanceKit SQLite trace databases. The published `0.9.2` package contains the original single-database viewer. The multi-database workbench described below is included in the `0.10.0` release candidate and will be available from PyPI after that release is published.
+The Python SDK has a local web viewer for existing DProvenanceKit SQLite trace databases. The published `0.10.0` package includes the multi-database workbench described below. The older `0.9.2` package contains only the original single-database viewer.
 
 ## Install
 
-For the currently published single-database viewer:
+Install the published workbench; existing single-database usage remains supported:
 
 ```bash
-python -m pip install "dprovenancekit==0.9.2"
+python -m pip install "dprovenancekit==0.10.0"
 dpk ui --db .dprovenance/traces.sqlite
 ```
 
-To use the `0.10.0` candidate's multi-database mode before PyPI publication, install the prepared branch:
+To reproduce the published source instead, install its release tag:
 
 ```bash
-git clone --branch release/0.10.0-preparation https://github.com/Therealdk8890/DProvenanceKitPython.git
+git clone --branch v0.10.0 https://github.com/Therealdk8890/DProvenanceKitPython.git
 cd DProvenanceKitPython
 python -m pip install .
 ```
@@ -82,4 +82,4 @@ Strict-audit alignment remains authoritative. The viewer does not turn semantic 
 
 ## Package validation
 
-The CI workflow builds a wheel from the current repository revision, installs it in a fresh virtual environment, imports the viewer module, verifies that the packaged `index.html` resource exists, and invokes `dpk ui --help`. This verifies packaging of the `0.10.0` release candidate; it does not claim that the already-published `0.9.2` wheel contains the newer multi-database implementation.
+The CI workflow builds a wheel, installs it in a fresh virtual environment, imports the viewer module, verifies packaged HTML resources and invokes the CLI. The `0.10.0` publication workflow passed, and a fresh installation directly from PyPI verified both viewer resources and offline demos. See the [publication record](RELEASE_0.10.0.md). The older `0.9.2` wheel does not contain the multi-database implementation.

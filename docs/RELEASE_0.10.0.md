@@ -1,9 +1,26 @@
-# DProvenanceKit 0.10.0 release preparation
+# DProvenanceKit 0.10.0 release record
 
-Status: **unpublished candidate**. Latest published Python and Swift versions: **0.9.2**.
+Status: **published for Python and Swift**. Latest published versions: **0.10.0**.
 Python tag: `v0.10.0`. Swift tag: `0.10.0`. The unpublished 0.9.3 preparation is
 superseded; its workbench changes are included in 0.10.0. Numbered changelog entries
-and build-version constants describe the prepared source, not proof of publication.
+and build-version constants identify source builds; publication is verified below.
+
+## Verified publication
+
+| Distribution | Immutable source / evidence |
+|---|---|
+| [Python v0.10.0](https://github.com/Therealdk8890/DProvenanceKitPython/releases/tag/v0.10.0) | `26ca41f9657a8b123673f2de463f3a669a8b8f96` |
+| [Swift 0.10.0](https://github.com/Therealdk8890/DProvenanceKit/releases/tag/0.10.0) | `f3b0ff225e15bf3ca075b1fd6f0023dd4834af4c` |
+| [PyPI 0.10.0](https://pypi.org/project/dprovenancekit/0.10.0/) | [Trusted Publishing run 43797953686](https://github.com/Therealdk8890/DProvenanceKitPython/actions/runs/43797953686) passed tests, build/version checks, provenance attestation and upload |
+
+A fresh environment installed exactly 0.10.0 directly from PyPI, imported both viewers,
+checked both HTML resources and the dependency-free core, then passed both offline demos.
+The history demo rejected the skipped verification, accepted a fresh matching execution
+and reproduced the evaluation after bundle export/import. Both Git tags resolve to the
+validated merge commits. Swift builds and conformance passed macOS CI on that exact
+source tree; a fresh consumer build from the published tag was not run in this Linux
+workspace. Optional heavy framework integrations remain skipped as recorded in the
+release notes. Published tags and PyPI artifacts are immutable; this record updates main.
 
 ## Release scope
 
@@ -58,24 +75,25 @@ not evidence of a successful integration test. Record its tested SHA if run sepa
 
 ## Swift and cross-language validation
 
-Follow the [Swift release checklist](https://github.com/Therealdk8890/DProvenanceKit/blob/release/0.10.0-preparation/docs/RELEASE_0.10.0.md).
+Follow the [Swift release checklist](https://github.com/Therealdk8890/DProvenanceKit/blob/main/docs/RELEASE_0.10.0.md).
 Compare every vendored Swift vector byte-for-byte with Python `conformance/vectors/`,
 and compare the shared malformed-attestation fixture. Run both production engines'
 shared-fixture tests; matching file bytes alone are not an engine-execution result.
 
 ## Publication gates
 
-- [ ] Record both final candidate SHAs, review the diff and resolve CI/DCO failures.
-- [ ] Both SDKs' full CI and release-specific checks pass at those SHAs; record skips.
-- [ ] Merge both preparation PRs, then verify the final main commits and their checks.
-- [ ] Confirm `v0.10.0` and `0.10.0` do not already exist; never reuse or move a release tag.
-- [ ] Publish Python `v0.10.0` using GitHub Release and the Trusted Publishing workflow.
-- [ ] Confirm the release-gate tests, build, metadata checks, attestations and PyPI upload succeed.
-- [ ] Install exactly `dprovenancekit==0.10.0` from PyPI in a fresh environment and repeat the wheel smoke checks; verify artifact provenance.
+- [x] Record both final candidate SHAs, review the diff and resolve CI/DCO failures.
+- [x] Both SDKs' full CI and release-specific checks pass at those SHAs; record skips.
+- [x] Merge both preparation PRs, then verify the final main commits and their checks.
+- [x] Confirm `v0.10.0` and `0.10.0` do not already exist; never reuse or move a release tag.
+- [x] Publish Python `v0.10.0` using GitHub Release and the Trusted Publishing workflow.
+- [x] Confirm the release-gate tests, build, metadata checks, attestations and PyPI upload succeed.
+- [x] Install exactly `dprovenancekit==0.10.0` from PyPI in a fresh environment and repeat the wheel smoke checks; verify artifact provenance.
 - [ ] Publish Swift `0.10.0` and verify a clean consumer resolves that tag and its supported library targets build.
-- [ ] Update latest-published status, candidate install guidance and changelog dates only after the corresponding publication is verified.
-- [ ] After PyPI verification, update bundled/downstream Action package pins to the published 0.10.0 artifact; their current 0.9.2 pins intentionally target an available package.
-- [ ] Announce a coordinated release only after both distribution paths are confirmed.
+- [x] Update latest-published status, candidate install guidance and changelog dates only after the corresponding publication is verified.
+- [x] After PyPI verification, update bundled/downstream Action package pins to the published 0.10.0 artifact; their current 0.9.2 pins intentionally target an available package.
+- [x] Announce a coordinated release only after both distribution paths are confirmed.
 
-Release preparation does not create tags, publish packages or satisfy these gates by
-itself. Report per-SDK status if either publication fails.
+The checklist above is retained as the release procedure; checked publication evidence
+is recorded in the verified-publication section. For future releases, report per-SDK
+status if either publication fails.

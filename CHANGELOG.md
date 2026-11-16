@@ -7,6 +7,12 @@ public API may still change between minor versions.
 
 ## [Unreleased]
 
+## [0.10.0] - Unreleased
+
+Prepared coordinated release candidate; no 0.10.0 tag or PyPI artifact is published yet.
+The previously prepared 0.9.3 workbench candidate was not published; its changes are
+included here with the later additions.
+
 ### Added
 - Opt-in local reasoning repository v1: canonical SHA-256 objects, workflow/run commits,
   branch/tag/baseline refs with transactional conditional updates and reflog.
@@ -14,19 +20,43 @@ public API may still change between minor versions.
   bundles, detached P-256 signatures, and shared Python/Swift conformance fixtures.
 - `dpk repo` CLI, offline history demo, and read-only paged `dpk ui --repo` workbench.
 - Required Windows, macOS and Linux repository/capture validation jobs.
+- Self-hosted multi-database trace workbench with source-aware run browsing,
+  cross-database diffs, read-only SQLite access, per-source health reporting and
+  isolated source failures; local Docker Compose deployment and installed-wheel checks.
+- Experimental Structural Alignment v1 reference engine with integer basis-point
+  scoring, deterministic assignment, independent F1/hierarchy/order gates and shared
+  Python/Swift golden and negative vectors. It is opt-in and does not replace the
+  existing regression-gate engine.
+- Experimental deterministic configuration fingerprints and signed Ed25519 manifests
+  verified against caller-supplied trusted-key policy; signature operations use the
+  optional `[crypto]` extra.
+- External P-256 attestation signing-provider protocol. Applications supply provider
+  adapters; this does not ship an HSM/TPM integration or hardware-attestation verifier.
+- Synthetic regression-policy sensitivity benchmark and shared malformed-attestation
+  conformance coverage.
 
 ### Fixed
 - Generic SQLite/UI decoding retains stored critical identity, priority and schema
   rather than inferring them from payload keys or silently hiding decode failures.
 - Per-run capture lifecycle/loss accounting, bounded edge buffering, workflow
   prebinding and rejection of writes after finalization.
+- Alignment snapshots reject inconsistent provenance metadata.
+- Completed captures can be sealed through strict read-only SQLite snapshots without
+  running schema initialization or the writer lifecycle.
+- Repository branch commits require an expected parent for compare-and-swap updates;
+  CLI trust decisions require independently supplied signer trust and fail closed.
 
-## [0.9.3] — 2026-11-09
-
-### Added
-- Self-hosted multi-database trace workbench with source-aware run browsing and cross-database diffs.
-- Read-only SQLite source access, per-source health reporting, and isolated source failures.
-- Hardened local Docker Compose deployment and installed-wheel validation for the workbench.
+### Compatibility and scope
+- Existing trace commands, frozen Trace Specification v1, profile hashes and
+  DPK-BINARY-V1 attestation encoding remain available and unchanged.
+- Repository CLI callers must supply the documented expected parent and trust policy;
+  see [local reasoning history](docs/REASONING_REPOSITORY.md).
+- Matching SDK versions identify a coordinated release, not identical features. Swift
+  verifies portable objects/bundles; Python owns local history operations and viewers.
+- Captured steps and signed artifacts establish recorded evidence and integrity, not
+  truth, complete observation, hardware custody or authorization to execute.
+- Critical-step order-intent policy remains a design proposal, not delivered behavior.
+- See the [0.10.0 release checklist](docs/RELEASE_0.10.0.md) for publication gates.
 
 ## [0.9.2] — 2026-11-06
 
@@ -252,7 +282,8 @@ Baseline for this changelog. See the Git history and
 [GitHub releases](https://github.com/Therealdk8890/DProvenanceKitPython/releases) for earlier
 changes.
 
-[Unreleased]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.9.1...v0.9.2
 [0.7.1]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/Therealdk8890/DProvenanceKitPython/compare/v0.6.1...v0.7.0

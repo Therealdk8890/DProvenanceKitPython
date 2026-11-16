@@ -7,9 +7,9 @@ public API may still change between minor versions.
 
 ## [Unreleased]
 
-## [0.10.0] - Unreleased
+## [0.10.0] - 2026-11-15
 
-Prepared coordinated release candidate; no 0.10.0 tag or PyPI artifact is published yet.
+Published on GitHub and PyPI as part of the coordinated Python/Swift 0.10.0 release.
 The previously prepared 0.9.3 workbench candidate was not published; its changes are
 included here with the later additions.
 

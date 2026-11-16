@@ -2,8 +2,8 @@
 
 DPK can preserve a workflow snapshot and its recorded execution as an immutable
 commit, branch experiments, compare decision paths, and export portable evidence.
-This is source-checkout candidate functionality, not a claim about the published
-0.9.2 wheel. Existing trace commands and formats remain available.
+This is opt-in functionality in the 0.10.0 source candidate, not a claim about the
+published 0.9.2 wheel. Existing trace commands and formats remain available.
 
 ## Run the complete offline example
 

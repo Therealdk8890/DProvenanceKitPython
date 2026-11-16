@@ -11,8 +11,8 @@ DProvenanceKit records the execution steps your application instruments, compare
 
 ## Try it in 60 seconds
 
-The current source checkout also includes an **opt-in reasoning repository v1
-candidate**: immutable workflow/run commits, branches, baseline promotion,
+The **0.10.0 source candidate** includes an **opt-in reasoning repository v1**:
+immutable workflow/run commits, branches, baseline promotion,
 read-only history browsing, and verified offline bundles. Run
 `dpk repo demo --output-dir history-demo` after installing this checkout.
 See the [local reasoning history guide](docs/REASONING_REPOSITORY.md).
@@ -72,6 +72,9 @@ The SDKs share a product and trace model, but their language-specific capabiliti
 | `DPK-BINARY-V1` trace attestation | Yes; optional `[crypto]` extra, software P-256 keys | Yes; CryptoKit and P-256 |
 | Proof packs | Not currently available | Yes |
 | Secure Enclave-backed keys | Not available | Supported Apple hardware |
+| Portable reasoning-history objects and bundle verification | Yes | Yes; read-only verification |
+| Local reasoning-history operations and web workbench | Yes; opt-in | Not available |
+| Structural Alignment v1 and signed configuration manifests | Experimental, opt-in | Experimental, opt-in |
 
 Python's optional cryptographic extra is installed separately:
 
@@ -96,13 +99,19 @@ These boundaries are intentional. See the [attestation threat model and limitati
 
 - [Python installation and API documentation](https://dprovenance.dev)
 - [Regression-gate GitHub Action](https://github.com/marketplace/actions/dprovenancekit-regression-gate)
-- [Self-hosted trace workbench guide](docs/SELF_HOSTED_WORKBENCH.md) — includes the separate instructions and release status for the Python 0.9.3 workbench candidate
+- [Self-hosted trace workbench guide](docs/SELF_HOSTED_WORKBENCH.md) — installation and release status for the 0.10.0 multi-database candidate
+- [0.10.0 release checklist](docs/RELEASE_0.10.0.md) — scope, validation and publication gates
 - [Product and release documentation](docs/)
 - [DProvenanceKit alongside LangSmith](https://dprovenance.dev/compare/dprovenancekit-vs-langsmith/)
 
 ## Release status and license
 
-The latest published Python and Swift SDK releases are **0.9.2**. The Python 0.9.3 workbench candidate and its publication status are documented in the [workbench guide](docs/SELF_HOSTED_WORKBENCH.md); candidate functionality is not implied to be present in the published 0.9.2 wheel.
+The latest published Python and Swift SDK releases are **0.9.2**. This checkout prepares
+the coordinated **0.10.0 candidate**, which includes the multi-database workbench, opt-in
+reasoning history and experimental alignment/configuration APIs. The earlier unpublished
+0.9.3 preparation is superseded. No 0.10.0 tag or PyPI artifact is published yet; candidate
+functionality is not implied to be present in the published 0.9.2 wheel. See the
+[release checklist](docs/RELEASE_0.10.0.md) and [workbench guide](docs/SELF_HOSTED_WORKBENCH.md).
 
 DProvenanceKit is released under the [Apache License 2.0](LICENSE).
 

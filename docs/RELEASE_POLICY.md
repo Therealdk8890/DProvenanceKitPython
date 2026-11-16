@@ -20,4 +20,14 @@ If one language's validation or publication fails, report the other SDK's status
 
 ## 0.9.2 status
 
-Python PR #93 and Swift PR #142 prepare the respective 0.9.2 candidates. Neither PR publishes a tag or package. The product release remains pending both repositories' validation and publication gates.
+The coordinated 0.9.2 release has been published: [Python v0.9.2](https://github.com/Therealdk8890/DProvenanceKitPython/releases/tag/v0.9.2)
+and [Swift 0.9.2](https://github.com/Therealdk8890/DProvenanceKit/releases/tag/0.9.2).
+The Python [publish workflow](https://github.com/Therealdk8890/DProvenanceKitPython/actions/runs/42661357851)
+completed successfully, including PyPI publication.
+
+## 0.10.0 preparation
+
+The next coordinated target is **0.10.0**, superseding the unpublished Python 0.9.3
+preparation. Python uses tag `v0.10.0`; Swift uses `0.10.0`. Both remain unpublished
+candidates. See [the release checklist](RELEASE_0.10.0.md). Publishing either SDK alone
+does not complete the coordinated release.

@@ -309,3 +309,95 @@ def test_unsigned_close_rejects_truncation_and_replacement():
 def test_invalid_empty_close(changes, code):
     with pytest.raises(ChainError, match=f'^{code}$'):
         close_preimage(replace(close_from_fixture(CLOSE_CASES[0]), **changes))
+
+
+def test_authenticated_run_close():
+    from hashlib import sha256
+    from dprovenancekit.attestation import SoftwareTraceAttestationKey
+    from experimental.event_chain.auth import (
+        Edge, Trace, sign_close, trace_digest, verify_authentication,
+    )
+
+    chain = build(RUN, EVENTS)
+    trace = Trace(RUN, EVENTS[0].contextID, EVENTS,
+                  (Edge(EVENTS[0].eventID, EVENTS[1].eventID, 'derivedFrom'),))
+    key = SoftwareTraceAttestationKey()
+    other = SoftwareTraceAttestationKey()
+    trusted = sha256(key.public_key_x963_representation).digest()
+    untrusted = sha256(other.public_key_x963_representation).digest()
+    signed = sign_close(chain, trace, RUN, 123, key)
+    verify_authentication(chain, trace, signed, RUN, trusted_key_id=trusted,
+                          require_evidence=True)
+    assert signed.close.traceDigest == trace_digest(chain, trace, RUN)
+    for bad, pin, code in [
+        (signed, untrusted, 'UNTRUSTED_KEY'),
+        (replace(signed, publicKeyX963=other.public_key_x963_representation),
+         trusted, 'KEY_ID_MISMATCH'),
+        (replace(signed, signatureDER=b'bad'), trusted, 'INVALID_SIGNATURE'),
+        (replace(signed, close=replace(signed.close, issuedAtUnixMicroseconds=124)),
+         trusted, 'INVALID_SIGNATURE'),
+    ]:
+        with pytest.raises(ChainError, match=f'^{code}$'):
+            verify_authentication(chain, trace, bad, RUN, trusted_key_id=pin)
+    with pytest.raises(ChainError, match='^TRACE_MISMATCH$'):
+        verify_authentication(chain, replace(trace, edges=()), signed, RUN,
+                              trusted_key_id=trusted)
+    with pytest.raises(ChainError, match='^TRACE_MISMATCH$'):
+        sign_close(chain, replace(trace, events=EVENTS[:-1]), RUN, 123, key)
+    with pytest.raises(ChainError, match='^INVALID_TRACE_EDGE$'):
+        sign_close(chain, replace(trace, edges=trace.edges * 2), RUN, 123, key)
+    truncated = build(RUN, EVENTS[:-1])
+    with pytest.raises(ChainError, match='^CLOSURE_MISMATCH$'):
+        verify_authentication(truncated, trace, signed, RUN, trusted_key_id=trusted)
+    replacement = build(RUN, (replace(EVENTS[0], payloadJSON='{}'), *EVENTS[1:]))
+    with pytest.raises(ChainError, match='^CLOSURE_MISMATCH$'):
+        verify_authentication(replacement, trace, signed, RUN, trusted_key_id=trusted)
+
+
+def test_authenticated_empty_chain_and_wrong_provider():
+    from hashlib import sha256
+    from dprovenancekit.attestation import SoftwareTraceAttestationKey
+    from experimental.event_chain.auth import Trace, sign_close, verify_authentication
+
+    chain = build(RUN, [])
+    trace = Trace(RUN, 'empty', ())
+    key = SoftwareTraceAttestationKey()
+    signed = sign_close(chain, trace, RUN, 123, key)
+    pin = sha256(key.public_key_x963_representation).digest()
+    verify_authentication(chain, trace, signed, RUN, trusted_key_id=pin)
+    with pytest.raises(ChainError, match='^EMPTY_CHAIN$'):
+        verify_authentication(chain, trace, signed, RUN, trusted_key_id=pin,
+                              require_evidence=True)
+
+    class WrongProvider:
+        public_key_x963_representation = key.public_key_x963_representation
+
+        def signature_der(self, data):
+            return SoftwareTraceAttestationKey().signature_der(data)
+
+    with pytest.raises(ChainError, match='^INVALID_SIGNATURE$'):
+        sign_close(chain, trace, RUN, 123, WrongProvider())
+
+
+def test_candidate_trace_digest_matches_existing_attestation_oracle():
+    from dprovenancekit.attestation import AttestableTrace, canonical_trace_bytes
+    from experimental.event_chain.auth import Edge, Trace, trace_bytes, trace_digest
+
+    fixture = json.loads((FIXTURE.parent / 'attestation-v1.json').read_text(encoding='utf-8'))
+    wire = fixture['trace']
+    events = tuple(Event(
+        e['id'], e['runID'], e['contextID'], e['engineName'], e['schemaVersion'],
+        e['sequence'], e.get('spanID'), e.get('parentSpanID'), e['typeIdentifier'],
+        e['priority'], e['payloadJSON'], e['timestampUnixMicroseconds'],
+    ) for e in wire['events'])
+    chain = build(wire['runID'], events)
+    for edges in ([], [
+        {'sourceID': events[2].eventID, 'targetID': events[4].eventID, 'type': 'informed'},
+        {'sourceID': events[0].eventID, 'targetID': events[1].eventID, 'type': 'derivedFrom'},
+    ]):
+        trace = Trace(wire['runID'], wire['contextID'], events,
+                      tuple(Edge(**edge) for edge in edges))
+        oracle = AttestableTrace.from_wire(dict(wire, edges=edges))
+        assert trace_bytes(chain, trace, wire['runID']) == canonical_trace_bytes(oracle)
+        if not edges:
+            assert trace_digest(chain, trace, wire['runID']).hex() == fixture['attestation']['traceDigest']

@@ -30,4 +30,4 @@ jobs:
         with:
           python-version: '3.9'
       - run: python -m pip install -r event_chain_gate_requirements.txt
-      - run: python -m pytest -q tests/test_event_chain_candidate.py
+      - run: python -m pytest -q tests/test_event_chain_candidate.py tests/test_event_chain_storage.py

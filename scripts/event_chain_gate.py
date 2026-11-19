@@ -5,9 +5,9 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMANDS = (
-    ("lint", ("-m", "ruff", "check", "--target-version", "py39", "--select", "E,F", "--ignore", "E501", "experimental", "tests/test_event_chain_candidate.py", "scripts/event_chain_gate.py")),
+    ("lint", ("-m", "ruff", "check", "--target-version", "py39", "--select", "E,F", "--ignore", "E501", "experimental", "tests/test_event_chain_candidate.py", "tests/test_event_chain_storage.py", "scripts/event_chain_gate.py")),
     ("strict types", ("-m", "mypy", "--config-file", "event_chain_mypy.ini", "experimental")),
-    ("tests", ("-m", "pytest", "-q", "tests/test_event_chain_candidate.py")),
+    ("tests", ("-m", "pytest", "-q", "tests/test_event_chain_candidate.py", "tests/test_event_chain_storage.py")),
 )
 
 

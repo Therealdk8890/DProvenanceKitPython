@@ -401,3 +401,14 @@ def test_candidate_trace_digest_matches_existing_attestation_oracle():
         assert trace_bytes(chain, trace, wire['runID']) == canonical_trace_bytes(oracle)
         if not edges:
             assert trace_digest(chain, trace, wire['runID']).hex() == fixture['attestation']['traceDigest']
+
+
+@pytest.mark.parametrize("name", ["empty", "sequence_gap_and_unicode"])
+def test_candidate_exchange_roundtrip(tmp_path, name):
+    from experimental.event_chain.auth import sign_close
+    from experimental.event_chain.exchange import TestKey, emit, fixture_case, pin, verify_received
+
+    chain, trace = fixture_case(FIXTURE, name)
+    artifact = tmp_path / "python.json"
+    emit(chain, trace, sign_close(chain, trace, chain.runID, 123, TestKey(1)), artifact)
+    verify_received(artifact, chain.runID, pin(1), pin(2))

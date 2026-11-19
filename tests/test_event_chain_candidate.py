@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 from experimental.event_chain.core import (
-    ChainError, Event, append, build, entry_preimage, genesis_preimage, verify,
+    ChainError, Event, RunClose, append, build, close_preimage, entry_preimage,
+    event_bytes, genesis_preimage, verify, verify_close_binding,
 )
 
 FIXTURE = Path(__file__).resolve().parents[1] / 'conformance/vectors/event_chain_v1_candidate.json'
@@ -221,3 +222,90 @@ def test_builder_resume_hashes_prefix_once(monkeypatch):
     assert calls == 2
     writer.append(EVENTS[2])
     assert calls == 3
+
+
+@pytest.mark.parametrize("extra,accepted", [(256, True), (257, False)])
+def test_payload_depth_boundary(extra, accepted):
+    payload = '{"x":' + '[' * extra + '0' + ']' * extra + '}'
+    event = replace(EVENTS[0], payloadJSON=payload)
+    if accepted:
+        event_bytes(event)
+    else:
+        with pytest.raises(ChainError, match='^INVALID_PAYLOAD_JSON$'):
+            event_bytes(event)
+
+
+@pytest.mark.parametrize("extra,accepted", [(0, True), (1, False)])
+def test_payload_utf8_byte_limit(extra, accepted):
+    payload = '{"x":"' + 'é' * ((1_048_576 - 8) // 2) + 'a' * extra + '"}'
+    assert len(payload.encode('utf-8')) == 1_048_576 + extra
+    event = replace(EVENTS[0], payloadJSON=payload)
+    if accepted:
+        event_bytes(event)
+    else:
+        with pytest.raises(ChainError, match='^INVALID_PAYLOAD_JSON$'):
+            event_bytes(event)
+
+
+@pytest.mark.parametrize("payload", [
+    '{"é":1,"e\\u0301":2}', '{"x":"[[[[[[\\""}', '{"x":1e999999}',
+    '{"\\uD800":0}', '{"x":[true,null,-1.2e+5]}',
+])
+def test_valid_payload_grammar(payload):
+    event_bytes(replace(EVENTS[0], payloadJSON=payload))
+
+
+@pytest.mark.parametrize("payload", [
+    '{"a":1,"\\u0061":2}', '{"😀":1,"\\uD83D\\uDE00":2}', '{"x":{"a":1,"a":2}}',
+])
+def test_duplicate_decoded_keys(payload):
+    with pytest.raises(ChainError, match='^INVALID_PAYLOAD_JSON$'):
+        event_bytes(replace(EVENTS[0], payloadJSON=payload))
+
+
+CLOSE_CASES = json.loads(FIXTURE.read_text(encoding='utf-8'))['unsignedClosureCases']
+
+
+def close_from_fixture(case):
+    return RunClose(
+        case['runID'], case['chainVersion'], case['finalChainIndex'],
+        bytes.fromhex(case['finalChainHead']), case['eventCount'],
+        bytes.fromhex(case['traceDigest']), bytes.fromhex(case['keyID']),
+        case['issuedAtUnixMicroseconds'],
+    )
+
+
+@pytest.mark.parametrize('case', CLOSE_CASES, ids=lambda case: case['name'])
+def test_unsigned_close_golden(case):
+    from hashlib import sha256
+
+    close = close_from_fixture(case)
+    raw = close_preimage(close)
+    assert raw.hex() == case['preimageHex']
+    assert sha256(raw).hexdigest() == case['preimageSHA256']
+    events = next(c for c in CASES if c['name'] == case['name'])['entries']
+    chain = build(case['runID'], [Event(**entry['event']) for entry in events])
+    verify_close_binding(chain, close, case['runID'])
+
+
+def test_unsigned_close_rejects_truncation_and_replacement():
+    chain = build(RUN, EVENTS)
+    close = close_from_fixture(CLOSE_CASES[1])
+    verify_close_binding(chain, close, RUN)
+    for changed in (build(RUN, EVENTS[:-1]),
+                    build(RUN, (replace(EVENTS[0], payloadJSON='{}'), *EVENTS[1:]))):
+        with pytest.raises(ChainError, match='^CLOSURE_MISMATCH$'):
+            verify_close_binding(changed, close, RUN)
+
+
+@pytest.mark.parametrize('changes,code', [
+    ({'finalChainIndex': 0}, 'CLOSURE_MISMATCH'),
+    ({'finalChainHead': b'\x00' * 32}, 'CLOSURE_MISMATCH'),
+    ({'traceDigest': b''}, 'INVALID_HASH'),
+    ({'keyID': b''}, 'INVALID_HASH'),
+    ({'chainVersion': 2}, 'UNSUPPORTED_VERSION'),
+    ({'eventCount': -1}, 'INTEGER_OUT_OF_RANGE'),
+])
+def test_invalid_empty_close(changes, code):
+    with pytest.raises(ChainError, match=f'^{code}$'):
+        close_preimage(replace(close_from_fixture(CLOSE_CASES[0]), **changes))

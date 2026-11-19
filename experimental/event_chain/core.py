@@ -9,6 +9,9 @@ from uuid import UUID
 
 GENESIS_DOMAIN = b"DPROVENANCEKIT-EVENT-CHAIN-GENESIS-V1"
 ENTRY_DOMAIN = b"DPROVENANCEKIT-EVENT-CHAIN-ENTRY-V1"
+CLOSE_DOMAIN = b"DPROVENANCEKIT-RUN-CLOSE-V1"
+MAX_PAYLOAD_BYTES = 1_048_576
+MAX_CONTAINER_DEPTH = 256
 _UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
 
@@ -71,7 +74,30 @@ def _reject_constant(value: str) -> object:
 
 
 def _payload(value: str) -> bytes:
-    raw = _string(value)
+    encoded = _utf8(value)
+    if len(encoded) > MAX_PAYLOAD_BYTES:
+        raise ChainError("INVALID_PAYLOAD_JSON")
+    # Count container nesting before parsing; brackets in strings are not containers.
+    depth = -1
+    in_string = False
+    escaped = False
+    for token in value:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif token == "\\":
+                escaped = True
+            elif token == '"':
+                in_string = False
+        elif token == '"':
+            in_string = True
+        elif token in "[{":
+            depth += 1
+            if depth > MAX_CONTAINER_DEPTH:
+                raise ChainError("INVALID_PAYLOAD_JSON")
+        elif token in "]}":
+            depth -= 1
+    raw = _integer(len(encoded)) + encoded
     try:
         # Number tokens are validated by the JSON grammar, without float coercion.
         parsed: object = json.loads(value, object_pairs_hook=_pairs,
@@ -263,3 +289,44 @@ def append(chain: Chain, event: Event, expected_run_id: str) -> Chain:
     writer = ChainBuilder.from_chain(chain, expected_run_id)
     writer.append(event)
     return writer.snapshot()
+
+
+@dataclass(frozen=True)
+class RunClose:
+    """Unsigned commitment fields; not a signature or evidence of full trace coverage."""
+    runID: str
+    chainVersion: int
+    finalChainIndex: Optional[int]
+    finalChainHead: bytes
+    eventCount: int
+    traceDigest: bytes
+    keyID: bytes
+    issuedAtUnixMicroseconds: int
+
+
+def close_preimage(close: RunClose) -> bytes:
+    """Encode the candidate closure, enforcing structural invariants."""
+    if type(close.chainVersion) is not int or close.chainVersion != 1:
+        raise ChainError("UNSUPPORTED_VERSION")
+    identity = _uuid(close.runID).bytes
+    count = _integer(close.eventCount)
+    head = _hash(close.finalChainHead)
+    index = close.finalChainIndex
+    index_bytes = b"\x00" if index is None else b"\x01" + _integer(index)
+    if close.eventCount == 0:
+        if index is not None or not compare_digest(head, genesis(close.runID)):
+            raise ChainError("CLOSURE_MISMATCH")
+    elif index is None or index != close.eventCount - 1:
+        raise ChainError("CLOSURE_MISMATCH")
+    return b"".join((CLOSE_DOMAIN, identity, _integer(1, signed=True), index_bytes,
+                     head, count, _hash(close.traceDigest), _hash(close.keyID),
+                     _integer(close.issuedAtUnixMicroseconds, signed=True)))
+
+
+def verify_close_binding(chain: Chain, close: RunClose, expected_run_id: str) -> None:
+    """Check unsigned chain binding only; never authenticate a commitment here."""
+    close_preimage(close)
+    if _uuid(close.runID) != _uuid(expected_run_id):
+        raise ChainError("RUN_ID_MISMATCH")
+    verify(chain, expected_run_id, expected_count=close.eventCount,
+           expected_head=close.finalChainHead)

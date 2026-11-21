@@ -521,12 +521,154 @@ def gen_alignment_verdict() -> dict:
     }
 
 
+# -- 6. OpenTelemetry gate-verdict attributes ------------------------------------
+
+# SDK-identity keys differ per implementation (name) and per release (version), so they
+# are excluded from the pinned attribute maps; an SDK MUST still emit both.
+OTEL_VERDICT_SDK_KEYS = ("dpk.sdk.name", "dpk.sdk.version")
+
+
+def _otel_verdict_attributes(verdict) -> dict:
+    attrs = verdict.to_attributes()
+    return {k: v for k, v in attrs.items() if k not in OTEL_VERDICT_SDK_KEYS}
+
+
+def gen_otel_verdict_attributes() -> dict:
+    from dprovenancekit.exporters import VERDICT_SCHEMA, GateVerdict
+    from dprovenancekit.exporters.otel import _key_values
+
+    long_reasoning = "Critical reasoning steps removed: verify. " + ("x" * 1100)
+    many_added = [f"tool_call.start#{i}" for i in range(70)]
+    samples = [
+        {
+            "description": "Passing gate with every optional field present.",
+            "verdict": {
+                "passed": True,
+                "regression_level": "none",
+                "strength": 0.0,
+                "fingerprint_match": True,
+                "golden_fingerprint": "972d989e2f3371dc0ecc2fc480056a5a05fb6d48",
+                "candidate_fingerprint": "972d989e2f3371dc0ecc2fc480056a5a05fb6d48",
+                "golden_run_id": "00000000-0000-4000-8000-000000000001",
+                "candidate_run_id": "00000000-0000-4000-8000-000000000002",
+                "max_regression_level": "none",
+                "allow_divergent_steps": False,
+                "profile": "strict_audit_v1",
+                "removed_steps": [],
+                "added_steps": [],
+                "divergent_steps": [],
+                "reasoning": None,
+                "evidence": {},
+            },
+        },
+        {
+            "description": "Failing gate: a CRITICAL step was removed; evidence references attached.",
+            "verdict": {
+                "passed": False,
+                "regression_level": "high",
+                "strength": 1.0,
+                "fingerprint_match": False,
+                "golden_fingerprint": "972d989e2f3371dc0ecc2fc480056a5a05fb6d48",
+                "candidate_fingerprint": "343d10a8c111860b6e141cb881eaacd7dc820a8f",
+                "golden_run_id": "00000000-0000-4000-8000-000000000001",
+                "candidate_run_id": "4bf92f35-77b3-4da6-a3ce-929d0e0e4736",
+                "max_regression_level": "none",
+                "allow_divergent_steps": False,
+                "profile": "strict_audit_v1",
+                "removed_steps": ["verify_account_status"],
+                "added_steps": [],
+                "divergent_steps": ["verify_account_status"],
+                "reasoning": "Critical reasoning steps removed: verify_account_status",
+                "evidence": {
+                    "attestation.format": "DPK-BINARY-V1",
+                    "attestation.sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+                    "signer.key_id": "b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c",
+                },
+            },
+        },
+        {
+            "description": "Minimal verdict: only the required 'passed' field.",
+            "verdict": {"passed": False},
+        },
+        {
+            "description": "Bounds: free text truncated to 1024 characters, step lists to 64 items.",
+            "verdict": {
+                "passed": False,
+                "regression_level": "high",
+                "added_steps": many_added,
+                "divergent_steps": many_added,
+                "reasoning": long_reasoning,
+            },
+        },
+    ]
+    cases = []
+    for sample in samples:
+        spec = dict(sample["verdict"])
+        evidence = spec.pop("evidence", None) or None
+        tuple_fields = ("removed_steps", "added_steps", "divergent_steps")
+        kwargs = {k: (tuple(v) if k in tuple_fields else v) for k, v in spec.items()}
+        verdict = GateVerdict(**kwargs)
+        if evidence:
+            verdict = GateVerdict(
+                **kwargs, evidence=tuple(sorted(evidence.items()))
+            )
+        attrs = _otel_verdict_attributes(verdict)
+        cases.append(
+            {
+                "description": sample["description"],
+                "verdict": sample["verdict"],
+                "attributes": attrs,
+                "otlp_attributes": _key_values(attrs),
+                "evaluation_result": verdict.evaluation_result_attributes(),
+                "label": verdict.label,
+                "score": verdict.score,
+            }
+        )
+    gate_json = {
+        "passed": False,
+        "regression_level": "high",
+        "strength": 1.0,
+        "max_regression_level": "none",
+        "allow_divergent_steps": False,
+        "fingerprint_match": False,
+        "golden_fingerprint": "972d989e2f3371dc0ecc2fc480056a5a05fb6d48",
+        "candidate_fingerprint": "343d10a8c111860b6e141cb881eaacd7dc820a8f",
+        "steps_by_change": {"removed": ["verify"], "reordered": ["answer"]},
+        "reasoning": "Critical reasoning steps removed: verify",
+        "summary": "(ignored)",
+    }
+    cases.append(
+        {
+            "description": "Built from 'dpk gate --json' output of an SDK predating run ids.",
+            "gate_json": gate_json,
+            "attributes": _otel_verdict_attributes(GateVerdict.from_gate_json(gate_json)),
+            "label": "fail",
+            "score": 0.0,
+        }
+    )
+    return {
+        "spec_version": SPEC_VERSION,
+        "schema": VERDICT_SCHEMA,
+        "description": (
+            "Gate verdict -> OpenTelemetry attributes (dpk.* namespace). See "
+            "OTEL_GENAI_MAPPING_v1.md section 3. 'attributes' omits the SDK-identity keys "
+            + ", ".join(OTEL_VERDICT_SDK_KEYS)
+            + ", which every SDK MUST still emit. 'otlp_attributes' is the same map in "
+            "OTLP/JSON KeyValue form (int64 as a decimal string). 'evaluation_result' is "
+            "the standard gen_ai.evaluation.result event (section 3.3)."
+        ),
+        "excluded_keys": list(OTEL_VERDICT_SDK_KEYS),
+        "cases": cases,
+    }
+
+
 def main() -> None:
     _write("payload_encoding.json", gen_payload_encoding())
     _write("run_fingerprint.json", gen_run_fingerprint())
     _write("query_semantics.json", gen_query_semantics())
     _write("profile_hash.json", gen_profile_hash())
     _write("alignment_verdict.json", gen_alignment_verdict())
+    _write("otel_verdict_attributes.json", gen_otel_verdict_attributes())
     print("done.")
 
 

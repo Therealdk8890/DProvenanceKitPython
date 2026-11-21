@@ -191,3 +191,42 @@ def test_alignment_verdict(desc, case):
     assert result.regression_risk.level.value == expected["regression_level"]
     assert round(result.regression_risk.strength, 6) == expected["regression_strength"]
     assert [a.state.kind.value for a in ordered] == expected["alignment_state_kinds"]
+
+
+# ── 6. OpenTelemetry gate-verdict attributes ───────────────────────────────────
+
+
+def _verdict_from_case(case):
+    from dprovenancekit.exporters import GateVerdict
+
+    if "gate_json" in case:
+        return GateVerdict.from_gate_json(case["gate_json"])
+    spec = dict(case["verdict"])
+    evidence = spec.pop("evidence", None) or None
+    for key in ("removed_steps", "added_steps", "divergent_steps"):
+        if key in spec:
+            spec[key] = tuple(spec[key])
+    verdict = GateVerdict(**spec)
+    if evidence:
+        verdict = GateVerdict(**spec, evidence=tuple(sorted(evidence.items())))
+    return verdict
+
+
+@pytest.mark.parametrize("desc, case", _cases("otel_verdict_attributes.json"))
+def test_otel_verdict_attributes(desc, case):
+    from dprovenancekit.exporters.otel import _key_values
+
+    excluded = _load("otel_verdict_attributes.json")["excluded_keys"]
+    verdict = _verdict_from_case(case)
+    attrs = verdict.to_attributes()
+    for key in excluded:  # SDK identity: MUST be present, not pinned
+        assert isinstance(attrs.pop(key), str) and key.startswith("dpk.sdk.")
+    assert attrs == case["attributes"]  # key order is not significant
+    if "otlp_attributes" in case:
+        def by_key(kvs):
+            return sorted(kvs, key=lambda kv: kv["key"])
+
+        assert by_key(_key_values(attrs)) == by_key(case["otlp_attributes"])
+    if "evaluation_result" in case:
+        assert verdict.evaluation_result_attributes() == case["evaluation_result"]
+    assert verdict.label == case["label"] and verdict.score == case["score"]

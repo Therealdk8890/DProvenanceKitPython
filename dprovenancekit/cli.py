@@ -283,6 +283,14 @@ def _run_gate(argv, fail_on_regression=True) -> int:
         help="tolerate per-step changes; gate only on severity",
     )
     ap.add_argument("--json", action="store_true", help="emit the report as JSON")
+    ap.add_argument(
+        "--otlp-out",
+        metavar="PATH",
+        help=(
+            "also write the verdict as an OTLP/HTTP JSON trace (one 'dpk.gate' span with "
+            "dpk.* attributes) for any OpenTelemetry backend; see dprovenancekit.exporters"
+        ),
+    )
     args = ap.parse_args(argv)
 
     if args.context and (args.golden_context or args.candidate_context):
@@ -429,12 +437,32 @@ def _run_gate(argv, fail_on_regression=True) -> int:
                     "steps_by_change": report.steps_by_change,
                     "reasoning": report.reasoning,
                     "summary": report.summary(),
+                    "golden_run_id": str(golden.run_id),
+                    "candidate_run_id": str(candidate.run_id),
+                    "profile": args.profile,
                 },
                 indent=2,
             )
         )
     else:
         print(report.summary())
+
+    if args.otlp_out:
+        from .exporters import GateVerdict, verdict_to_otlp_json
+
+        verdict = GateVerdict.from_report(
+            report,
+            golden_run_id=golden.run_id,
+            candidate_run_id=candidate.run_id,
+            profile=args.profile,
+        )
+        try:
+            with open(args.otlp_out, "w", encoding="utf-8") as fh:
+                json.dump(verdict_to_otlp_json(verdict), fh, indent=2)
+                fh.write("\n")
+        except OSError as exc:
+            print(f"error: could not write {args.otlp_out}: {exc}", file=sys.stderr)
+            return 2
 
     if not fail_on_regression:
         return 0
@@ -709,6 +737,27 @@ def _run_ui(argv) -> int:
     return 0
 
 
+def _existing_run_ids(db_path) -> set:
+    """Run ids already present in a trace database (empty for a missing/new file)."""
+    import sqlite3
+    import uuid
+
+    existing = set()
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        try:
+            for (run_id_text,) in conn.execute("SELECT run_id FROM runs"):
+                try:
+                    existing.add(uuid.UUID(str(run_id_text)))
+                except ValueError:
+                    continue
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        pass  # missing/new database — nothing to skip
+    return existing
+
+
 def _run_ingest(argv) -> int:
     """``dprovenancekit ingest`` — import OpenTelemetry (OTLP JSON) traces as runs.
 
@@ -723,7 +772,6 @@ def _run_ingest(argv) -> int:
     import argparse
     import json
     import sqlite3
-    import uuid
 
     from .event import AnyTraceableEvent  # noqa: F401 — parity with other subcommands
     from .otel_ingest import OTelSpanEvent, ingest_otlp
@@ -752,24 +800,18 @@ def _run_ingest(argv) -> int:
         action="store_true",
         help="omit input/output previews from event attributes",
     )
+    ap.add_argument(
+        "--format",
+        choices=("otlp", "langsmith"),
+        default="otlp",
+        help="input format: OTLP JSON (default) or LangSmith runs JSON / JSON-lines",
+    )
     ap.add_argument("--json", action="store_true", help="emit ingested runs as JSON")
     args = ap.parse_args(argv)
 
     # Run ids derive deterministically from OTel trace ids, so traces already in the
     # database are detected up front and skipped instead of duplicated.
-    existing = set()
-    try:
-        conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)
-        try:
-            for (run_id_text,) in conn.execute("SELECT run_id FROM runs"):
-                try:
-                    existing.add(uuid.UUID(str(run_id_text)))
-                except ValueError:
-                    continue
-        finally:
-            conn.close()
-    except sqlite3.Error:
-        pass  # missing/new database — nothing to skip
+    existing = _existing_run_ids(args.db)
 
     try:
         store = SQLiteTraceStore(OTelSpanEvent, args.db)
@@ -781,8 +823,15 @@ def _run_ingest(argv) -> int:
     try:
         for path in args.files:
             try:
+                source = path
+                if args.format == "langsmith":
+                    from .langsmith_import import load_langsmith_file
+
+                    source = load_langsmith_file(
+                        path, capture_payloads=not args.no_payloads
+                    )
                 new_runs = ingest_otlp(
-                    path,
+                    source,
                     store,
                     context_id=args.context,
                     include_unclassified=args.include_unclassified,
@@ -1158,13 +1207,21 @@ def _run_init(argv) -> int:
     Creates ``.dprovenance/``, a tiny account-status agent stub, and a README
     that gets you to a CRITICAL-step regression in the first five minutes.
     Does not contact any network service.
+
+    With ``--from-otel`` / ``--from-langsmith`` it instead bootstraps a golden baseline
+    from traces the team already has, with no code change: the traces are imported into
+    ``.dprovenance/traces.sqlite`` and one of them is pinned as
+    ``.dprovenance/baseline.sqlite`` (see :func:`_init_from_traces`).
     """
     import argparse
     from pathlib import Path
 
     ap = argparse.ArgumentParser(
         prog="dpk init",
-        description="Scaffold a minimal DProvenanceKit project (local-first, offline).",
+        description=(
+            "Scaffold a minimal DProvenanceKit project (local-first, offline), or "
+            "bootstrap a golden baseline from existing OpenTelemetry or LangSmith traces."
+        ),
     )
     ap.add_argument(
         "directory",
@@ -1177,7 +1234,52 @@ def _run_init(argv) -> int:
         action="store_true",
         help="overwrite scaffold files if they already exist",
     )
+    source = ap.add_argument_group(
+        "bootstrap from existing traces (no code change; skips the scaffold)"
+    )
+    source.add_argument(
+        "--from-otel",
+        nargs="+",
+        action="extend",
+        default=[],
+        metavar="FILE",
+        help="OTLP/HTTP JSON trace files (GenAI, OpenInference or OpenLLMetry spans)",
+    )
+    source.add_argument(
+        "--from-langsmith",
+        nargs="+",
+        action="extend",
+        default=[],
+        metavar="FILE",
+        help="LangSmith runs exported as JSON / JSON-lines (see dprovenancekit.langsmith_import)",
+    )
+    source.add_argument(
+        "--golden-trace",
+        metavar="ID",
+        help=(
+            "trace id (32 hex), LangSmith trace id or DPK run id to pin as the golden "
+            "baseline (default: the newest imported trace)"
+        ),
+    )
+    source.add_argument(
+        "--context", help="override the context id for every imported run"
+    )
+    source.add_argument(
+        "--no-payloads",
+        action="store_true",
+        help="do not store input/output previews from the traces",
+    )
     args = ap.parse_args(argv)
+
+    if args.from_otel or args.from_langsmith:
+        return _init_from_traces(args)
+    if args.golden_trace or args.context or args.no_payloads:
+        print(
+            "error: --golden-trace, --context and --no-payloads require --from-otel "
+            "or --from-langsmith",
+            file=sys.stderr,
+        )
+        return 2
 
     root = Path(args.directory).resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -1297,6 +1399,135 @@ For the API reference and advanced options, see the project README.
 
 
 
+def _init_from_traces(args) -> int:
+    """``dpk init --from-otel/--from-langsmith``: import traces and pin a golden run.
+
+    Exit codes: 0 baseline pinned; 1 no usable GenAI trace in the inputs; 2 usage or
+    unreadable input.
+    """
+    import sqlite3
+    import uuid
+    from pathlib import Path
+
+    from .langsmith_import import load_langsmith_file
+    from .otel_ingest import OTelSpanEvent, ingest_otlp
+    from .sqlite_store import SQLiteTraceStore
+    from .store import InMemoryTraceStore
+
+    root = Path(args.directory).resolve()
+    dprov = root / ".dprovenance"
+    db_path = dprov / "traces.sqlite"
+    baseline_path = dprov / "baseline.sqlite"
+
+    # Normalize every input into OTLP request objects up front, so one unreadable file
+    # fails the command before anything is written.
+    sources = []
+    for path in args.from_otel:
+        sources.append((path, path))
+    for path in args.from_langsmith:
+        try:
+            sources.append(
+                (path, load_langsmith_file(path, capture_payloads=not args.no_payloads))
+            )
+        except ValueError as exc:
+            print(f"error: {path}: {exc}", file=sys.stderr)
+            return 2
+
+    # Pass 1 (in memory): which runs do the inputs contain, regardless of what the
+    # database already holds? Re-running init on the same traces must still work.
+    found = []
+    seen = set()
+    for label, source in sources:
+        try:
+            runs = ingest_otlp(
+                source,
+                InMemoryTraceStore(),
+                context_id=args.context,
+                capture_payloads=not args.no_payloads,
+            )
+        except ValueError as exc:
+            print(f"error: {label}: {exc}", file=sys.stderr)
+            return 2
+        for run in runs:
+            if run.run_id not in seen:
+                seen.add(run.run_id)
+                found.append(run)
+    if not found:
+        print(
+            "error: no GenAI traces found in the inputs (nothing to use as a baseline). "
+            "Check that the files hold agent/LLM/tool spans.",
+            file=sys.stderr,
+        )
+        return 1
+
+    # Pass 2: persist into the project's trace database, skipping traces already there.
+    dprov.mkdir(parents=True, exist_ok=True)
+    existing = _existing_run_ids(str(db_path))
+    try:
+        store = SQLiteTraceStore(OTelSpanEvent, str(db_path))
+    except sqlite3.DatabaseError as exc:
+        print(f"error: {db_path} is not a usable SQLite database: {exc}", file=sys.stderr)
+        return 2
+    try:
+        for _label, source in sources:
+            written = ingest_otlp(
+                source,
+                store,
+                context_id=args.context,
+                capture_payloads=not args.no_payloads,
+                skip_run_ids=frozenset(existing),
+            )
+            existing.update(run.run_id for run in written)
+        # Newest first by start time, the same ordering 'dpk record' and 'dpk gate' use.
+        newest_first = [row.run_id for row in store.list_run_metadata()]
+    finally:
+        store.close()
+
+    by_run = {str(run.run_id): run for run in found}
+    if args.golden_trace:
+        wanted = args.golden_trace.strip().lower()
+        try:
+            wanted = str(uuid.UUID(wanted))
+        except ValueError:
+            pass
+        chosen = next(
+            (r for r in found if str(r.run_id) == wanted or r.trace_id.lower() == wanted),
+            None,
+        )
+        if chosen is None:
+            print(
+                f"error: --golden-trace {args.golden_trace!r} is not among the imported "
+                "traces",
+                file=sys.stderr,
+            )
+            return 2
+    else:
+        chosen = next(
+            (by_run[run_id] for run_id in newest_first if run_id in by_run), found[-1]
+        )
+
+    print(f"Imported {len(found)} trace(s) into {db_path}:")
+    for run in found:
+        marker = "*" if run is chosen else " "
+        print(
+            f" {marker} {run.run_id}  context='{run.context_id}'  "
+            f"events={run.event_count}  (trace {run.trace_id})"
+        )
+    code = _run_record(
+        ["--db", str(db_path), "--baseline", str(baseline_path), "--run", str(chosen.run_id)]
+    )
+    if code != 0:
+        return code
+    print(
+        "\nNext: import a new trace and gate it against this baseline, e.g.\n"
+        f"  dpk ingest new-trace.json --db {db_path}\n"
+        f"  dpk gate --baseline {baseline_path} --candidate-db {db_path}\n"
+        "In CI, the same two commands (or Therealdk8890/dprovenancekit-action) fail the\n"
+        "pull request when the agent's path drifts from the golden trace."
+    )
+    return 0
+
+
 _USAGE = (
     "Usage: dprovenancekit <repo|init|record|compare|gate|demo|anomalies|runs|ui|ingest|export|sync"
     "|attest|evaluate|diagnose|stability>"
@@ -1308,7 +1539,8 @@ _HELP = """DProvenanceKit — record, diff, and gate AI agent runs.
 
 Commands:
   repo       opt-in immutable reasoning history, branches, bundles, and verified gates
-  init       scaffold a minimal local-first project (DX hook stub)
+  init       scaffold a minimal local-first project, or bootstrap a golden
+             baseline from existing traces (--from-otel / --from-langsmith)
   record     pin the latest recorded run as the local golden baseline
   compare    inspect the latest run against the baseline; always exit 0 on a diff
   gate       compare the latest run against the baseline; exit 1 on regression

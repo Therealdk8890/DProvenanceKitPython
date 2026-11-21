@@ -7,6 +7,25 @@ public API may still change between minor versions.
 
 ## [Unreleased]
 
+### Added
+- `dprovenancekit.exporters`: attach gate verdicts to the observability stack teams
+  already use. `GateVerdict` (from a `RegressionReport` or `dpk gate --json`) maps to
+  `dpk.gate.*` attributes plus a standard `gen_ai.evaluation.result` event;
+  `attach_verdict` / `record_verdict_span` for OpenTelemetry; stdlib-only
+  `verdict_to_otlp_json`; and adapters for LangSmith feedback, Langfuse scores, Arize
+  Phoenix span annotations and Datadog LLM Observability evaluations. New optional
+  extras `[otel]`, `[langsmith]`, `[langfuse]`, `[phoenix]`, `[datadog]`; the core stays
+  dependency-free.
+- `dpk gate --otlp-out FILE` writes the verdict as an OTLP/HTTP JSON span for any OTel
+  backend; `dpk gate --json` now also reports `golden_run_id`, `candidate_run_id` and
+  `profile`.
+- `dpk init --from-otel FILE... / --from-langsmith FILE...` bootstraps a golden baseline
+  from existing traces with no code change; `dpk ingest --format langsmith` imports later
+  LangSmith runs (`dprovenancekit.langsmith_import`).
+- Conformance: `otel_verdict_attributes.json` vector, the
+  [OTel GenAI mapping](conformance/OTEL_GENAI_MAPPING_v1.md), and a draft (unsubmitted)
+  evidence-attribute proposal under `conformance/proposals/`.
+
 ## [0.10.0] - 2026-11-15
 
 Published on GitHub and PyPI as part of the coordinated Python/Swift 0.10.0 release.

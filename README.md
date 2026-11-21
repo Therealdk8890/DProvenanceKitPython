@@ -46,7 +46,7 @@ The distinction is the question each tool answers:
 | Data flow | Your existing collectors and platforms | Local recording and comparison; optional OpenTelemetry ingestion |
 | Relationship | Keep using your current stack | Add DPK alongside it |
 
-Python integrations include LangChain/LangGraph, OpenAI Agents, LlamaIndex, CrewAI, and OpenTelemetry ingestion. DPK complements these systems; it does not replace production monitoring or evaluation.
+Python integrations include LangChain/LangGraph, OpenAI Agents, LlamaIndex, CrewAI, and OpenTelemetry ingestion. Start from traces you already have with `dpk init --from-otel` or `--from-langsmith`, and send gate verdicts back to OpenTelemetry, LangSmith, Langfuse, Arize Phoenix or Datadog with [`dprovenancekit.exporters`](docs/OBSERVABILITY_EXPORTERS.md). DPK complements these systems; it does not replace production monitoring or evaluation.
 
 ## Example: protect a legal-document workflow
 
@@ -99,6 +99,7 @@ These boundaries are intentional. See the [attestation threat model and limitati
 
 - [Python installation and API documentation](https://dprovenance.dev)
 - [Regression-gate GitHub Action](https://github.com/marketplace/actions/dprovenancekit-regression-gate)
+- [Observability exporters and trace bootstrap](docs/OBSERVABILITY_EXPORTERS.md) — gate verdicts in OTel, LangSmith, Langfuse, Phoenix and Datadog
 - [Self-hosted trace workbench guide](docs/SELF_HOSTED_WORKBENCH.md) — installation for the published multi-database viewer
 - [0.10.0 release checklist](docs/RELEASE_0.10.0.md) — scope, validation and publication gates
 - [Product and release documentation](docs/)

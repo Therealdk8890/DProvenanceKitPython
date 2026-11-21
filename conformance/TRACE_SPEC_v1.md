@@ -294,6 +294,9 @@ A Rust / TypeScript / … SDK is v1-conformant when, reading the same `vectors/*
 3. **query_semantics** — every backend returns the exact `expected_context_ids`.
 4. **profile_hash** — reproduces every SHA-256 exactly (mind `fmt`).
 5. **alignment_verdict** — reproduces level + ordered state kinds under `ExactEquality_v1`.
+6. **otel_verdict_attributes** *(optional; required for SDKs that export verdicts to
+   OpenTelemetry)* — reproduces every `dpk.*` attribute and `gen_ai.evaluation.result`
+   attribute set (order-insensitive). See [`OTEL_GENAI_MAPPING_v1.md`](OTEL_GENAI_MAPPING_v1.md).
 
 Vectors are versioned by `spec_version`. A backward-incompatible change ships as
 Trace Specification **v2** with its own vector set; v1 vectors remain frozen.

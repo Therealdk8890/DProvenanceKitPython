@@ -51,6 +51,15 @@ google-genai = ["google-genai"]
 fastapi = ["fastapi", "starlette"]
 jupyter = ["ipython"]
 mcp = ["mcp"]
+# Gate-verdict exporters (dprovenancekit.exporters). Each is only needed to send a verdict
+# through that vendor's SDK; the dpk.* attribute mapping and the OTLP JSON encoder are
+# standard library only. Adapters drop keyword arguments the installed SDK version does
+# not declare, so no lower bounds are pinned beyond the OpenTelemetry API.
+otel = ["opentelemetry-api>=1.20"]
+langsmith = ["langsmith"]
+langfuse = ["langfuse"]
+phoenix = ["arize-phoenix-client"]
+datadog = ["ddtrace"]
 # Software ECDSA P-256 (DER) for DPK-BINARY-V1 attestation. Core stays stdlib-only;
 # install this extra to sign/verify attestation documents interoperable with Swift.
 crypto = ["cryptography>=41.0"]

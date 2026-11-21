@@ -18,6 +18,14 @@ Both harnesses fail closed on this corpus. The Python suite is the reference
 oracle; the Swift `ConformanceHarness` vendors the same JSON and
 `.github/workflows/vector-sync.yml` fails on drift.
 
+## OpenTelemetry verdict export — Python-first
+
+| Surface | Status |
+| --- | --- |
+| `otel_verdict_attributes.json` (gate verdict → `dpk.*` + `gen_ai.evaluation.result`) | **Python only** for now. The Swift `ConformanceHarness` must vendor the file for `vector-sync.yml` to stay green; a Swift mapping and harness check follow in the Swift repo. |
+| Vendor adapters (LangSmith, Langfuse, Phoenix, Datadog) | **Python only.** Thin wrappers over each vendor SDK; not part of the shared contract. |
+| `dpk init --from-otel` / `--from-langsmith` | **Python only.** |
+
 ## Attestation (DPK-BINARY-V1) — implemented on both (MVP)
 
 **Released in Python `0.7.0`** on PyPI as `dprovenancekit[crypto]` (software P-256). Prior PyPI `0.6.1` wheels do **not** include attestation — use `>=0.7.0`.

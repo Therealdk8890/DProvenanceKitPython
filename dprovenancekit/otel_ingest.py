@@ -203,6 +203,25 @@ class _OTelSpan:
     children: List["_OTelSpan"] = field(default_factory=list)
 
 
+_HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+
+
+def _canonical_span_id(span_id: str) -> str:
+    """An OTLP span id as lowercase hex when it is valid hex or base64 of 8 bytes.
+
+    The two encodings cannot collide: 8 bytes are 16 hex characters but 12 base64
+    characters. Anything else is kept verbatim (base64 is case-sensitive).
+    """
+    raw = span_id.strip()
+    if len(raw) == 16 and all(c in _HEX_DIGITS for c in raw):
+        return raw.lower()
+    for decoder in (_b64_std, _b64_url):
+        decoded = decoder(raw)
+        if decoded is not None and len(decoded) == 8:
+            return decoded.hex()
+    return span_id
+
+
 def _field(obj: Mapping[str, Any], camel: str, snake: str, default: Any = None) -> Any:
     """Read an OTLP field leniently: camelCase per spec, snake_case from non-compliant
     exporters (protobuf json_format, older collector debug output)."""
@@ -236,15 +255,16 @@ def _decode_spans(request: Mapping[str, Any]) -> List[_OTelSpan]:
                 status_code = (
                     status.get("code") if isinstance(status, Mapping) else None
                 )
-                # Keep ids verbatim: a hex id is case-normalized downstream by
-                # run_id_for_trace, but a base64 id (protobuf json_format output) is
-                # case-sensitive and must not be lowercased. Casing is consistent within
-                # one exporter's file, so span/parent matching is unaffected.
+                # Trace ids stay verbatim (run_id_for_trace maps hex and base64 forms
+                # to one run id, and grouping uses that run id). Span ids are
+                # canonicalized to lowercase hex, so a parent written in hex by one
+                # exporter and its child written in base64 by another (protobuf
+                # json_format) still link up when files are ingested together.
                 spans.append(
                     _OTelSpan(
                         trace_id=trace_id,
-                        span_id=span_id,
-                        parent_span_id=parent or None,
+                        span_id=_canonical_span_id(span_id),
+                        parent_span_id=_canonical_span_id(parent) if parent else None,
                         name=str(span.get("name", "") or ""),
                         start_ns=_decode_nanos(
                             _field(span, "startTimeUnixNano", "start_time_unix_nano")
@@ -837,19 +857,23 @@ def ingest_otlp(
     for request in requests:
         spans.extend(_decode_spans(request))
 
-    by_trace: Dict[str, List[_OTelSpan]] = {}
-    trace_order: List[str] = []
+    # Group by the derived run id, not the raw trace id: the hex and base64 spellings
+    # of one trace id (different exporters, merged files) are one trace and must get
+    # one event sequence. The first spelling seen is reported as the trace id.
+    by_run: Dict[uuid.UUID, List[_OTelSpan]] = {}
+    first_trace_id: Dict[uuid.UUID, str] = {}
     for span in spans:
-        if span.trace_id not in by_trace:
-            trace_order.append(span.trace_id)
-        by_trace.setdefault(span.trace_id, []).append(span)
+        key = run_id_for_trace(span.trace_id)
+        if key not in by_run:
+            first_trace_id[key] = span.trace_id
+        by_run.setdefault(key, []).append(span)
 
     ingested: List[IngestedRun] = []
-    for trace_id in trace_order:
-        run_id = run_id_for_trace(trace_id)
+    for run_id, run_spans in by_run.items():
+        trace_id = first_trace_id[run_id]
         if skip_run_ids and run_id in skip_run_ids:
             continue
-        roots = _build_forest(by_trace[trace_id])
+        roots = _build_forest(run_spans)
         run_context = context_id or next(
             (root.name for root in roots if root.name),
             None,

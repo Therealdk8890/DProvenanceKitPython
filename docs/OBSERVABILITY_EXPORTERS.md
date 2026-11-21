@@ -48,9 +48,11 @@ Imported run ids are the source trace ids (OTel trace id, LangSmith trace id), s
 verdict can be sent back to the same trace with the routes below. LangSmith run types
 map onto OpenInference span kinds; see `dprovenancekit.langsmith_import`. All files given
 to one `dpk init` are read as a single batch, so a trace split across rotated collector
-files (or LangSmith parents and children in different exports) is imported whole. LangSmith
-traces that still contain an unfinished run are skipped with a warning; export them again
-once they complete.
+files (or LangSmith parents and children in different exports) is imported whole; `dpk
+ingest` does the same for its files. LangSmith traces that still contain an unfinished run
+are skipped with a warning; export them again once they complete. If the project database
+already holds a different copy of an input trace (an earlier, partial import), `dpk init`
+stops without writing rather than pin the stale copy: run it in a fresh directory.
 
 ## 1. Build a verdict
 

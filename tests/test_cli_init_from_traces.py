@@ -361,3 +361,132 @@ def test_init_from_langsmith_then_gate_detects_skipped_verify(tmp_path, capsys):
     assert code == 1 and report["passed"] is False
     assert report["golden_run_id"] == ROOT
     assert "tool_call.start" in report["steps_by_change"]["removed"]
+
+
+# ── review follow-ups (#121) ───────────────────────────────────────────────────
+
+
+def _split(request, at):
+    spans = request["resourceSpans"][0]["scopeSpans"][0]["spans"]
+    return [
+        {"resourceSpans": [{"scopeSpans": [{"spans": part}]}]}
+        for part in (spans[:at], spans[at:])
+    ]
+
+
+def _stored_events(db, run_id):
+    store = SQLiteTraceStore(AnyTraceableEvent, str(db), start_writer=False)
+    try:
+        run = store.get_run(run_id)
+        return [] if run is None else run.events
+    finally:
+        store.close()
+
+
+def test_init_refuses_to_pin_a_stale_partial_copy(tmp_path, capsys):
+    whole = _otlp(TRACE_NEW, ("lookup", "verify"), start=1_000)
+    partial, rest = _split(whole, 2)  # agent + lookup | verify
+    first, second = tmp_path / "part1.json", tmp_path / "part2.json"
+    first.write_text(json.dumps(partial))
+    second.write_text(json.dumps(rest))
+    project = tmp_path / "p"
+    db = project / ".dprovenance" / "traces.sqlite"
+    baseline = project / ".dprovenance" / "baseline.sqlite"
+
+    assert main(["init", str(project), "--from-otel", str(first)]) == 0
+    assert "events=4" in capsys.readouterr().out
+    db_before, baseline_before = db.read_bytes(), baseline.read_bytes()
+
+    # The second fragment completes the trace: init must not pin the stale 4-event copy.
+    assert main(["init", str(project), "--from-otel", str(first), str(second)]) == 2
+    err = capsys.readouterr().err
+    assert str(run_id_for_trace(TRACE_NEW)) in err and "fresh directory" in err
+    assert db.read_bytes() == db_before and baseline.read_bytes() == baseline_before
+
+    # Identical inputs stay idempotent, and a fresh project gets the complete trace.
+    assert main(["init", str(project), "--from-otel", str(first)]) == 0
+    fresh = tmp_path / "fresh"
+    assert main(["init", str(fresh), "--from-otel", str(first), str(second)]) == 0
+    assert "events=6" in capsys.readouterr().out
+    pinned = _stored_events(
+        fresh / ".dprovenance" / "baseline.sqlite", run_id_for_trace(TRACE_NEW)
+    )
+    assert len(pinned) == 6
+
+
+@pytest.mark.parametrize("order", ["root_first", "child_first"])
+def test_ingest_never_stores_a_langsmith_trace_with_an_unfinished_child_elsewhere(
+    tmp_path, capsys, order
+):
+    runs = _langsmith_trace()
+    root_only, children = runs[:1], [dict(r) for r in runs[1:]]
+    children[-1]["end_time"] = None  # verify_refund_policy still running
+    a, b = tmp_path / "root.json", tmp_path / "children.json"
+    a.write_text(json.dumps(root_only))
+    b.write_text(json.dumps(children))
+    files = [str(a), str(b)] if order == "root_first" else [str(b), str(a)]
+    db = tmp_path / "t.sqlite"
+
+    assert main(["ingest", *files, "--db", str(db), "--format", "langsmith"]) == 1
+    err = capsys.readouterr().err
+    assert f"skipped LangSmith trace {ROOT}" in err
+    assert _stored_events(db, uuid.UUID(ROOT)) == []
+
+    # Once the run finishes, the complete export is accepted.
+    done = tmp_path / "done.json"
+    done.write_text(json.dumps(_langsmith_trace()))
+    assert main(["ingest", str(done), "--db", str(db), "--format", "langsmith"]) == 0
+    assert "events=8" in capsys.readouterr().out
+    assert len(_stored_events(db, uuid.UUID(ROOT))) == 8
+
+
+def test_ingest_warns_when_a_stored_trace_differs(tmp_path, capsys):
+    whole = _otlp(TRACE_NEW, ("lookup", "verify"), start=1_000)
+    partial, _ = _split(whole, 2)
+    p, w = tmp_path / "partial.json", tmp_path / "whole.json"
+    p.write_text(json.dumps(partial))
+    w.write_text(json.dumps(whole))
+    db = tmp_path / "t.sqlite"
+    assert main(["ingest", str(p), "--db", str(db)]) == 0
+    assert main(["ingest", str(p), "--db", str(db)]) == 1  # identical: no warning
+    assert "different content" not in capsys.readouterr().err
+    assert main(["ingest", str(w), "--db", str(db)]) == 1
+    assert "different content" in capsys.readouterr().err
+
+
+def _b64(hex_id):
+    import base64
+
+    return base64.b64encode(bytes.fromhex(hex_id)).decode()
+
+
+def test_hex_and_base64_ids_of_one_trace_form_one_tree(tmp_path, capsys):
+    whole = _otlp(TRACE_NEW, ("lookup",), start=1_000)
+    collector, protobuf = _split(whole, 1)  # root (hex) | tool child (base64 ids)
+    for span in protobuf["resourceSpans"][0]["scopeSpans"][0]["spans"]:
+        span["traceId"] = _b64(span["traceId"])
+        span["spanId"] = _b64(span["spanId"])
+        span["parentSpanId"] = _b64(span["parentSpanId"])
+    store = InMemoryTraceStore()
+    (run,) = ingest_otlp([collector, protobuf], store)
+    events = store.get_run(run.run_id).events
+    assert run.run_id == run_id_for_trace(TRACE_NEW) and run.trace_id == TRACE_NEW
+    assert [e.sequence for e in events] == [0, 1, 2, 3]
+    assert [e.payload.type_identifier for e in events] == [
+        "agent_invocation.start", "tool_call.start", "tool_call.end",
+        "agent_invocation.end",
+    ]
+    tool = next(e for e in events if e.payload.type_identifier == "tool_call.start")
+    assert tool.span_id == f"{1:016x}" and tool.parent_span_id == "a" * 16
+
+    # Through the CLI, across two files, the pinned baseline is that single tree.
+    f1, f2 = tmp_path / "collector.json", tmp_path / "protobuf.json"
+    f1.write_text(json.dumps(collector))
+    f2.write_text(json.dumps(protobuf))
+    project = tmp_path / "p"
+    assert main(["init", str(project), "--from-otel", str(f1), str(f2)]) == 0
+    capsys.readouterr()
+    pinned = _stored_events(
+        project / ".dprovenance" / "baseline.sqlite", run_id_for_trace(TRACE_NEW)
+    )
+    assert sorted(e.sequence for e in pinned) == [0, 1, 2, 3]

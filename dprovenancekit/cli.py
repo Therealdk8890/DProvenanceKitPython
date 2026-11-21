@@ -780,6 +780,40 @@ def _write_text_atomic(path, text) -> None:
         raise
 
 
+def _event_signature(run) -> list:
+    """The content of a run that a baseline depends on (ids/timestamps excluded)."""
+    if run is None:
+        return []
+    return [
+        (event.sequence, event.engine_name, event.span_id, event.parent_span_id, event.payload)
+        for event in sorted(run.events, key=lambda event: event.sequence)
+    ]
+
+
+def _changed_stored_runs(db_path, fresh_store, run_ids) -> list:
+    """Run ids already in ``db_path`` whose stored events differ from ``fresh_store``.
+
+    Re-importing identical traces is a no-op, but a re-import that *completes* a trace
+    (a later file adds spans, an unfinished run has finished) is not: the stored copy
+    would be kept silently and a baseline pinned from it would miss steps.
+    """
+    from .otel_ingest import OTelSpanEvent
+    from .sqlite_store import SQLiteTraceStore
+
+    if not run_ids:
+        return []
+    stored = SQLiteTraceStore(OTelSpanEvent, str(db_path), start_writer=False)
+    try:
+        return [
+            run_id
+            for run_id in run_ids
+            if _event_signature(stored.get_run(run_id))
+            != _event_signature(fresh_store.get_run(run_id))
+        ]
+    finally:
+        stored.close()
+
+
 def _existing_run_ids(db_path) -> set:
     """Run ids already present in a trace database (empty for a missing/new file)."""
     import sqlite3
@@ -821,8 +855,11 @@ def _run_ingest(argv) -> int:
     import sqlite3
 
     from .event import AnyTraceableEvent  # noqa: F401 — parity with other subcommands
-    from .otel_ingest import OTelSpanEvent, ingest_otlp
+    from .otel_ingest import OTelSpanEvent, _parse_otlp_text, ingest_otlp
     from .sqlite_store import SQLiteTraceStore
+    from .store import InMemoryTraceStore
+
+    langsmith_runs: list = []
 
     ap = argparse.ArgumentParser(
         prog="dprovenancekit ingest",
@@ -866,43 +903,66 @@ def _run_ingest(argv) -> int:
         print(f"error: --db {args.db!r} is not a usable SQLite database: {exc}", file=sys.stderr)
         return 2
 
-    ingested = []
-    try:
-        for path in args.files:
-            try:
-                source = path
-                if args.format == "langsmith":
-                    from .langsmith_import import (
-                        langsmith_runs_to_otlp,
-                        read_langsmith_file,
-                        unfinished_trace_ids,
-                    )
+    # Read every file first and ingest them as ONE batch: a trace can be split across
+    # files (rotated collector output; a LangSmith root in one export and a child in
+    # another), and completeness can only be judged on the whole batch. Repeated
+    # spans (a file listed twice, overlapping globs) are de-duplicated by the importer.
+    requests = []
+    for path in args.files:
+        try:
+            if args.format == "langsmith":
+                from .langsmith_import import read_langsmith_file
 
-                    runs = read_langsmith_file(path)
-                    for trace in unfinished_trace_ids(runs):
-                        print(
-                            f"warning: {path}: skipped LangSmith trace {trace}: it has "
-                            "unfinished runs (no end_time)",
-                            file=sys.stderr,
-                        )
-                    source = langsmith_runs_to_otlp(
-                        runs, capture_payloads=not args.no_payloads
-                    )
-                new_runs = ingest_otlp(
-                    source,
-                    store,
-                    context_id=args.context,
-                    include_unclassified=args.include_unclassified,
-                    capture_payloads=not args.no_payloads,
-                    skip_run_ids=frozenset(existing),
-                )
-            except ValueError as exc:
-                print(f"error: {path}: {exc}", file=sys.stderr)
-                return 2
-            ingested.extend(new_runs)
-            # Fold this file's run ids into the skip set so a trace repeated across
-            # files (overlapping globs, a file listed twice) is written only once.
-            existing.update(run.run_id for run in new_runs)
+                langsmith_runs.extend(read_langsmith_file(path))
+            else:
+                with open(path, "r", encoding="utf-8") as fh:
+                    requests.extend(_parse_otlp_text(fh.read()))
+        except OSError as exc:
+            store.close()
+            print(f"error: {path}: cannot read: {exc}", file=sys.stderr)
+            return 2
+        except ValueError as exc:
+            store.close()
+            print(f"error: {path}: {exc}", file=sys.stderr)
+            return 2
+    if args.format == "langsmith":
+        from .langsmith_import import langsmith_runs_to_otlp, unfinished_trace_ids
+
+        # Unfinished traces are left out entirely (no partial candidate is stored), so
+        # the completed export can be ingested later.
+        for trace in unfinished_trace_ids(langsmith_runs):
+            print(
+                f"warning: skipped LangSmith trace {trace}: it has unfinished runs "
+                "(no end_time); ingest it again once it completes",
+                file=sys.stderr,
+            )
+        requests.append(
+            langsmith_runs_to_otlp(langsmith_runs, capture_payloads=not args.no_payloads)
+        )
+
+    options = dict(
+        context_id=args.context,
+        include_unclassified=args.include_unclassified,
+        capture_payloads=not args.no_payloads,
+    )
+    try:
+        fresh = InMemoryTraceStore()
+        seen = ingest_otlp(requests, fresh, **options)
+        changed = _changed_stored_runs(
+            args.db, fresh, [run.run_id for run in seen if run.run_id in existing]
+        )
+        for run_id in changed:
+            print(
+                f"warning: trace {run_id} is already in {args.db} with different content; "
+                "the stored copy was kept (ingest into a fresh database to replace it)",
+                file=sys.stderr,
+            )
+        ingested = ingest_otlp(
+            requests, store, skip_run_ids=frozenset(existing), **options
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     finally:
         store.close()
 
@@ -1516,10 +1576,11 @@ def _init_from_traces(args) -> int:
 
     # Pass 1 (in memory): which runs do the inputs contain, regardless of what the
     # database already holds? Re-running init on the same traces must still work.
+    fresh = InMemoryTraceStore()
     try:
         found = ingest_otlp(
             requests,
-            InMemoryTraceStore(),
+            fresh,
             context_id=args.context,
             capture_payloads=not args.no_payloads,
         )
@@ -1535,8 +1596,25 @@ def _init_from_traces(args) -> int:
         return 1
 
     # Pass 2: persist into the project's trace database, skipping traces already there.
+    # A stored trace whose content differs from the inputs is never pinned silently.
     dprov.mkdir(parents=True, exist_ok=True)
     existing = _existing_run_ids(str(db_path))
+    try:
+        changed = _changed_stored_runs(
+            db_path, fresh, [run.run_id for run in found if run.run_id in existing]
+        )
+    except sqlite3.DatabaseError as exc:
+        print(f"error: {db_path} is not a usable SQLite database: {exc}", file=sys.stderr)
+        return 2
+    if changed:
+        listed = ", ".join(str(run_id) for run_id in changed)
+        print(
+            f"error: {db_path} already holds a different copy of trace(s) {listed} "
+            "(an earlier import was partial, or the trace changed). Nothing was written. "
+            "Run init in a fresh directory, or remove that database to re-import.",
+            file=sys.stderr,
+        )
+        return 2
     try:
         store = SQLiteTraceStore(OTelSpanEvent, str(db_path))
     except sqlite3.DatabaseError as exc:

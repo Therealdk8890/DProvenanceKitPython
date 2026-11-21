@@ -110,6 +110,61 @@ def test_from_otel_pins_newest_trace_then_gate_catches_a_dropped_tool(
     assert _baseline_runs(project) == [str(run_id_for_trace(TRACE_OLD))]
 
 
+def test_from_otel_merges_a_trace_split_across_files(tmp_path, capsys):
+    whole = _otlp(TRACE_NEW, ("lookup", "verify"), start=1_000)
+    spans = whole["resourceSpans"][0]["scopeSpans"][0]["spans"]
+    first, second = tmp_path / "part1.json", tmp_path / "part2.json"
+    first.write_text(json.dumps({"resourceSpans": [{"scopeSpans": [{"spans": spans[:2]}]}]}))
+    second.write_text(json.dumps({"resourceSpans": [{"scopeSpans": [{"spans": spans[2:]}]}]}))
+    # A '#' in the project path must not break the re-run idempotency check.
+    project = tmp_path / "team #1"
+    for _ in range(2):
+        assert main(["init", str(project), "--from-otel", str(first), str(second)]) == 0
+    out = capsys.readouterr().out
+    assert "events=6" in out  # root start/end + 2 tools x start/end
+    store = SQLiteTraceStore(
+        AnyTraceableEvent, str(project / ".dprovenance" / "traces.sqlite"),
+        start_writer=False,
+    )
+    try:
+        events = store.get_run(run_id_for_trace(TRACE_NEW)).events
+    finally:
+        store.close()
+    assert len(events) == 6  # not duplicated by the second run
+    assert [e.engine_name for e in events if e.payload.type_identifier == "tool_call.start"] == [
+        "lookup",
+        "verify",
+    ]
+
+
+def test_gate_refuses_otlp_out_over_an_input_database(tmp_path, capsys):
+    history = tmp_path / "t.json"
+    history.write_text(json.dumps(_otlp(TRACE_OLD, ("lookup",), start=1)))
+    project = tmp_path / "p"
+    assert main(["init", str(project), "--from-otel", str(history)]) == 0
+    db = project / ".dprovenance" / "traces.sqlite"
+    baseline = project / ".dprovenance" / "baseline.sqlite"
+    before = db.read_bytes()
+    link = tmp_path / "alias.sqlite"
+    link.symlink_to(db)
+    capsys.readouterr()
+    for target in (db, link):
+        code = main(
+            ["gate", "--baseline", str(baseline), "--candidate-db", str(db),
+             "--otlp-out", str(target)]
+        )
+        assert code == 2
+        assert "input trace databases" in capsys.readouterr().err
+    assert db.read_bytes() == before
+    out = tmp_path / "verdict.json"
+    assert main(
+        ["gate", "--baseline", str(baseline), "--candidate-db", str(db),
+         "--otlp-out", str(out)]
+    ) == 0
+    assert json.loads(out.read_text())["resourceSpans"]
+    assert not list(tmp_path.glob(".dpk-*.tmp"))
+
+
 def test_from_otel_errors(tmp_path, capsys):
     empty = tmp_path / "empty.json"
     empty.write_text(json.dumps({"resourceSpans": []}))
@@ -198,8 +253,19 @@ def test_langsmith_runs_map_to_openinference_spans():
         ("tool_call.end", "verify_refund_policy"),
         ("chain.end", "support_agent"),
     ]
-    # Span ids are the LangSmith run ids, so a verdict can be routed back.
-    assert events[1].span_id == uuid.UUID(RETRIEVE).hex
+    # OTLP-legal 8-byte span ids; the full LangSmith run id stays an attribute.
+    spans = request["resourceSpans"][0]["scopeSpans"][0]["spans"]
+    assert all(len(span["spanId"]) == 16 for span in spans)
+    assert all(len(span.get("parentSpanId", "0" * 16)) == 16 for span in spans)
+    assert len({span["spanId"] for span in spans}) == len(spans)
+    tool = next(span for span in spans if span["name"] == "lookup_order")
+    assert {"key": "langsmith.run_id", "value": {"stringValue": RETRIEVE}} in tool[
+        "attributes"
+    ]
+    assert tool["parentSpanId"] == next(
+        span["spanId"] for span in spans if span["name"] == "support_agent"
+    )
+    assert events[1].span_id == tool["spanId"]
 
 
 def test_langsmith_input_shapes_and_nested_child_runs():
@@ -214,6 +280,38 @@ def test_langsmith_input_shapes_and_nested_child_runs():
         assert len(parse_langsmith_runs(text)) == 4
     with pytest.raises(ValueError):
         parse_langsmith_runs("{not json\n")
+
+
+def test_nested_child_runs_inherit_their_enclosing_run():
+    runs = _langsmith_trace()
+    children = []
+    for child in runs[1:]:
+        child = dict(child)
+        child.pop("parent_run_id")
+        child.pop("trace_id")
+        children.append(child)
+    nested = dict(runs[0], child_runs=children)
+    store = InMemoryTraceStore()
+    (run,) = ingest_otlp(langsmith_runs_to_otlp(parse_langsmith_runs(json.dumps(nested))), store)
+    assert run.run_id == uuid.UUID(ROOT) and run.event_count == 8
+
+
+def test_unfinished_langsmith_traces_are_not_imported(tmp_path, capsys):
+    from dprovenancekit.langsmith_import import unfinished_trace_ids
+
+    runs = _langsmith_trace()
+    runs[3]["end_time"] = None  # verify_refund_policy still running
+    assert unfinished_trace_ids(runs) == [ROOT]
+    assert ingest_otlp(langsmith_runs_to_otlp(runs), InMemoryTraceStore()) == []
+    errored = [dict(r) for r in runs]
+    errored[3]["error"] = "Timeout"  # errored runs are finished
+    assert unfinished_trace_ids(errored) == []
+
+    path = tmp_path / "running.json"
+    path.write_text(json.dumps(runs))
+    assert main(["init", str(tmp_path / "p"), "--from-langsmith", str(path)]) == 1
+    captured = capsys.readouterr()
+    assert "unfinished runs" in captured.err and "no GenAI traces" in captured.err
 
 
 def test_langsmith_errors_and_missing_trace_ids():
@@ -242,7 +340,7 @@ def test_init_from_langsmith_then_gate_detects_skipped_verify(tmp_path, capsys):
     golden = tmp_path / "langsmith.json"
     golden.write_text(json.dumps(_langsmith_trace()))
     assert main(["init", str(project), "--from-langsmith", str(golden)]) == 0
-    capsys.readouterr()
+    assert "--format langsmith" in capsys.readouterr().out
     assert _baseline_runs(project) == [ROOT]
 
     later = tmp_path / "later.json"

@@ -178,6 +178,9 @@ def test_from_gate_json_requires_passed_and_rejects_bad_evidence_keys():
         GateVerdict.from_gate_json({"regression_level": "none"})
     with pytest.raises(ValueError):
         GateVerdict(passed=True).from_gate_json({"passed": True}, evidence={"bad key": "x"})
+    for key in ("source.cafe\u0301", "caf\u00e9", "n\u00b2", "id\u0663"):  # ASCII only
+        with pytest.raises(ValueError, match="ASCII"):
+            GateVerdict.from_gate_json({"passed": True}, evidence={key: "x"})
 
 
 # ── OpenTelemetry ───────────────────────────────────────────────────────────────
@@ -344,6 +347,31 @@ def test_langsmith_feedback_defaults_run_id_to_candidate():
 
     with pytest.raises(ValueError):
         send_verdict_to_langsmith(GateVerdict(passed=True), client=Client())
+
+
+def test_langsmith_project_feedback_targets_only_the_project():
+    rec = Recorder()
+
+    class Client:
+        # Mirrors LangSmith: project feedback must not also name a run or trace.
+        def create_feedback(self, run_id=None, key="unnamed", *, project_id=None,
+                            trace_id=None, **kwargs):
+            if project_id is not None and (run_id is not None or trace_id is not None):
+                raise ValueError("project_id cannot be combined with run_id/trace_id")
+            rec.record("create_feedback", (run_id, key), {"project_id": project_id})
+            return "ok"
+
+    project = uuid.uuid4()
+    assert send_verdict_to_langsmith(_verdict(), client=Client(), project_id=project) == "ok"
+    (_, (run_id, _key), kwargs), = rec.calls
+    assert run_id is None and kwargs["project_id"] == project
+    assert send_verdict_to_langsmith(
+        GateVerdict(passed=True), client=Client(), project_id=project
+    ) == "ok"
+    with pytest.raises(ValueError, match="project feedback"):
+        send_verdict_to_langsmith(
+            _verdict(), uuid.uuid4(), client=Client(), project_id=project
+        )
 
 
 def test_langfuse_v3_create_score_and_v2_fallback():

@@ -46,7 +46,7 @@ The distinction is the question each tool answers:
 | Data flow | Your existing collectors and platforms | Local recording and comparison; optional OpenTelemetry ingestion |
 | Relationship | Keep using your current stack | Add DPK alongside it |
 
-Python integrations include LangChain/LangGraph, OpenAI Agents, LlamaIndex, CrewAI, and OpenTelemetry ingestion. Start from traces you already have with `dpk init --from-otel` or `--from-langsmith`, and send gate verdicts back to OpenTelemetry, LangSmith, Langfuse, Arize Phoenix or Datadog with [`dprovenancekit.exporters`](docs/OBSERVABILITY_EXPORTERS.md). DPK complements these systems; it does not replace production monitoring or evaluation.
+Python integrations include LangChain/LangGraph, OpenAI Agents, LlamaIndex, CrewAI, and OpenTelemetry ingestion. Starting with **0.11.0** you can also start from traces you already have with `dpk init --from-otel` or `--from-langsmith`, and send gate verdicts back to OpenTelemetry, LangSmith, Langfuse, Arize Phoenix or Datadog with [`dprovenancekit.exporters`](docs/OBSERVABILITY_EXPORTERS.md). These are not in the published 0.10.0 package; until 0.11.0 is on PyPI, install from `main` to try them (`pip install "git+https://github.com/Therealdk8890/DProvenanceKitPython.git"`). DPK complements these systems; it does not replace production monitoring or evaluation.
 
 ## Example: protect a legal-document workflow
 
@@ -99,9 +99,10 @@ These boundaries are intentional. See the [attestation threat model and limitati
 
 - [Python installation and API documentation](https://dprovenance.dev)
 - [Regression-gate GitHub Action](https://github.com/marketplace/actions/dprovenancekit-regression-gate)
-- [Observability exporters and trace bootstrap](docs/OBSERVABILITY_EXPORTERS.md) — gate verdicts in OTel, LangSmith, Langfuse, Phoenix and Datadog
+- [Observability exporters and trace bootstrap](docs/OBSERVABILITY_EXPORTERS.md) — gate verdicts in OTel, LangSmith, Langfuse, Phoenix and Datadog (0.11.0+)
 - [Self-hosted trace workbench guide](docs/SELF_HOSTED_WORKBENCH.md) — installation for the published multi-database viewer
 - [0.10.0 release checklist](docs/RELEASE_0.10.0.md) — scope, validation and publication gates
+- [0.11.0 release checklist](docs/RELEASE_0.11.0.md) — prepared candidate; not yet published
 - [Product and release documentation](docs/)
 - [DProvenanceKit alongside LangSmith](https://dprovenance.dev/compare/dprovenancekit-vs-langsmith/)
 
@@ -115,6 +116,10 @@ This release includes the multi-database workbench and opt-in reasoning history;
 Structural Alignment v1/configuration authorization remain experimental. The earlier
 unpublished 0.9.3 preparation is superseded. See the
 [publication record](docs/RELEASE_0.10.0.md) and [workbench guide](docs/SELF_HOSTED_WORKBENCH.md).
+
+Source on `main` is prepared as **0.11.0** (trace bootstrap with `dpk init --from-otel` /
+`--from-langsmith`, `dprovenancekit.exporters`, `dpk gate --otlp-out`). 0.11.0 is not
+published yet; see the [0.11.0 release checklist](docs/RELEASE_0.11.0.md).
 
 DProvenanceKit is released under the [Apache License 2.0](LICENSE).
 

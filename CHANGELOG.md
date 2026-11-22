@@ -7,6 +7,12 @@ public API may still change between minor versions.
 
 ## [Unreleased]
 
+## [0.11.0] - Unreleased
+
+Prepared release candidate; no `v0.11.0` tag or PyPI artifact is published yet. A minor
+bump because this release adds public API (`dprovenancekit.exporters`), CLI options and
+optional extras; existing APIs, trace formats and gate behaviour are unchanged.
+
 ### Added
 - `dprovenancekit.exporters`: attach gate verdicts to the observability stack teams
   already use. `GateVerdict` (from a `RegressionReport` or `dpk gate --json`) maps to
@@ -32,6 +38,17 @@ public API may still change between minor versions.
 - Conformance: `otel_verdict_attributes.json` vector, the
   [OTel GenAI mapping](conformance/OTEL_GENAI_MAPPING_v1.md), and a draft (unsubmitted)
   evidence-attribute proposal under `conformance/proposals/`.
+
+### Fixed
+- The `DPK_QUICKSTART.md` written by `dpk init` told users to remove the
+  `verify_account_status(account)` call to see the gate fail. Deleting that line leaves
+  `is_active` undefined, so the agent crashed with `NameError` before the gate ran. It
+  now says to change the line to `is_active = True`; a test follows the generated
+  instructions literally and requires `dpk gate` to exit 1.
+
+### Documentation
+- README and the observability-exporter guide mark trace bootstrap, verdict exporters and
+  `dpk gate --otlp-out` as new in 0.11.0 and absent from the published 0.10.0 package.
 
 ## [0.10.0] - 2026-11-15
 

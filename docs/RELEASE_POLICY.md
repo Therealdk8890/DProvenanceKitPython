@@ -34,3 +34,9 @@ The coordinated **0.10.0** release is published for both SDKs:
 The [Python Trusted Publishing workflow](https://github.com/Therealdk8890/DProvenanceKitPython/actions/runs/43797953686)
 succeeded, a fresh PyPI install passed both offline demos, and both tags resolve to
 the validated merge commits. See [the publication record](RELEASE_0.10.0.md).
+
+## 0.11.0 status
+
+Python **0.11.0** is prepared on `main` but **not published**; the latest published
+version of both SDKs remains 0.10.0. See the [0.11.0 checklist](RELEASE_0.11.0.md),
+including the decision on a matching Swift release.

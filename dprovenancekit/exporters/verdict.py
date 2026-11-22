@@ -16,6 +16,7 @@ Standard library only. Nothing here imports OpenTelemetry or any vendor SDK.
 
 from __future__ import annotations
 
+import string
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
@@ -300,15 +301,21 @@ def _optional_bool(value: Any) -> Optional[bool]:
     return None if value is None else bool(value)
 
 
+_EVIDENCE_KEY_CHARS = frozenset(string.ascii_letters + string.digits + "_.")
+
+
 def _evidence_items(evidence: Optional[Mapping[str, str]]) -> Tuple[Tuple[str, str], ...]:
     if not evidence:
         return ()
     items = []
     for key, value in sorted(evidence.items()):
         key = str(key)
-        if not key or not all(c.isalnum() or c in "_." for c in key):
+        # ASCII only ([A-Za-z0-9_.]+), the published mapping contract; str.isalnum()
+        # alone would accept some non-ASCII letters and digits.
+        if not key or not all(c in _EVIDENCE_KEY_CHARS for c in key):
             raise ValueError(
-                f"evidence key {key!r} must be non-empty and use only letters, digits, '_' or '.'"
+                f"evidence key {key!r} must be non-empty and use only ASCII letters, "
+                "digits, '_' or '.'"
             )
         items.append((key, str(value)))
     return tuple(items)

@@ -54,13 +54,25 @@ def send_verdict_to_langsmith(
             which reads ``LANGSMITH_API_KEY`` / ``LANGSMITH_ENDPOINT``).
         key: feedback key (default ``dpk_gate``).
         trace_id: optional trace id, forwarded when the installed SDK supports it.
-        project_id: optional project id, forwarded when the installed SDK supports it.
+        project_id: record *project* feedback instead of run feedback. LangSmith
+            accepts either a run/trace target or a project target, so this cannot be
+            combined with ``run_id`` / ``trace_id`` and does not default to the
+            candidate run.
     """
-    target = run_id if run_id is not None else uuid_or_none(verdict.candidate_run_id)
-    if target is None:
-        raise ValueError(
-            "run_id is required (the verdict has no UUID candidate_run_id to default to)"
-        )
+    if project_id is not None:
+        if run_id is not None or trace_id is not None:
+            raise ValueError(
+                "project_id records project feedback; do not combine it with run_id "
+                "or trace_id"
+            )
+        target = None
+    else:
+        target = run_id if run_id is not None else uuid_or_none(verdict.candidate_run_id)
+        if target is None:
+            raise ValueError(
+                "run_id is required (the verdict has no UUID candidate_run_id to "
+                "default to)"
+            )
     client = client if client is not None else _default_client()
     return call_supported(
         client.create_feedback,

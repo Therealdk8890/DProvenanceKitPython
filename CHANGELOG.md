@@ -21,7 +21,14 @@ public API may still change between minor versions.
   `profile`.
 - `dpk init --from-otel FILE... / --from-langsmith FILE...` bootstraps a golden baseline
   from existing traces with no code change; `dpk ingest --format langsmith` imports later
-  LangSmith runs (`dprovenancekit.langsmith_import`).
+  LangSmith runs (`dprovenancekit.langsmith_import`). All init inputs are ingested as one
+  batch (traces split across files stay whole); LangSmith traces with unfinished runs are
+  skipped with a warning; `dpk gate --otlp-out` refuses to overwrite an input database and
+  writes atomically. `dpk ingest` also reads all its files as one batch. Re-running
+  `dpk init` refuses (exit 2, nothing written) when the database holds a different copy
+  of an input trace, instead of pinning a stale partial import; `dpk ingest` warns.
+- OTLP ingest groups spans by derived run id, so hex and base64 (protobuf `json_format`)
+  spellings of one trace id form one trace; span ids are canonicalized to lowercase hex.
 - Conformance: `otel_verdict_attributes.json` vector, the
   [OTel GenAI mapping](conformance/OTEL_GENAI_MAPPING_v1.md), and a draft (unsubmitted)
   evidence-attribute proposal under `conformance/proposals/`.

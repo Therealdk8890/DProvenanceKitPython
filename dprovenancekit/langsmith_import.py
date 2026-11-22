@@ -25,20 +25,26 @@ Produce one with the LangSmith SDK, for example::
 
 **Identity.** The OTLP trace id is the LangSmith ``trace_id`` (the root run's id) as 32
 hex characters, so the DProvenanceKit run id of an imported trace *equals* the LangSmith
-trace id. Span ids are the run ids as 32 hex characters. Both make it trivial to send a
-gate verdict back to the right LangSmith run (see
-:mod:`dprovenancekit.exporters.langsmith`).
+trace id, which makes it trivial to send a gate verdict back to the right LangSmith
+trace (see :mod:`dprovenancekit.exporters.langsmith`). OTLP span ids are 8 bytes, so each
+run's span id is a stable hash of its run id; the full run id is kept in the
+``langsmith.run_id`` span attribute.
+
+**Unfinished runs.** A trace that still contains a run with no ``end_time`` and no error
+is left out (see :func:`unfinished_trace_ids`), so an in-progress step can never look
+completed to the gate. Export again once the trace finishes.
 
 Standard library only.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Mapping, Optional
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 # LangSmith run_type → openinference.span.kind (classified by otel_ingest §2.1).
 _RUN_TYPE_KINDS = {
@@ -99,15 +105,45 @@ def _string_attr(key: str, value: str) -> Dict[str, Any]:
 
 
 def _flatten(runs: Iterable[Any]) -> List[Mapping[str, Any]]:
+    """Flatten nested ``child_runs``; a nested child inherits its enclosing run as
+    parent (and its trace) when it does not name them itself."""
     out: List[Mapping[str, Any]] = []
-    stack = [r for r in reversed(list(runs)) if isinstance(r, Mapping)]
+    stack: List[Tuple[Mapping[str, Any], Optional[Mapping[str, Any]]]] = [
+        (r, None) for r in reversed(list(runs)) if isinstance(r, Mapping)
+    ]
     while stack:
-        run = stack.pop()
+        run, enclosing = stack.pop()
+        if enclosing is not None:
+            filled = dict(run)
+            if not filled.get("parent_run_id") and enclosing.get("id"):
+                filled["parent_run_id"] = enclosing["id"]
+            if not filled.get("trace_id") and enclosing.get("trace_id"):
+                filled["trace_id"] = enclosing["trace_id"]
+            run = filled
         out.append(run)
         children = run.get("child_runs") or []
         if isinstance(children, list):
-            stack.extend(c for c in reversed(children) if isinstance(c, Mapping))
+            stack.extend(
+                (c, run) for c in reversed(children) if isinstance(c, Mapping)
+            )
     return out
+
+
+def _is_unfinished(run: Mapping[str, Any]) -> bool:
+    """A run still in progress: no end time and no error (LangSmith allows both)."""
+    if run.get("error") or str(run.get("status") or "").lower() == "error":
+        return False
+    return not run.get("end_time")
+
+
+def _span_id(run_hex: str) -> str:
+    """A stable 8-byte OTLP span id for a LangSmith run UUID.
+
+    OTLP span ids are 8 bytes; run UUIDs are 16. Hashing (rather than truncating)
+    avoids collisions between time-ordered UUIDs that share a prefix. The full run id
+    is kept in the ``langsmith.run_id`` attribute.
+    """
+    return hashlib.sha256(run_hex.encode("ascii")).hexdigest()[:16]
 
 
 def parse_langsmith_runs(text: str) -> List[Mapping[str, Any]]:
@@ -159,24 +195,16 @@ def _metadata(run: Mapping[str, Any]) -> Mapping[str, Any]:
     return metadata if isinstance(metadata, Mapping) else {}
 
 
-def langsmith_runs_to_otlp(
-    runs: Iterable[Mapping[str, Any]],
-    *,
-    capture_payloads: bool = True,
-    service_name: str = "langsmith",
-) -> Dict[str, Any]:
-    """Build one OTLP/HTTP JSON request holding every run as a span.
-
-    Runs without a usable UUID ``id`` are skipped. A run without ``trace_id`` inherits
-    its parent's trace, or starts its own trace when it has no known parent.
-    """
-    flat = _flatten(runs)
+def _runs_by_id(runs: Iterable[Mapping[str, Any]]) -> Dict[str, Mapping[str, Any]]:
     by_id: Dict[str, Mapping[str, Any]] = {}
-    for run in flat:
+    for run in _flatten(runs):
         run_hex = _hex(run.get("id"))
         if run_hex is not None and run_hex not in by_id:
             by_id[run_hex] = run
+    return by_id
 
+
+def _trace_resolver(by_id: Mapping[str, Mapping[str, Any]]) -> Any:
     def trace_of(run_hex: str) -> str:
         seen = set()
         current = run_hex
@@ -192,8 +220,44 @@ def langsmith_runs_to_otlp(
             current = parent
         return run_hex  # parent cycle: fall back to the run itself
 
+    return trace_of
+
+
+def unfinished_trace_ids(runs: Iterable[Mapping[str, Any]]) -> List[str]:
+    """Trace ids (UUID strings) that contain at least one run still in progress."""
+    by_id = _runs_by_id(runs)
+    trace_of = _trace_resolver(by_id)
+    found = {trace_of(h) for h, run in by_id.items() if _is_unfinished(run)}
+    return sorted(str(uuid.UUID(hex=h)) for h in found)
+
+
+def langsmith_runs_to_otlp(
+    runs: Iterable[Mapping[str, Any]],
+    *,
+    capture_payloads: bool = True,
+    service_name: str = "langsmith",
+    include_unfinished: bool = False,
+) -> Dict[str, Any]:
+    """Build one OTLP/HTTP JSON request holding every run as a span.
+
+    Runs without a usable UUID ``id`` are skipped. A run without ``trace_id`` inherits
+    its parent's trace, or starts its own trace when it has no known parent.
+
+    Traces that still contain an unfinished run (no ``end_time`` and no error) are
+    left out by default: a step that never finished must not look completed to the
+    gate. Re-import them once they finish, or pass ``include_unfinished=True``.
+    """
+    by_id = _runs_by_id(runs)
+    trace_of = _trace_resolver(by_id)
+    skip = set()
+    if not include_unfinished:
+        skip = {trace_of(h) for h, run in by_id.items() if _is_unfinished(run)}
+
     spans: List[Dict[str, Any]] = []
     for run_hex, run in by_id.items():
+        trace_hex = trace_of(run_hex)
+        if trace_hex in skip:
+            continue
         run_type = str(run.get("run_type") or "chain").lower()
         name = str(run.get("name") or run_type)
         attrs = [
@@ -229,8 +293,8 @@ def langsmith_runs_to_otlp(
         error = run.get("error")
         is_error = bool(error) or str(run.get("status") or "").lower() == "error"
         span: Dict[str, Any] = {
-            "traceId": trace_of(run_hex),
-            "spanId": run_hex,
+            "traceId": trace_hex,
+            "spanId": _span_id(run_hex),
             "name": name,
             "startTimeUnixNano": str(start_ns),
             "endTimeUnixNano": str(end_ns),
@@ -243,7 +307,7 @@ def langsmith_runs_to_otlp(
         }
         parent = _hex(run.get("parent_run_id"))
         if parent is not None:
-            span["parentSpanId"] = parent
+            span["parentSpanId"] = _span_id(parent)
         spans.append(span)
 
     return {
@@ -256,16 +320,27 @@ def langsmith_runs_to_otlp(
     }
 
 
-def load_langsmith_file(path: str, *, capture_payloads: bool = True) -> Dict[str, Any]:
-    """Read an exported LangSmith runs file and return the OTLP JSON request."""
+def read_langsmith_file(path: str) -> List[Mapping[str, Any]]:
+    """Read and flatten the runs in an exported LangSmith file."""
     try:
         with open(path, "r", encoding="utf-8") as fh:
             text = fh.read()
     except OSError as exc:
         raise ValueError(f"cannot read {path!r}: {exc}") from exc
+    return parse_langsmith_runs(text)
+
+
+def load_langsmith_file(path: str, *, capture_payloads: bool = True) -> Dict[str, Any]:
+    """Read an exported LangSmith runs file and return the OTLP JSON request."""
     return langsmith_runs_to_otlp(
-        parse_langsmith_runs(text), capture_payloads=capture_payloads
+        read_langsmith_file(path), capture_payloads=capture_payloads
     )
 
 
-__all__ = ["langsmith_runs_to_otlp", "load_langsmith_file", "parse_langsmith_runs"]
+__all__ = [
+    "langsmith_runs_to_otlp",
+    "load_langsmith_file",
+    "parse_langsmith_runs",
+    "read_langsmith_file",
+    "unfinished_trace_ids",
+]

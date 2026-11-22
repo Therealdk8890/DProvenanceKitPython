@@ -46,7 +46,13 @@ dpk gate --baseline .dprovenance/baseline.sqlite --candidate-db .dprovenance/tra
 
 Imported run ids are the source trace ids (OTel trace id, LangSmith trace id), so the
 verdict can be sent back to the same trace with the routes below. LangSmith run types
-map onto OpenInference span kinds; see `dprovenancekit.langsmith_import`.
+map onto OpenInference span kinds; see `dprovenancekit.langsmith_import`. All files given
+to one `dpk init` are read as a single batch, so a trace split across rotated collector
+files (or LangSmith parents and children in different exports) is imported whole; `dpk
+ingest` does the same for its files. LangSmith traces that still contain an unfinished run
+are skipped with a warning; export them again once they complete. If the project database
+already holds a different copy of an input trace (an earlier, partial import), `dpk init`
+stops without writing rather than pin the stale copy: run it in a fresh directory.
 
 ## 1. Build a verdict
 
@@ -134,7 +140,8 @@ send_verdict_to_langsmith(verdict, run_id=langsmith_run_id)  # langsmith.Client(
 The verdict is stored as feedback with key `dpk_gate` (score 1/0, value pass/fail, the
 summary as the comment, all `dpk.*` attributes as `source_info`). If the candidate was
 imported with `dpk init --from-langsmith`, its DPK run id is the LangSmith trace id, so
-`run_id` can be omitted.
+`run_id` can be omitted. Pass `project_id=` instead to attach project-level feedback
+(it cannot be combined with `run_id` or `trace_id`).
 
 ## 4. Langfuse
 

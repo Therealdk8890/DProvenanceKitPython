@@ -1493,9 +1493,30 @@ python agent_stub.py
 dpk gate
 ~~~
 
-To see the gate fail, temporarily remove the verify_account_status(account) call
-from main(), run the agent again, and run dpk gate. The missing CRITICAL step
-should be reported as a regression.
+To see the gate fail, edit main() in agent_stub.py and change
+
+~~~python
+is_active = verify_account_status(account)
+~~~
+
+to
+
+~~~python
+is_active = True
+~~~
+
+so the CRITICAL verification step is skipped but the agent still reaches a
+decision. (Deleting the line instead leaves is_active undefined and the agent
+crashes with a NameError before anything is recorded.) Then run the agent again
+and gate it:
+
+~~~bash
+python agent_stub.py
+dpk gate
+~~~
+
+dpk gate reports the missing CRITICAL step as a regression and exits 1. Change
+the line back to restore a passing run.
 
 ## Data capture
 

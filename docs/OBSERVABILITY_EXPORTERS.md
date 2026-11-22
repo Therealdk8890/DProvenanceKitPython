@@ -1,5 +1,11 @@
 # Send gate verdicts to the observability stack you already use
 
+> **Availability:** everything on this page — `dprovenancekit.exporters`, the `[otel]`,
+> `[langsmith]`, `[langfuse]`, `[phoenix]` and `[datadog]` extras, `dpk gate --otlp-out`,
+> `dpk init --from-otel` / `--from-langsmith` and `dpk ingest --format langsmith` — is new
+> in **0.11.0**. It is not in the published 0.10.0 package. Until 0.11.0 is on PyPI,
+> install from source: `pip install "git+https://github.com/Therealdk8890/DProvenanceKitPython.git"`.
+
 DProvenanceKit does not ask you to adopt another dashboard. The gate decides whether an
 agent's decision path regressed; `dprovenancekit.exporters` puts that verdict next to
 the traces your team already reads in LangSmith, Langfuse, Arize Phoenix, Datadog, or

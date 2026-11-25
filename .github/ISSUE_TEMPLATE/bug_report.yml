@@ -1,0 +1,34 @@
+name: Bug report
+description: Something is broken or behaves differently from the docs
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: A minimal command, snippet or workflow that reproduces it.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS, runtime version (Python/Swift/Xcode), CI provider.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      render: shell
